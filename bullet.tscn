@@ -38,7 +38,7 @@ mesh = SubResource("CapsuleMesh_hxxf5")
 target_position = Vector3(2.08165e-12, 2.08165e-12, -0.6)
 
 [node name="GPUParticles3D" type="GPUParticles3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.08165e-12, 2.08165e-12, 0.6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.08165e-12, 2.08165e-12, 1)
 material_override = SubResource("StandardMaterial3D_r27f2")
 emitting = false
 one_shot = true
