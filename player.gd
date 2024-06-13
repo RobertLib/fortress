@@ -91,6 +91,10 @@ func _physics_process(delta: float):
 			bullet_instance.transform.basis = gun_barrel.global_transform.basis
 			get_parent().add_child(bullet_instance)
 
+	# Check for interaction.
+	if Input.is_action_just_pressed("action"):
+		_check_and_open_door()
+
 	move_and_slide()
 
 
@@ -99,3 +103,24 @@ func _headbob(time: float) -> Vector3:
 	pos.y = sin(time * BOB_FREQ) * BOB_AMP
 	pos.x = cos(time * BOB_FREQ / 2) * BOB_AMP
 	return pos
+
+
+func _check_and_open_door():
+	var space_state := get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.new()
+
+	query.from = camera.global_transform.origin
+	query.to = camera.global_transform.origin - camera.global_transform.basis.z * 2.0
+	query.collision_mask = 1
+
+	var result := space_state.intersect_ray(query)
+
+	if result and result.collider:
+		var collider = result.collider
+
+		while collider:
+			if collider.has_method("open_door"):
+				collider.open_door()
+				break
+
+			collider = collider.get_parent()
