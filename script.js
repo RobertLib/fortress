@@ -1,0 +1,489 @@
+// FORTRESS — a medieval first-person raycasting adventure.
+// Entry point: asset/level loading, input, game states and the main loop.
+
+import { buildAssets } from "./js/textures.js";
+import { loadLevels } from "./js/level.js";
+import { Renderer, W, H, VIEW_H } from "./js/engine.js";
+import { Game } from "./js/game.js";
+import { audio } from "./js/audio.js";
+
+const LEVEL_COUNT = 5;
+const canvas = document.getElementById("screen");
+const ctx = canvas.getContext("2d");
+
+const assets = buildAssets();
+const renderer = new Renderer(canvas, assets);
+
+let levels = null;
+let state = "loading"; // loading | intro | levelstart | playing | paused |
+//                        died | levelcomplete | gameover | victory | error
+let errorMsg = "";
+let game = null;
+let session = null;
+let stateTimer = 0;
+let deathDelay = 0;
+let clock = 0;
+
+// ------------------------------------------------------------------ input
+
+const input = {
+  forward: false,
+  back: false,
+  strafeLeft: false,
+  strafeRight: false,
+  turnLeft: false,
+  turnRight: false,
+  run: false,
+  fire: false,
+  use: false,
+  weapon: null,
+  mouseDX: 0,
+};
+
+const KEYMAP = {
+  KeyW: "forward",
+  ArrowUp: "forward",
+  KeyS: "back",
+  ArrowDown: "back",
+  KeyA: "strafeLeft",
+  KeyD: "strafeRight",
+  ArrowLeft: "turnLeft",
+  ArrowRight: "turnRight",
+  ShiftLeft: "run",
+  ShiftRight: "run",
+  ControlLeft: "fire",
+  ControlRight: "fire",
+  KeyJ: "fire",
+};
+
+window.addEventListener("keydown", (e) => {
+  if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
+    e.preventDefault();
+  }
+  audio.init();
+  if (e.repeat) return;
+
+  if (KEYMAP[e.code] !== undefined) input[KEYMAP[e.code]] = true;
+  if (e.code === "KeyE" || e.code === "Space") input.use = true;
+  if (e.code === "Digit1") input.weapon = "dagger";
+  if (e.code === "Digit2") input.weapon = "crossbow";
+  if (e.code === "Digit3") input.weapon = "arbalest";
+  if (e.code === "KeyM") {
+    audio.enabled = !audio.enabled;
+    if (game) game.say(audio.enabled ? "SOUND ON" : "SOUND OFF", 1.2);
+  }
+  if (e.code === "Tab" && game && state === "playing") game.showMap = !game.showMap;
+
+  handleStateKey(e.code);
+});
+
+window.addEventListener("keyup", (e) => {
+  if (KEYMAP[e.code] !== undefined) input[KEYMAP[e.code]] = false;
+});
+
+canvas.addEventListener("mousedown", (e) => {
+  audio.init();
+  if (state === "playing") {
+    if (document.pointerLockElement !== canvas) {
+      canvas.requestPointerLock?.();
+    }
+    if (e.button === 0) input.fire = true;
+  }
+});
+window.addEventListener("mouseup", (e) => {
+  if (e.button === 0) input.fire = false;
+});
+window.addEventListener("mousemove", (e) => {
+  if (document.pointerLockElement === canvas && state === "playing") {
+    input.mouseDX += e.movementX;
+  }
+});
+
+function handleStateKey(code) {
+  const enter = code === "Enter" || code === "NumpadEnter";
+  const esc = code === "Escape";
+
+  switch (state) {
+    case "intro":
+      if (enter) {
+        audio.play("start");
+        newGame();
+      }
+      break;
+    case "levelstart":
+      if (enter) beginLevel();
+      break;
+    case "playing":
+      if (esc) {
+        setState("paused");
+        document.exitPointerLock?.();
+        audio.play("blip");
+      }
+      break;
+    case "paused":
+      if (esc || enter) {
+        setState("playing");
+        audio.play("blip");
+      } else if (code === "KeyQ") {
+        setState("intro");
+      }
+      break;
+    case "died":
+      if (enter) restartLevel();
+      break;
+    case "levelcomplete":
+      if (enter) nextLevel();
+      break;
+    case "gameover":
+      if (enter) {
+        audio.play("start");
+        newGame();
+      } else if (esc) {
+        setState("intro");
+      }
+      break;
+    case "victory":
+      if (enter || esc) setState("intro");
+      break;
+  }
+}
+
+// ------------------------------------------------------------------ flow
+
+function setState(s) {
+  state = s;
+  stateTimer = 0;
+}
+
+function newGame() {
+  session = {
+    score: 0,
+    lives: 3,
+    nextLife: 40000,
+    totalKills: 0,
+    totalTreasure: 0,
+    totalEnemies: 0,
+    maxTreasure: 0,
+    totalTime: 0,
+  };
+  startLevel(0, null);
+}
+
+function startLevel(index, persist) {
+  game = new Game(levels[index], index, session, persist);
+  setState("levelstart");
+}
+
+function beginLevel() {
+  setState("playing");
+  audio.play("blip");
+}
+
+function restartLevel() {
+  startLevel(game.levelIndex, null); // classic rules: fresh crossbow after death
+}
+
+function nextLevel() {
+  const p = game.player;
+  session.totalEnemies += game.totalEnemies;
+  session.maxTreasure += game.totalTreasure;
+  session.totalTime += game.time;
+  if (game.levelIndex + 1 >= LEVEL_COUNT) {
+    audio.play("victory");
+    setState("victory");
+  } else {
+    startLevel(game.levelIndex + 1, {
+      health: p.health,
+      ammo: p.ammo,
+      weapon: p.weapon,
+      hasArbalest: p.hasArbalest,
+    });
+  }
+}
+
+function levelBonus() {
+  const killPct = game.totalEnemies ? game.kills / game.totalEnemies : 1;
+  const treasurePct = game.totalTreasure ? game.treasure / game.totalTreasure : 1;
+  const timeBonus = Math.max(0, Math.floor(120 - game.time)) * 10;
+  return Math.round(killPct * 1000 + treasurePct * 1000 + timeBonus);
+}
+
+// ------------------------------------------------------------------ loop
+
+let last = performance.now();
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  clock += dt;
+  stateTimer += dt;
+
+  update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+
+function update(dt) {
+  if (state !== "playing") return;
+  game.update(dt, input);
+
+  if (game.playerDead) {
+    deathDelay += dt;
+    if (deathDelay > 1.4) {
+      deathDelay = 0;
+      session.lives--;
+      document.exitPointerLock?.();
+      if (session.lives <= 0) {
+        audio.play("gameOver");
+        setState("gameover");
+      } else {
+        setState("died");
+      }
+    }
+  } else {
+    deathDelay = 0;
+  }
+
+  if (game.completed && state === "playing") {
+    game.bonus = levelBonus();
+    game.addScore(game.bonus);
+    document.exitPointerLock?.();
+    setState("levelcomplete");
+  }
+}
+
+// ------------------------------------------------------------------ draw
+
+function render() {
+  ctx.imageSmoothingEnabled = false;
+  switch (state) {
+    case "loading":
+      drawCenterScreen("#101018", ["LOADING..."]);
+      break;
+    case "error":
+      drawError();
+      break;
+    case "intro":
+      drawIntro();
+      break;
+    case "levelstart":
+      drawLevelStart();
+      break;
+    case "playing":
+    case "paused":
+    case "died":
+      renderer.renderView(game);
+      if (game.showMap && state === "playing") renderer.renderMap(game);
+      renderer.renderHUD(game);
+      if (state === "paused") drawPauseOverlay();
+      if (state === "died") drawDiedOverlay();
+      if (game.playerDead && state === "playing") drawDeathFade();
+      break;
+    case "levelcomplete":
+      drawLevelComplete();
+      break;
+    case "gameover":
+      drawGameOver();
+      break;
+    case "victory":
+      drawVictory();
+      break;
+  }
+}
+
+const blink = () => Math.floor(clock * 2) % 2 === 0;
+
+function text(str, x, y, size, color, align = "center") {
+  ctx.font = `bold ${size}px Georgia, serif`;
+  ctx.textAlign = align;
+  ctx.fillStyle = color;
+  ctx.fillText(str, x, y);
+}
+
+function titleText(str, x, y, size, color) {
+  ctx.font = `bold ${size}px Georgia, serif`;
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#000";
+  ctx.fillText(str, x + size * 0.06, y + size * 0.06);
+  ctx.fillStyle = color;
+  ctx.fillText(str, x, y);
+}
+
+function drawCenterScreen(bg, lines) {
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  lines.forEach((l, i) => text(l, W / 2, H / 2 + i * 24, 16, "#e8e8e8"));
+}
+
+function drawError() {
+  ctx.fillStyle = "#180808";
+  ctx.fillRect(0, 0, W, H);
+  text("FAILED TO LOAD LEVELS", W / 2, 150, 22, "#e05050");
+  text(errorMsg, W / 2, 190, 12, "#c8c8c8");
+  text("Run a local server, e.g.:", W / 2, 240, 14, "#e8e8e8");
+  text("python3 -m http.server 8000", W / 2, 268, 14, "#ffd23c");
+  text("then open http://localhost:8000", W / 2, 296, 14, "#e8e8e8");
+}
+
+function drawIntro() {
+  ctx.fillStyle = "#140e08";
+  ctx.fillRect(0, 0, W, H);
+  // torch glow behind the title
+  const glow = ctx.createRadialGradient(W / 2, 90, 10, W / 2, 90, 260);
+  glow.addColorStop(0, "rgba(200,120,40,0.22)");
+  glow.addColorStop(1, "rgba(200,120,40,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, 240);
+  ctx.fillStyle = "#c9a24a";
+  ctx.fillRect(W / 2 - 150, 116, 300, 2);
+
+  titleText("F O R T R E S S", W / 2, 95, 52, "#e9c93c");
+  text("A MEDIEVAL RAYCASTING ADVENTURE", W / 2, 140, 11, "#a89878");
+
+  const story = [
+    "Betrayed and thrown into the fortress dungeons,",
+    "you have slipped your chains. Five floors of the",
+    "garrison stand between you and the night. Find the",
+    "3 KEYS on each floor, unlock the GATE, and escape.",
+  ];
+  story.forEach((l, i) => text(l, W / 2, 172 + i * 18, 12, "#d8cbaa"));
+
+  if (blink()) titleText("PRESS ENTER TO BEGIN", W / 2, 268, 18, "#ead9b0");
+
+  const controls = [
+    ["W A S D / ARROWS", "move & turn"],
+    ["MOUSE (CLICK VIEW)", "turn & shoot"],
+    ["CTRL / J", "shoot"],
+    ["E / SPACE", "open doors, use the gate"],
+    ["1 / 2 / 3", "dagger, crossbow, repeater"],
+    ["SHIFT / TAB / M", "run / map / sound"],
+  ];
+  controls.forEach(([k, v], i) => {
+    const y = 296 + i * 15;
+    text(k, W / 2 - 12, y, 11, "#c9a24a", "right");
+    text(v, W / 2 + 2, y, 11, "#a89878", "left");
+  });
+}
+
+function drawLevelStart() {
+  ctx.fillStyle = "#140e08";
+  ctx.fillRect(0, 0, W, H);
+  text(`FLOOR ${game.levelIndex + 1} OF ${LEVEL_COUNT}`, W / 2, 130, 16, "#a89878");
+  titleText(game.level.name, W / 2, 180, 36, "#e9c93c");
+  text("FIND 3 KEYS AND REACH THE GATE", W / 2, 230, 14, "#d8cbaa");
+  text(`LIVES: ${session.lives}    SCORE: ${session.score}`, W / 2, 262, 13, "#a89878");
+  if (blink()) text("PRESS ENTER", W / 2, 320, 16, "#ead9b0");
+  if (stateTimer > 3) beginLevel();
+}
+
+function drawPauseOverlay() {
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.fillRect(0, 0, W, VIEW_H);
+  titleText("PAUSED", W / 2, 140, 34, "#e9c93c");
+  text("ESC / ENTER — resume", W / 2, 180, 13, "#d8cbaa");
+  text("Q — quit to title", W / 2, 202, 13, "#d8cbaa");
+}
+
+function drawDeathFade() {
+  ctx.fillStyle = `rgba(120,0,0,${Math.min(0.7, deathDelay * 0.6)})`;
+  ctx.fillRect(0, 0, W, VIEW_H);
+}
+
+function drawDiedOverlay() {
+  ctx.fillStyle = "rgba(60,0,0,0.7)";
+  ctx.fillRect(0, 0, W, VIEW_H);
+  titleText("YOU HAVE FALLEN", W / 2, 130, 36, "#e05050");
+  text(`LIVES LEFT: ${session.lives}`, W / 2, 175, 16, "#ead9b0");
+  if (blink()) text("PRESS ENTER TO TRY THIS FLOOR AGAIN", W / 2, 220, 14, "#e9c93c");
+}
+
+function fmtTime(t) {
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function drawLevelComplete() {
+  ctx.fillStyle = "#140e08";
+  ctx.fillRect(0, 0, W, H);
+  text(`FLOOR ${game.levelIndex + 1} CLEARED!`, W / 2, 90, 26, "#e9c93c");
+
+  const killPct = game.totalEnemies ? Math.round((100 * game.kills) / game.totalEnemies) : 100;
+  const trePct = game.totalTreasure ? Math.round((100 * game.treasure) / game.totalTreasure) : 100;
+  const rows = [
+    ["TIME", fmtTime(game.time)],
+    ["KILLS", `${game.kills}/${game.totalEnemies}  (${killPct}%)`],
+    ["TREASURE", `${game.treasure}/${game.totalTreasure}  (${trePct}%)`],
+    ["BONUS", `+${game.bonus}`],
+    ["SCORE", `${session.score}`],
+  ];
+  rows.forEach(([k, v], i) => {
+    const y = 150 + i * 30;
+    text(k, W / 2 - 30, y, 15, "#a89878", "right");
+    text(v, W / 2 - 5, y, 15, "#ead9b0", "left");
+  });
+
+  const lastOne = game.levelIndex + 1 >= LEVEL_COUNT;
+  if (blink()) {
+    text(lastOne ? "PRESS ENTER" : "PRESS ENTER FOR THE NEXT FLOOR", W / 2, 330, 15, "#e9c93c");
+  }
+}
+
+function drawGameOver() {
+  ctx.fillStyle = "#180808";
+  ctx.fillRect(0, 0, W, H);
+  titleText("GAME OVER", W / 2, 150, 52, "#c02020");
+  text(`FINAL SCORE: ${session.score}`, W / 2, 205, 18, "#ead9b0");
+  text(`KILLS: ${session.totalKills}`, W / 2, 235, 13, "#a89878");
+  if (blink()) text("ENTER — PLAY AGAIN", W / 2, 290, 15, "#e9c93c");
+  text("ESC — TITLE SCREEN", W / 2, 318, 13, "#d8cbaa");
+}
+
+function drawVictory() {
+  ctx.fillStyle = "#100c14";
+  ctx.fillRect(0, 0, W, H);
+  titleText("YOU ESCAPED THE FORTRESS!", W / 2, 90, 30, "#e9c93c");
+  text("WELL FOUGHT — YOU ARE FREE.", W / 2, 128, 14, "#d8cbaa");
+  text("Thanks for playing this little retro adventure.", W / 2, 150, 12, "#a89878");
+
+  const killPct = session.totalEnemies
+    ? Math.round((100 * session.totalKills) / session.totalEnemies)
+    : 100;
+  const trePct = session.maxTreasure
+    ? Math.round((100 * session.totalTreasure) / session.maxTreasure)
+    : 100;
+  const rows = [
+    ["TOTAL TIME", fmtTime(session.totalTime)],
+    ["KILLS", `${session.totalKills}/${session.totalEnemies}  (${killPct}%)`],
+    ["TREASURE", `${session.totalTreasure}/${session.maxTreasure}  (${trePct}%)`],
+    ["LIVES LEFT", `${session.lives}`],
+    ["FINAL SCORE", `${session.score}`],
+  ];
+  rows.forEach(([k, v], i) => {
+    const y = 195 + i * 26;
+    text(k, W / 2 - 30, y, 14, "#a89878", "right");
+    text(v, W / 2 - 5, y, 14, "#ead9b0", "left");
+  });
+
+  if (blink()) text("PRESS ENTER FOR THE TITLE SCREEN", W / 2, 350, 14, "#e9c93c");
+}
+
+// debug/testing hook (harmless in normal play)
+window.FORTRESS = {
+  getGame: () => game,
+  getState: () => state,
+};
+
+// ------------------------------------------------------------------ boot
+
+loadLevels(LEVEL_COUNT)
+  .then((lv) => {
+    levels = lv;
+    setState("intro");
+  })
+  .catch((err) => {
+    errorMsg = String(err.message ?? err);
+    setState("error");
+  });
+
+requestAnimationFrame(frame);
