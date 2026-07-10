@@ -466,6 +466,82 @@ function soldierSprite(pal, pose) {
   return c;
 }
 
+// A swarm of bats drawn into a single billboard. One little bat is a body
+// with red eyes and a pair of membrane wings caught either mid-upstroke or
+// mid-downstroke; the swarm poses scatter several of them across the tile.
+function miniBat(g, x, y, flap) {
+  const wing = "#4c3a28";
+  const wingTip = "#33271a";
+  const body = "#241a10";
+  if (flap === 0) {
+    // wings raised
+    px(g, x - 2.1, y - 1.1, 1.8, 0.7, wing);
+    px(g, x + 0.8, y - 1.1, 1.8, 0.7, wing);
+    px(g, x - 2.8, y - 1.9, 1, 0.9, wingTip);
+    px(g, x + 2.3, y - 1.9, 1, 0.9, wingTip);
+  } else {
+    // wings swept down and out
+    px(g, x - 2.6, y + 0.1, 2.2, 0.7, wing);
+    px(g, x + 0.9, y + 0.1, 2.2, 0.7, wing);
+    px(g, x - 3.1, y + 0.7, 1, 0.8, wingTip);
+    px(g, x + 2.6, y + 0.7, 1, 0.8, wingTip);
+  }
+  px(g, x - 0.6, y - 0.7, 1.7, 1.7, body);
+  px(g, x - 0.5, y - 1.1, 0.4, 0.5, body); // ears
+  px(g, x + 0.6, y - 1.1, 0.4, 0.5, body);
+  px(g, x - 0.3, y - 0.4, 0.4, 0.4, "#e04040"); // eyes
+  px(g, x + 0.4, y - 0.4, 0.4, 0.4, "#e04040");
+}
+
+// Swarm billboard. pose keys match the soldier set so Enemy.sprite() can
+// stay generic; aim/fire never trigger for bats and just alias the flaps.
+function batSwarmSprite(pose) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const FLOCK = [[4.5, 4], [10.5, 3], [7.5, 7], [12, 8.5], [4, 9.5], [9, 11]];
+
+  if (pose === "stand") {
+    // roosting: a huddle of bats hanging under the ceiling, eyes aglow
+    px(g, 4, 0, 8.5, 2.6, "#181008");
+    for (const [i, hx] of [4.8, 6.8, 8.8, 10.8].entries()) {
+      const hy = i % 2 ? 1.4 : 0.8;
+      px(g, hx - 0.4, hy, 1.9, 1.2, "#241a10"); // folded wings
+      px(g, hx, hy, 1.1, 2.4, "#2e2214"); // hanging body
+      px(g, hx + 0.05, hy + 2.4, 1, 0.9, "#241a10"); // head at the bottom
+      px(g, hx + 0.1, hy + 2.6, 0.35, 0.35, "#e04040");
+      px(g, hx + 0.6, hy + 2.6, 0.35, 0.35, "#e04040");
+    }
+    return c;
+  }
+  if (pose === "dead") {
+    // a few limp bats on the flagstones
+    for (const [dx, wsp] of [[4, 2.2], [8.5, 1.8], [11.5, 2]]) {
+      px(g, dx - wsp / 2, 14.9, wsp * 2, 0.6, "#241a10");
+      px(g, dx - 0.4, 14.5, 1.2, 0.9, "#181008");
+    }
+    return c;
+  }
+  if (pose === "die1" || pose === "die2") {
+    // the swarm tumbles: wings folded, dropping toward the floor
+    const drop = pose === "die1" ? 3 : 6.5;
+    for (const [i, [bx, by]] of FLOCK.entries()) {
+      const y = Math.min(14, by + drop + (i % 3));
+      px(g, bx - 1.3, y, 2.6, 0.8, "#33271a");
+      px(g, bx - 0.5, y - 0.5, 1.2, 1.4, "#241a10");
+    }
+    return c;
+  }
+
+  const spread = pose === "pain" ? 1.35 : 1;
+  const alt = pose === "walk2" || pose === "fire";
+  for (const [i, [bx, by]] of FLOCK.entries()) {
+    const x = 8 + (bx - 8) * spread;
+    const y = 7.5 + (by - 7.5) * spread + (alt ? (i % 2 ? 0.7 : -0.5) : 0);
+    miniBat(g, x, y, (i + (alt ? 1 : 0)) % 2);
+  }
+  return c;
+}
+
 const PAL_GUARD = { uniform: "#6e5638", dark: "#463621", trim: "#a3823f", skin: "#dba377", helmet: "#8d949c", style: "kettle" };
 const PAL_KNIGHT = { uniform: "#8d959f", dark: "#565e66", trim: "#c9a24a", skin: "#dba377", helmet: "#9aa2ac", style: "greathelm" };
 const PAL_CAPTAIN = { uniform: "#8c2020", dark: "#5a1414", trim: "#c9a24a", skin: "#dba377", helmet: "#8d949c", style: "plume" };
@@ -998,6 +1074,8 @@ export function buildAssets() {
     enemySprites[type] = {};
     for (const p of poses) enemySprites[type][p] = soldierSprite(pal, p);
   }
+  enemySprites.bat = {};
+  for (const p of poses) enemySprites.bat[p] = batSwarmSprite(p);
 
   const items = {};
   for (const k of ["key", "potion", "bread", "bolts", "treasure", "arbalest"]) {

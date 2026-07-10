@@ -1,5 +1,7 @@
 // Enemy AI: patrol (or stand guard) -> alert -> chase -> stop & shoot,
 // with pain staggers and a small death animation. Rendered as billboards.
+// The bat swarm is the odd one out: it flies (drawn head-high, passes
+// through other actors), swoops at the player, bites and veers away.
 
 import { audio } from "./audio.js";
 
@@ -7,6 +9,11 @@ const TYPES = {
   guard: { hp: 25, speed: 1.7, range: 8, aimTime: 0.42, cooldown: [0.7, 1.5], dmg: 14, score: 100, drop: 0.6 },
   knight: { hp: 60, speed: 1.9, range: 9, aimTime: 0.36, cooldown: [0.5, 1.2], dmg: 21, score: 500, drop: 0.8 },
   captain: { hp: 45, speed: 2.7, range: 9, aimTime: 0.26, cooldown: [0.4, 1.0], dmg: 17, score: 400, drop: 0.5 },
+  bat: {
+    hp: 16, speed: 3.1, range: 0.8, cooldown: [0.9, 1.6], dmg: 7, score: 150, drop: 0,
+    swarm: true, radius: 0.25, scale: 0.6,
+    alertSound: "batAlert", painSound: "batSqueak", deathSound: "batDeath",
+  },
 };
 
 const CARDINALS = [
@@ -23,7 +30,7 @@ export class Enemy {
     this.type = spawn.type;
     this.stats = TYPES[spawn.type];
     this.hp = this.stats.hp;
-    this.radius = 0.3;
+    this.radius = this.stats.radius ?? 0.3;
 
     this.state = spawn.patrol ? "patrol" : "stand";
     const [dx, dy] = CARDINALS[Math.floor(Math.random() * 4)];
@@ -35,6 +42,9 @@ export class Enemy {
     this.attackCooldown = 0;
     this.reaction = 0;
     this.alive = true;
+    this.wobble = Math.random() * Math.PI * 2; // flight-path phase (bats)
+    this.flutterTimer = 0;
+    this.flyHeight = undefined; // sprite zCenter; stays undefined for footmen
   }
 
   get dead() {
@@ -46,11 +56,23 @@ export class Enemy {
     this.moving = false;
     const p = game.player;
 
+    if (this.stats.swarm && !this.dead) {
+      // roosting swarms hang under the ceiling; airborne ones bob a little
+      this.flyHeight = this.state === "stand"
+        ? 0.8
+        : 0.54 + Math.sin(this.animTime * 3.2 + this.wobble) * 0.05;
+      if (this.state === "chase" || this.state === "swoop") this.flutterWings(game, dt);
+    }
+
     switch (this.state) {
       case "dead":
         return;
       case "dying":
         this.timer -= dt;
+        if (this.stats.swarm) {
+          // the swarm tumbles out of the air
+          this.flyHeight = Math.max(this.stats.scale / 2, (this.flyHeight ?? 0.5) - dt * 1.6);
+        }
         if (this.timer <= 0) this.state = "dead";
         return;
       case "pain":
@@ -61,7 +83,18 @@ export class Enemy {
       case "stand":
       case "patrol": {
         if (this.state === "patrol") {
-          if (!this.tryMove(game, this.dirX, this.dirY, this.stats.speed * 0.55 * dt)) {
+          if (this.stats.swarm) {
+            // aimless fluttering: drift on a free angle, re-pick it often
+            this.timer -= dt;
+            const ok = this.tryMove(game, this.dirX, this.dirY, this.stats.speed * 0.45 * dt);
+            if (this.timer <= 0 || !ok) {
+              const a = Math.random() * Math.PI * 2;
+              this.dirX = Math.cos(a);
+              this.dirY = Math.sin(a);
+              this.timer = 0.6 + Math.random() * 0.9;
+            }
+            this.moving = true;
+          } else if (!this.tryMove(game, this.dirX, this.dirY, this.stats.speed * 0.55 * dt)) {
             const [dx, dy] = CARDINALS[Math.floor(Math.random() * 4)];
             this.dirX = dx;
             this.dirY = dy;
@@ -81,6 +114,18 @@ export class Enemy {
       case "chase": {
         this.attackCooldown -= dt;
         const dist = Math.hypot(p.x - this.x, p.y - this.y);
+        if (this.stats.swarm) {
+          // swoop straight through the player on a weaving path
+          const nx = (p.x - this.x) / (dist || 1);
+          const ny = (p.y - this.y) / (dist || 1);
+          const wob = Math.sin(this.animTime * 6.5 + this.wobble) * 0.7;
+          this.tryMove(game, nx - ny * wob, ny + nx * wob, this.stats.speed * dt);
+          this.moving = true;
+          if (dist < this.stats.range && this.attackCooldown <= 0) this.bite(game);
+          const door = game.doorAt(Math.floor(this.x + nx * 0.8), Math.floor(this.y + ny * 0.8));
+          if (door) game.openDoor(door, false);
+          return;
+        }
         const los = game.lineOfSight(this.x, this.y, p.x, p.y);
         if (los && dist < this.stats.range && this.attackCooldown <= 0 && dist > 0.7) {
           this.state = "aim";
@@ -125,7 +170,40 @@ export class Enemy {
         }
         return;
       }
+
+      case "swoop": {
+        // bats only: after a bite the swarm veers off before circling back
+        this.timer -= dt;
+        this.tryMove(game, this.dirX, this.dirY, this.stats.speed * 0.85 * dt);
+        this.moving = true;
+        if (this.timer <= 0) this.state = "chase";
+        return;
+      }
     }
+  }
+
+  bite(game) {
+    const p = game.player;
+    audio.playAt("batBite", this.x, this.y, p);
+    game.hurtPlayer(Math.max(2, Math.round(2 + Math.random() * this.stats.dmg)));
+    const [a, b] = this.stats.cooldown;
+    this.attackCooldown = a + Math.random() * (b - a);
+    // peel away past the player's shoulder
+    const dx = this.x - p.x;
+    const dy = this.y - p.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const side = Math.random() < 0.5 ? 1 : -1;
+    this.dirX = (dx / d) * 0.6 + (-dy / d) * side;
+    this.dirY = (dy / d) * 0.6 + (dx / d) * side;
+    this.state = "swoop";
+    this.timer = 0.4 + Math.random() * 0.25;
+  }
+
+  flutterWings(game, dt) {
+    this.flutterTimer -= dt;
+    if (this.flutterTimer > 0) return;
+    this.flutterTimer = 0.28 + Math.random() * 0.2;
+    audio.playAt("flutter", this.x, this.y, game.player, { volume: 0.55, rate: 0.9 + Math.random() * 0.25 });
   }
 
   canSeePlayer(game) {
@@ -136,10 +214,10 @@ export class Enemy {
   }
 
   wake(game, silent = false) {
-    if (this.dead || this.state === "chase" || this.state === "aim" || this.state === "fire") return;
+    if (this.dead || this.state === "chase" || this.state === "aim" || this.state === "fire" || this.state === "swoop") return;
     this.state = "chase";
     this.attackCooldown = 0.35 + Math.random() * 0.4;
-    if (!silent) audio.playAt("alert", this.x, this.y, game.player, { rate: 0.9 + Math.random() * 0.25 });
+    if (!silent) audio.playAt(this.stats.alertSound ?? "alert", this.x, this.y, game.player, { rate: 0.9 + Math.random() * 0.25 });
   }
 
   fire(game) {
@@ -164,7 +242,7 @@ export class Enemy {
       this.die(game);
       return;
     }
-    audio.playAt("enemyPain", this.x, this.y, game.player);
+    audio.playAt(this.stats.painSound ?? "enemyPain", this.x, this.y, game.player);
     if (Math.random() < 0.7) {
       this.state = "pain";
       this.timer = 0.22;
@@ -175,7 +253,7 @@ export class Enemy {
     this.state = "dying";
     this.timer = 0.4;
     this.alive = false;
-    audio.playAt("enemyDeath", this.x, this.y, game.player, { rate: 0.9 + Math.random() * 0.2 });
+    audio.playAt(this.stats.deathSound ?? "enemyDeath", this.x, this.y, game.player, { rate: 0.9 + Math.random() * 0.2 });
     game.onEnemyKilled(this);
   }
 
@@ -210,7 +288,7 @@ export class Enemy {
         return set.fire;
       default: {
         if (!this.moving) return set.stand;
-        const f = Math.floor(this.animTime * 5) % 2;
+        const f = Math.floor(this.animTime * (this.stats.swarm ? 11 : 5)) % 2;
         return f ? set.walk1 : set.walk2;
       }
     }

@@ -13,6 +13,7 @@
 //     A      quiver of bolts   T treasure (score)    M repeating crossbow
 //     G/g    guard (patrol/standing)
 //     S/s    knight         O/o captain
+//     V/v    bat swarm (flying about / roosting until disturbed)
 //     Wall torches are placed automatically on suitable stretches of masonry.
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
 //            a straight line becomes an arrow slit (texture 7) and looses a
@@ -21,7 +22,7 @@
 export const WALLS = new Set(["1", "2", "3", "4", "5", "6", "7", "B", "#"]);
 
 const ITEM_CHARS = { K: "key", H: "potion", F: "bread", A: "bolts", T: "treasure", M: "arbalest" };
-const ENEMY_CHARS = { G: "guard", S: "knight", O: "captain" };
+const ENEMY_CHARS = { G: "guard", S: "knight", O: "captain", V: "bat" };
 
 export function parseLevel(text) {
   const props = { name: "FLOOR", floor: "#707070", ceil: "#383838", start: "E" };

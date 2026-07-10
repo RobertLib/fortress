@@ -98,6 +98,26 @@ class AudioSys {
       return (saw(t, f) * 0.55 + noise() * 0.2 * env(t, 0.25)) * env(t, 0.6, 1.6) * 0.7;
     });
 
+    // --- bats ---
+    B("batAlert", 0.4, (t) => {
+      // burst of shrill chittering as the swarm takes wing
+      const on = (t % 0.08) < 0.038;
+      const f = 2300 - 900 * (t / 0.4) + sin(t, 27) * 160;
+      const flap = noise() * 0.14 * env(t, 0.4, 1);
+      return (on ? sin(t, f) * env(t % 0.08, 0.05, 2) * 0.4 : 0) + flap;
+    });
+    B("batSqueak", 0.14, (t) => sin(t, 2600 - 5000 * t) * env(t, 0.13, 2) * 0.4);
+    B("batBite", 0.12, (t) => (sin(t, 1900 - 6500 * t) * 0.5 + noise() * 0.18) * env(t, 0.11, 2) * 0.6);
+    B("batDeath", 0.5, (t) => {
+      const f = 2200 * Math.pow(0.22, t / 0.5);
+      return (sin(t, f) * 0.5 + noise() * 0.15 * env(t, 0.22)) * env(t, 0.5, 1.5) * 0.6;
+    });
+    B("flutter", 0.24, (t) => {
+      // leathery wingbeats: noise pulsed at wing frequency
+      const beat = Math.pow(Math.max(0, Math.sin(2 * Math.PI * 13 * t)), 2);
+      return noise() * beat * env(t, 0.24, 1) * 0.3;
+    });
+
     // --- pickups ---
     B("pickup", 0.14, (t) => sin(t, 620 + 1800 * t) * env(t, 0.14) * 0.4);
     B("pickupAmmo", 0.12, (t) => sqr(t, 330 + 500 * t) * env(t, 0.12) * 0.25);

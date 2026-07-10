@@ -237,7 +237,8 @@ export class Renderer {
     const p = game.player;
     const sprites = [];
     for (const e of game.enemies) {
-      sprites.push({ x: e.x, y: e.y, img: e.sprite(this.assets), scale: 0.82 });
+      // flying enemies carry a zCenter (their height); footmen stand on the floor
+      sprites.push({ x: e.x, y: e.y, img: e.sprite(this.assets), scale: e.stats.scale ?? 0.82, zCenter: e.flyHeight });
     }
     for (const it of game.items) {
       const scale = it.kind === "key" ? 0.55 : 0.45;

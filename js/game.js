@@ -467,9 +467,10 @@ export class Game {
         return true;
       }
     }
-    // entities block each other
+    // entities block each other — except bat swarms, which fly right through
+    if (self?.stats?.swarm) return false;
     for (const e of this.enemies) {
-      if (e === self || e.dead) continue;
+      if (e === self || e.dead || e.stats.swarm) continue;
       const d = Math.hypot(e.x - x, e.y - y);
       if (d < r + e.radius) return true;
     }
