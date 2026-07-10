@@ -448,91 +448,295 @@ function itemSprite(kind) {
 
 // -------------------------------------------------------- weapon view (POV)
 
+// Weapons are modelled as small assemblies of 3D boxes and rendered with a
+// perspective camera sitting at the player's eye: flat-shaded faces sorted
+// back-to-front, strings and bolt streaks drawn as projected 3D lines.
+//
+// Camera space: x right, y up, z forward into the screen; the eye is at the
+// origin. Each part is an axis-aligned box (optionally rotated around its
+// own center, optionally tapered toward one end) with a base color.
+
+const WV = 192; // weapon canvas size
+const W_FOCAL = 150;
+const W_CX = WV / 2;
+const W_CY = 78;
+
+const v3sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const v3dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const v3cross = (a, b) => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+const v3norm = (v) => {
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+};
+
+const W_LIGHT = v3norm([-0.4, 0.75, -0.5]); // torch above the left shoulder
+
+function rot3(v, r) {
+  let [x, y, z] = v;
+  if (r[0]) {
+    const c = Math.cos(r[0]), s = Math.sin(r[0]);
+    [y, z] = [y * c - z * s, y * s + z * c];
+  }
+  if (r[1]) {
+    const c = Math.cos(r[1]), s = Math.sin(r[1]);
+    [x, z] = [x * c + z * s, -x * s + z * c];
+  }
+  if (r[2]) {
+    const c = Math.cos(r[2]), s = Math.sin(r[2]);
+    [x, y] = [x * c - y * s, x * s + y * c];
+  }
+  return [x, y, z];
+}
+
+const wProject = (v) => [W_CX + (W_FOCAL * v[0]) / v[2], W_CY - (W_FOCAL * v[1]) / v[2]];
+
+// quad corner indices of a box whose vertex i has bits (x:4, y:2, z:1)
+const BOX_FACES = [
+  [0, 1, 3, 2], [4, 5, 7, 6], // -x +x
+  [0, 1, 5, 4], [2, 3, 7, 6], // -y +y
+  [0, 2, 6, 4], [1, 3, 7, 5], // -z +z
+];
+
+// part: { p:[x,y,z] center, s:[w,h,d], c:"#hex", r:[rx,ry,rz]?, t:{axis,k,end}? }
+// taper t scales the cross-section at one end of the box (end: +1 or -1).
+function collectFaces(part, out, world) {
+  const [hw, hh, hd] = [part.s[0] / 2, part.s[1] / 2, part.s[2] / 2];
+  const verts = [];
+  for (let i = 0; i < 8; i++) {
+    let v = [i & 4 ? hw : -hw, i & 2 ? hh : -hh, i & 1 ? hd : -hd];
+    const t = part.t;
+    if (t && Math.sign(v[t.axis]) === (t.end ?? 1)) {
+      for (let a = 0; a < 3; a++) if (a !== t.axis) v[a] *= t.k;
+    }
+    if (part.r) v = rot3(v, part.r);
+    verts.push(world([v[0] + part.p[0], v[1] + part.p[1], v[2] + part.p[2]]));
+  }
+  const pc = world(part.p);
+  for (const f of BOX_FACES) {
+    const q = f.map((i) => verts[i]);
+    const cen = [
+      (q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4,
+      (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4,
+      (q[0][2] + q[1][2] + q[2][2] + q[3][2]) / 4,
+    ];
+    let n = v3norm(v3cross(v3sub(q[1], q[0]), v3sub(q[2], q[0])));
+    if (v3dot(n, v3sub(cen, pc)) < 0) n = [-n[0], -n[1], -n[2]]; // outward
+    if (v3dot(n, cen) >= 0) continue; // facing away from the eye
+    const b = 0.38 + 0.62 * Math.max(0, v3dot(n, W_LIGHT));
+    out.push({ z: cen[2], pts: q.map(wProject), c: part.c, b });
+  }
+}
+
+// Rotate a finished model around the vertical axis through `pivot`, so the
+// weapon is seen slightly from the side — pure head-on views read as flat.
+function yawModel(model, yaw, pivot) {
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  const R = (v) => {
+    const x = v[0] - pivot[0], z = v[2] - pivot[2];
+    return [pivot[0] + x * cy + z * sy, v[1], pivot[2] - x * sy + z * cy];
+  };
+  for (const p of model.parts) {
+    p.p = R(p.p);
+    p.r = p.r ? [p.r[0], p.r[1] + yaw, p.r[2]] : [0, yaw, 0];
+  }
+  for (const l of model.lines) {
+    l.a = R(l.a);
+    l.b = R(l.b);
+  }
+}
+
+function renderWeaponModel(g, model) {
+  const { parts, lines, pitch = 0, pivot = [0, 0, 0.5] } = model;
+  // global pitch: tilt the whole weapon nose-down so its top faces show
+  const pc = Math.cos(pitch), ps = Math.sin(pitch);
+  const world = (v) => {
+    const y = v[1] - pivot[1], z = v[2] - pivot[2];
+    return [v[0], pivot[1] + y * pc - z * ps, pivot[2] + y * ps + z * pc];
+  };
+  const faces = [];
+  for (const p of parts) collectFaces(p, faces, world);
+  faces.sort((a, b) => b.z - a.z); // painter's algorithm: far first
+  for (const f of faces) {
+    g.fillStyle = shadeColor(f.c, f.b);
+    g.strokeStyle = shadeColor(f.c, f.b * 0.8); // darker edges define the form
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(f.pts[0][0], f.pts[0][1]);
+    for (let i = 1; i < 4; i++) g.lineTo(f.pts[i][0], f.pts[i][1]);
+    g.closePath();
+    g.fill();
+    g.stroke();
+  }
+  for (const ln of lines) {
+    const a = wProject(world(ln.a));
+    const b = wProject(world(ln.b));
+    g.strokeStyle = ln.c;
+    g.lineWidth = ln.w ?? 2;
+    g.beginPath();
+    g.moveTo(a[0], a[1]);
+    g.lineTo(b[0], b[1]);
+    g.stroke();
+  }
+}
+
+const W_SKIN = "#dba377";
+const W_SKIN_D = "#c08b5c";
+const W_WOOD = "#5a3a20";
+const W_WOOD_D = "#35240f";
+const W_LIMB = "#523823";
+const W_GOLD = "#c9a24a";
+const W_STEEL = "#c4ced4";
+const W_STRING = "#c9bd9c";
+
+const W_LEATHER = "#4a3220";
+
+function weaponModel(kind, frame) {
+  const parts = [];
+  const lines = [];
+  const P = (p, s, c, r, t) => parts.push({ p, s, c, r, t });
+  const model = { parts, lines };
+
+  if (kind === "dagger") {
+    // held point-forward: the blade juts out of the fist toward the
+    // crosshair, and the stab thrusts the whole arm deeper into the scene
+    const k = frame === 1 ? 1 : frame === 2 ? 0.45 : 0;
+    const at = (x, y, z) => [x, y + 0.02 * k, z + 0.24 * k];
+    P(at(0.1, -0.38, 0.44), [0.14, 0.3, 0.13], W_SKIN, [0.35, 0, 0.12]); // forearm
+    P(at(0.11, -0.48, 0.4), [0.16, 0.14, 0.15], W_LEATHER, [0.35, 0, 0.12]); // bracer
+    P(at(0.06, -0.24, 0.5), [0.16, 0.13, 0.16], W_SKIN, [0.05, 0.1, 0]); // fist
+    P(at(-0.02, -0.21, 0.455), [0.05, 0.05, 0.07], W_SKIN_D); // thumb
+    P(at(0.06, -0.21, 0.415), [0.05, 0.06, 0.035], W_GOLD); // pommel behind the fist
+    P(at(0.06, -0.2, 0.575), [0.2, 0.05, 0.035], W_GOLD, [-0.35, 0, 0]); // crossguard
+    P(at(0.06, -0.135, 0.745), [0.045, 0.02, 0.36], W_STEEL, [-0.35, 0, 0], { axis: 2, k: 0.15 }); // blade
+    yawModel(model, -0.15, [0.06, 0, 0.5]);
+    model.pitch = 0.06;
+    model.pivot = [0, -0.2, 0.5];
+  } else if (kind === "crossbow") {
+    const k = frame === 1 ? 1 : frame === 2 ? 0.5 : 0;
+    const at = (x, y, z) => [x + 0.03, y - 0.06 + 0.05 * k, z - 0.04 * k]; // sits low; recoil up and back
+    P(at(0.02, -0.35, 0.46), [0.14, 0.3, 0.13], W_SKIN, [0.32, 0, 0]); // forearm
+    P(at(0.03, -0.46, 0.42), [0.16, 0.14, 0.15], W_LEATHER, [0.32, 0, 0]); // bracer
+    P(at(0, -0.21, 0.52), [0.16, 0.12, 0.15], W_SKIN); // fist on the grip
+    P(at(0, -0.12, 0.4), [0.09, 0.13, 0.14], "#4a3018"); // butt at the cheek
+    P(at(0, -0.1, 0.6), [0.08, 0.08, 0.42], "#6a4426", null, { axis: 2, k: 0.75 }); // tiller
+    // wooden limbs swept back toward the shooter, steel lath on their face
+    P(at(-0.19, -0.045, 0.72), [0.38, 0.06, 0.065], W_LIMB, [0, -0.4, -0.18], { axis: 0, end: -1, k: 0.5 });
+    P(at(0.19, -0.045, 0.72), [0.38, 0.06, 0.065], W_LIMB, [0, 0.4, 0.18], { axis: 0, end: 1, k: 0.5 });
+    const tipL = at(-0.36, -0.011, 0.646);
+    const tipR = at(0.36, -0.011, 0.646);
+    if (frame === 0) {
+      // string cocked back to the nut, bolt lying on the tiller
+      const nut = at(0, -0.065, 0.5);
+      lines.push({ a: tipL, b: nut, c: W_STRING, w: 2 }, { a: tipR, b: nut, c: W_STRING, w: 2 });
+      P(at(0, -0.03, 0.62), [0.024, 0.024, 0.36], "#5d3f1c", null, { axis: 2, k: 0.5 }); // shaft
+      P(at(0, -0.03, 0.82), [0.045, 0.045, 0.08], W_STEEL); // head
+      P(at(0, -0.025, 0.49), [0.018, 0.065, 0.08], "#a03030"); // fletching
+      P(at(0, -0.025, 0.49), [0.065, 0.018, 0.08], "#a03030");
+    } else {
+      // loosed: string resting against the front of the lath
+      const front = at(0, -0.055, 0.68);
+      lines.push({ a: tipL, b: front, c: W_STRING, w: 2 }, { a: tipR, b: front, c: W_STRING, w: 2 });
+      if (frame === 1) {
+        lines.push({ a: [0, 0.03, 1.2], b: [0, 0.1, 2.4], c: "#f2ecd8", w: 2 }); // bolt racing away
+      }
+    }
+    yawModel(model, 0.08, [0.03, 0, 0.55]);
+    model.pitch = 0.16;
+    model.pivot = [0, -0.12, 0.5];
+  } else if (kind === "arbalest") {
+    const k = frame === 1 ? 1 : frame === 2 ? 0.5 : 0;
+    const at = (x, y, z) => [x + 0.02, y - 0.06 + 0.04 * k, z - 0.04 * k]; // sits low
+    // both arms braced
+    P(at(-0.21, -0.38, 0.45), [0.11, 0.28, 0.1], W_SKIN, [0.28, 0, -0.18]);
+    P(at(0.21, -0.38, 0.45), [0.11, 0.28, 0.1], W_SKIN, [0.28, 0, 0.18]);
+    P(at(-0.24, -0.47, 0.42), [0.13, 0.12, 0.12], W_LEATHER, [0.28, 0, -0.18]); // bracers
+    P(at(0.24, -0.47, 0.42), [0.13, 0.12, 0.12], W_LEATHER, [0.28, 0, 0.18]);
+    P(at(-0.16, -0.24, 0.51), [0.13, 0.1, 0.13], W_SKIN); // fists
+    P(at(0.16, -0.24, 0.51), [0.13, 0.1, 0.13], W_SKIN);
+    P(at(0, -0.13, 0.38), [0.11, 0.15, 0.16], "#4a3018"); // butt
+    P(at(0, -0.09, 0.6), [0.11, 0.1, 0.46], "#6a4426", null, { axis: 2, k: 0.8 }); // tiller
+    // magazine of the repeating mechanism riding on top, iron-strapped
+    P(at(0, 0.015, 0.58), [0.12, 0.1, 0.22], "#7a5230");
+    P(at(0, 0.015, 0.51), [0.13, 0.11, 0.02], "#2e2012");
+    P(at(0, 0.015, 0.65), [0.13, 0.11, 0.02], "#2e2012");
+    // heavy limbs with steel laths
+    P(at(-0.2, -0.04, 0.74), [0.4, 0.065, 0.075], W_LIMB, [0, -0.45, -0.2], { axis: 0, end: -1, k: 0.5 });
+    P(at(0.2, -0.04, 0.74), [0.4, 0.065, 0.075], W_LIMB, [0, 0.45, 0.2], { axis: 0, end: 1, k: 0.5 });
+    const tipL = at(-0.375, 0.0, 0.666);
+    const tipR = at(0.375, 0.0, 0.666);
+    const hook = at(0, -0.07, 0.52);
+    lines.push({ a: tipL, b: hook, c: W_STRING, w: 2 }, { a: tipR, b: hook, c: W_STRING, w: 2 });
+    if (frame === 1) {
+      lines.push({ a: [0, 0.04, 1.2], b: [0, 0.12, 2.4], c: "#f2ecd8", w: 3 }); // bolt racing away
+    }
+    yawModel(model, 0.08, [0.02, 0, 0.55]);
+    model.pitch = 0.16;
+    model.pivot = [0, -0.12, 0.5];
+  }
+  return model;
+}
+
 function weaponView(kind, frame) {
-  const c = canvas(128, 128);
+  const c = canvas(WV, WV);
+  const g = c.getContext("2d");
+  renderWeaponModel(g, weaponModel(kind, frame));
+  return c;
+}
+
+// Flat pixel-art emblems for the HUD "ARMS" panel — the 3D POV renders make
+// poor icons, so these stay 2D like the rest of the HUD.
+function weaponIcon(kind) {
+  const c = canvas(64, 64);
   const g = c.getContext("2d");
   const P = (x, y, w, h, col) => {
     g.fillStyle = col;
     g.fillRect(x * 4, y * 4, w * 4, h * 4);
   };
-  const skin = "#dba377";
-  const skinD = "#b98457";
   if (kind === "dagger") {
-    const up = frame === 1 ? -6 : frame === 2 ? -3 : 0;
-    P(13, 26 + up, 7, 6, skin); // fist
-    P(13, 26 + up, 7, 1.5, skinD);
-    P(14, 30 + up, 5, 2, skinD); // wrist shade
-    P(14.5, 21 + up, 4, 5, "#3a2a16"); // wrapped grip
-    P(14.5, 22.5 + up, 4, 0.8, "#5a4326");
-    P(14.5, 24.5 + up, 4, 0.8, "#5a4326");
-    P(13, 19.5 + up, 7, 1.5, "#c9a24a"); // crossguard
-    P(15.25, 9 + up, 2.5, 10.5, "#c9d4d8"); // blade
-    P(15.25, 9 + up, 1, 10.5, "#eef4f6");
-    P(15.25, 8 + up, 2.5, 1.5, "#eef4f6"); // tip
+    P(7.2, 0.6, 1.6, 1, "#eef4f6"); // tip
+    P(7.2, 1.4, 1.6, 5.8, "#c9d4d8"); // blade
+    P(7.2, 1.4, 0.6, 5.8, "#eef4f6");
+    P(5, 7.2, 6, 1.3, "#c9a24a"); // guard
+    P(6.9, 8.5, 2.2, 4.2, "#3a2a16"); // wrapped grip
+    P(6.9, 9.6, 2.2, 0.6, "#5a4326");
+    P(6.9, 11, 2.2, 0.6, "#5a4326");
+    P(6.6, 12.7, 2.8, 1.5, "#c9a24a"); // pommel
   } else if (kind === "crossbow") {
-    const up = frame >= 1 ? 2 : 0;
-    // forearm + hand on the tiller
-    P(12, 28 + up, 8, 4, skin);
-    P(11.5, 25 + up, 9, 3.5, skin);
-    P(11.5, 25 + up, 9, 1, skinD);
-    P(10.5, 26.5 + up, 1.5, 2, skinD); // thumb
-    // tiller (stock): wide near the eye, tapering away
-    P(14, 18 + up, 4, 7.5, "#4a3018");
-    P(14, 18 + up, 1.2, 7.5, "#6a4a28");
-    P(14.6, 13 + up, 2.8, 5, "#553a20");
-    // thick bow limbs with upswept tips and a steel lath
-    P(7, 12.5 + up, 18, 2.4, "#3a2a16");
-    P(5.5, 11.5 + up, 2, 2.6, "#33220f");
-    P(24.5, 11.5 + up, 2, 2.6, "#33220f");
-    P(7, 12.9 + up, 18, 0.8, "#5d4326");
-    P(7, 12.1 + up, 18, 0.5, "#9aa2ac");
-    if (frame === 0) {
-      // string drawn back to the nut, bolt loaded
-      const str = "#9a927e";
-      P(7, 14.9, 3.2, 0.6, str);
-      P(10.2, 16.1, 3, 0.6, str);
-      P(13.2, 17.2, 2.2, 0.6, str);
-      P(21.8, 14.9, 3.2, 0.6, str);
-      P(18.8, 16.1, 3, 0.6, str);
-      P(16.6, 17.2, 2.2, 0.6, str);
-      P(15.55, 10, 0.9, 7.5, "#7a5a30"); // bolt shaft
-      P(15.3, 8.2, 1.4, 1.9, "#8d949c"); // steel head
-      P(15.1, 15.6, 1.8, 1.8, "#a03030"); // fletching
-    } else {
-      // loosed: string snapped forward against the lath
-      P(7, 13 + up, 18, 0.6, "#b8b09a");
-      if (frame === 1) {
-        P(15.7, 3.5, 0.6, 4, "#e8e0c8"); // bolt streak
-        P(15.7, 2, 0.6, 1, "#ffffff");
-      }
-    }
-  } else if (kind === "arbalest") {
-    const up = frame >= 1 ? 1.5 : 0;
-    // two hands
-    P(9.5, 27 + up, 6, 5, skin);
-    P(9.5, 27 + up, 6, 1.2, skinD);
-    P(16.5, 27 + up, 6, 5, skin);
-    P(16.5, 27 + up, 6, 1.2, skinD);
-    // stock
-    P(13.5, 17 + up, 5, 10, "#4a3018");
-    P(13.5, 17 + up, 1.2, 10, "#6a4a28");
-    // magazine box on top (repeating mechanism)
-    P(12.5, 9.5 + up, 7, 7, "#5d4326");
-    P(12.5, 9.5 + up, 7, 1, "#7a5a34");
-    P(13.3, 11.5 + up, 5.4, 0.8, "#3c2a14");
-    P(13.3, 13.5 + up, 5.4, 0.8, "#3c2a14");
-    P(12.5, 9.5 + up, 1, 7, "#7a5a34");
-    // thick wide limbs with steel lath
-    P(6, 16 + up, 20, 2.6, "#3a2a16");
-    P(4.5, 15 + up, 2, 3, "#33220f");
-    P(25.5, 15 + up, 2, 3, "#33220f");
-    P(6, 16.5 + up, 20, 0.8, "#5d4326");
-    P(6, 15.6 + up, 20, 0.5, "#9aa2ac");
-    P(6.5, 18.8 + up, 19, 0.6, "#b8b09a"); // string
-    if (frame === 1) {
-      P(15.4, 3.5, 1, 4.5, "#e8e0c8"); // bolt streak
-      P(15.4, 2, 1, 1, "#ffffff");
-    }
+    P(1.5, 3.4, 13, 1.6, "#3c2818"); // bow
+    P(0.8, 2.6, 1.4, 1.8, "#2c1c10"); // upswept tips
+    P(13.8, 2.6, 1.4, 1.8, "#2c1c10");
+    P(1.5, 3.4, 13, 0.5, "#9aa2ac"); // steel lath
+    const s = "#c9bd9c"; // string drawn back to the nut
+    P(1.2, 4.6, 2.4, 0.5, s);
+    P(3.6, 5.6, 2.2, 0.5, s);
+    P(5.8, 6.6, 1.8, 0.5, s);
+    P(12.4, 4.6, 2.4, 0.5, s);
+    P(10.2, 5.6, 2.2, 0.5, s);
+    P(8.4, 6.6, 1.8, 0.5, s);
+    P(7.2, 3, 1.6, 9.5, "#5a3a20"); // stock
+    P(7.2, 3, 0.6, 9.5, "#6f4a28");
+    P(6.8, 12.5, 2.4, 1.5, "#4a3018"); // butt
+  } else {
+    P(1, 4.2, 14, 1.9, "#3c2818"); // heavier bow
+    P(0.3, 3.3, 1.5, 2, "#2c1c10");
+    P(14.2, 3.3, 1.5, 2, "#2c1c10");
+    P(1, 4.2, 14, 0.5, "#9aa2ac");
+    const s = "#c9bd9c";
+    P(0.8, 5.7, 2.6, 0.5, s);
+    P(3.4, 6.7, 2.4, 0.5, s);
+    P(5.8, 7.7, 2, 0.5, s);
+    P(12.6, 5.7, 2.6, 0.5, s);
+    P(10.2, 6.7, 2.4, 0.5, s);
+    P(8.2, 7.7, 2, 0.5, s);
+    P(6, 1, 4, 3.2, "#7a5230"); // magazine above the bow
+    P(6, 1, 4, 0.7, "#8d6238");
+    P(6.9, 4.2, 2.2, 8.3, "#5a3a20"); // stock
+    P(6.9, 4.2, 0.7, 8.3, "#6f4a28");
+    P(6.4, 12.5, 3.2, 1.8, "#4a3018"); // butt
   }
   return c;
 }
@@ -629,8 +833,14 @@ export function buildAssets() {
     arbalest: [weaponView("arbalest", 0), weaponView("arbalest", 1), weaponView("arbalest", 2)],
   };
 
+  const weaponIcons = {
+    dagger: weaponIcon("dagger"),
+    crossbow: weaponIcon("crossbow"),
+    arbalest: weaponIcon("arbalest"),
+  };
+
   const crests = {};
   for (const s of ["healthy", "ok", "hurt", "bad", "dead"]) crests[s] = crestSprite(s);
 
-  return { walls, wallsDark, enemySprites, items, weapons, crests, TEX };
+  return { walls, wallsDark, enemySprites, items, weapons, weaponIcons, crests, TEX };
 }

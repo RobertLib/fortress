@@ -395,7 +395,7 @@ export class Renderer {
     g.fillRect(584, y0 + hudH - 9, 48, 1);
     g.fillStyle = "#b08c46";
     g.fillText("ARMS", 608, y0 + 22);
-    const wIcon = this.assets.weapons[w][0];
-    g.drawImage(wIcon, 32, 24, 72, 84, 588, y0 + 22, 40, 38);
+    const wIcon = this.assets.weaponIcons[w];
+    g.drawImage(wIcon, 591, y0 + 24, 34, 34);
   }
 }
