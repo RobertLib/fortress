@@ -1,12 +1,12 @@
 ; FORTRESS — floor 1: GUARDHOUSE
-; 1-6 walls, D door, X gate, P player, K key, H potion, F bread,
+; 1-6 walls, B bars, D door, R barred door, X gate, P player, K key, H potion, F bread,
 ; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, ^ arrow trap
 @name GUARDHOUSE
 @floor #4a4038
 @ceil #1e1914
 @start E
 11111X1111111111111611111
-1PD.1.........1.D.......1
+1PR.B.........B.D.......1
 161.1116111.1.1.1.111.6.1
 1...1..D..1..H..1....AD.1
 1.111.111.1611111.61111.1

@@ -206,7 +206,7 @@ export class Game {
       const cy = Math.floor(p.y + p.dirY * t);
       const cell = this.cellAt(cx, cy);
       if (cell === ".") continue;
-      if (cell === "D") {
+      if (cell === "D" || cell === "R") {
         const door = this.doorAt(cx, cy);
         if (door) this.openDoor(door, true);
         return;
@@ -365,7 +365,8 @@ export class Game {
         const cx = Math.floor(a.x);
         const cy = Math.floor(a.y);
         const cell = this.cellAt(cx, cy);
-        if (cell !== "." && !(cell === "D" && this.doorOpenAmount(cx, cy) > 0.85)) {
+        if (cell === "B" || cell === "R") continue;
+        if (cell !== "." && !((cell === "D" || cell === "R") && this.doorOpenAmount(cx, cy) > 0.85)) {
           audio.playAt("arrowHit", a.x, a.y, p, { volume: 0.7 });
           dead = true;
           break;
@@ -462,7 +463,7 @@ export class Game {
       for (let cx = minX; cx <= maxX; cx++) {
         const cell = this.cellAt(cx, cy);
         if (cell === ".") continue;
-        if (cell === "D" && this.doorOpenAmount(cx, cy) > 0.85) continue;
+        if ((cell === "D" || cell === "R") && this.doorOpenAmount(cx, cy) > 0.85) continue;
         return true;
       }
     }
@@ -480,7 +481,8 @@ export class Game {
   }
 
   lineOfSight(x0, y0, x1, y1) {
-    // voxel traversal; walls and mostly-closed doors block sight
+    // voxel traversal; solid walls and mostly-closed wooden doors block sight.
+    // Bars are physical obstacles, but intentionally do not block vision/fire.
     let cx = Math.floor(x0);
     let cy = Math.floor(y0);
     const tx = Math.floor(x1);
@@ -505,6 +507,7 @@ export class Game {
       }
       const cell = this.cellAt(cx, cy);
       if (cell === ".") continue;
+      if (cell === "B" || cell === "R") continue;
       if (cell === "D" && this.doorOpenAmount(cx, cy) > 0.6) continue;
       if (cx === tx && cy === ty) return true;
       return false;

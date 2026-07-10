@@ -50,13 +50,17 @@ Levels are text files in [levels/](levels/) — one character = one tile,
 so they are easy to edit or extend with your own:
 
 ```
-1-6  walls (texture variants)  .  floor
-D    door                      X  gate (needs 3 keys)
+1-6  walls (texture variants)  B  barred wall (see/shoot through)
+.    floor                     D  wooden door
+R    barred door               X  gate (needs 3 keys)
 P    player start              K  key
 H    healing potion (+25)      F  bread (+10)
 A    quiver of bolts           T  treasure (score)
 M    repeating crossbow        G/S/O  guard / knight / captain
 ```
+
+Barred walls and barred doors block movement while closed, but allow both the
+player and enemies to see and shoot through them. `R` opens like a normal door.
 
 Wall variants: rough stone masonry, weathered mossy stone, a
 timber-framed wall, a dungeon wall with a barred window, old brick,

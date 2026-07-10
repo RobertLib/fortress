@@ -22,6 +22,7 @@ export class Renderer {
     this.ctx.imageSmoothingEnabled = false;
     this.assets = assets;
     this.zbuffer = new Float32Array(W);
+    this.transparentWalls = new Array(W);
     this.spriteShades = new Map(); // img -> [img, darker, ...]
     this.gradCache = null;
 
@@ -77,6 +78,7 @@ export class Renderer {
       const rayDirY = p.dirY + p.planeY * cameraX;
       const hit = this.castRay(game, p.x, p.y, rayDirX, rayDirY);
       this.zbuffer[x] = hit.dist;
+      this.transparentWalls[x] = hit.overlays;
       if (hit.dist <= 0.0001) continue;
 
       const lineHeight = VIEW_H / hit.dist;
@@ -95,6 +97,10 @@ export class Renderer {
       }
     }
 
+    // Transparent walls are initially drawn over the opaque scene. Sprites are
+    // composited afterward and redraw only the bars that are closer than them.
+    // This keeps actors correctly in front of or behind a barred surface.
+    this.renderTransparentWalls();
     this.renderSprites(game);
     g.drawImage(this.vignette, 0, 0);
     this.renderWeapon(game);
@@ -124,6 +130,7 @@ export class Renderer {
     }
 
     let side = 0;
+    const overlays = [];
     for (let i = 0; i < MAX_STEPS; i++) {
       if (sideDistX < sideDistY) {
         sideDistX += deltaX;
@@ -138,7 +145,7 @@ export class Renderer {
       const cell = grid[mapY * w + mapX];
       if (cell === ".") continue;
 
-      if (cell === "D") {
+      if (cell === "D" || cell === "R") {
         // sliding door: test the plane in the middle of the cell
         const open = game.doorOpenAmount(mapX, mapY);
         let distMid, coord;
@@ -150,7 +157,11 @@ export class Renderer {
           coord = posX + distMid * rayDirX - mapX;
         }
         if (coord >= 0 && coord < 1 && coord >= open) {
-          return { dist: distMid, side, tex: "D", wallX: coord - open };
+          if (cell === "R") {
+            overlays.push({ dist: distMid, side, tex: "R", wallX: coord - open });
+            continue;
+          }
+          return { dist: distMid, side, tex: "D", wallX: coord - open, overlays };
         }
         continue; // door open at this spot — ray passes through
       }
@@ -168,9 +179,36 @@ export class Renderer {
       if ((side === 0 && rayDirX > 0) || (side === 1 && rayDirY < 0)) {
         wallX = 1 - wallX;
       }
-      return { dist, side, tex: cell, wallX };
+      if (cell === "B") {
+        overlays.push({ dist, side, tex: "B", wallX });
+        continue;
+      }
+      return { dist, side, tex: cell, wallX, overlays };
     }
-    return { dist: 1e9, side: 0, tex: "1", wallX: 0 };
+    return { dist: 1e9, side: 0, tex: "1", wallX: 0, overlays };
+  }
+
+  drawTransparentStripe(hit, x) {
+    if (hit.dist <= 0.0001) return;
+    const g = this.ctx;
+    const lineHeight = VIEW_H / hit.dist;
+    const drawStart = VIEW_H / 2 - lineHeight / 2;
+    const texSet = hit.side === 1 ? this.assets.wallsDark : this.assets.walls;
+    const tex = texSet[hit.tex];
+    let texX = Math.floor(hit.wallX * 64);
+    texX = Math.max(0, Math.min(63, texX));
+    g.drawImage(tex, texX, 0, 1, 64, x, drawStart, 1, lineHeight);
+  }
+
+  renderTransparentWalls(startX = 0, endX = W - 1, inFrontOf = Infinity) {
+    for (let x = Math.max(0, startX); x <= Math.min(W - 1, endX); x++) {
+      const layers = this.transparentWalls[x];
+      if (!layers) continue;
+      // Rays encounter bars near-to-far; painters need the reverse order.
+      for (let i = layers.length - 1; i >= 0; i--) {
+        if (layers[i].dist < inFrontOf) this.drawTransparentStripe(layers[i], x);
+      }
+    }
   }
 
   renderSprites(game) {
@@ -236,6 +274,7 @@ export class Renderer {
           const texX0 = ((runStart - startX) / sprW) * 64;
           const texX1 = ((x - startX) / sprW) * 64;
           g.drawImage(img, texX0, 0, Math.max(0.01, texX1 - texX0), 64, runStart, top, x - runStart, sprH);
+          this.renderTransparentWalls(runStart, x - 1, transformY);
           runStart = -1;
         }
       }
@@ -304,6 +343,8 @@ export class Renderer {
         let col = null;
         if (cell === ".") col = "#241c12";
         else if (cell === "D") col = "#8a5a28";
+        else if (cell === "B") col = "#59636a";
+        else if (cell === "R") col = "#76828a";
         else if (cell === "X") col = "#c9a24a";
         else col = "#655743";
         g.fillStyle = col;

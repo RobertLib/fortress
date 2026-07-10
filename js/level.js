@@ -3,8 +3,10 @@
 //   Lines starting with "@" are properties: @name, @floor, @ceil (colors).
 //   Everything else is the map grid, one character per cell:
 //     1-6    walls (texture variants), # = 1
+//     B      barred wall (solid, but can be seen and shot through)
 //     .      floor
 //     D      door (slides open)
+//     R      barred door (slides open, can be seen and shot through)
 //     X      exit door (needs all 3 keys)
 //     P      player start (append facing to @start: N/S/E/W, default E)
 //     K      key            H healing potion (+25)   F bread (+10)
@@ -15,7 +17,7 @@
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
 
-export const WALLS = new Set(["1", "2", "3", "4", "5", "6", "7", "#"]);
+export const WALLS = new Set(["1", "2", "3", "4", "5", "6", "7", "B", "#"]);
 
 const ITEM_CHARS = { K: "key", H: "potion", F: "bread", A: "bolts", T: "treasure", M: "arbalest" };
 const ENEMY_CHARS = { G: "guard", S: "knight", O: "captain" };
@@ -51,9 +53,9 @@ export function parseLevel(text) {
       let cell = ".";
       if (WALLS.has(ch)) {
         cell = ch;
-      } else if (ch === "D") {
-        cell = "D";
-        doors.push({ x, y });
+      } else if (ch === "D" || ch === "R") {
+        cell = ch;
+        doors.push({ x, y, kind: ch });
       } else if (ch === "X") {
         cell = "X";
       } else if (ch === "P") {

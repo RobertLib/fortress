@@ -249,6 +249,67 @@ function doorTexture() {
   return c;
 }
 
+// Iron bars with a transparent opening. The renderer composites this surface
+// over whatever the ray hits farther down the corridor.
+function barsTexture({ door = false } = {}) {
+  const c = canvas();
+  const g = c.getContext("2d");
+
+  // A dark outline gives every bar some weight, followed by a narrow highlight
+  // on the torch-facing edge. Door bars have a complete moving iron frame;
+  // fixed bars are seated in heavier stone-colored top and bottom rails.
+  const frame = door ? "#25292d" : "#4f4a43";
+  const iron = "#30353a";
+  const edge = "rgba(190,200,205,0.32)";
+  const shadow = "rgba(0,0,0,0.5)";
+
+  g.fillStyle = shadow;
+  g.fillRect(0, 0, TEX, 6);
+  g.fillRect(0, TEX - 7, TEX, 7);
+  if (door) {
+    g.fillRect(0, 0, 6, TEX);
+    g.fillRect(TEX - 7, 0, 7, TEX);
+  }
+  g.fillStyle = frame;
+  g.fillRect(0, 0, TEX, 4);
+  g.fillRect(0, TEX - 5, TEX, 5);
+  if (door) {
+    g.fillRect(0, 0, 4, TEX);
+    g.fillRect(TEX - 5, 0, 5, TEX);
+  }
+
+  for (const x of [9, 20, 31, 42, 53]) {
+    g.fillStyle = shadow;
+    g.fillRect(x - 1, 3, 5, 57);
+    g.fillStyle = iron;
+    g.fillRect(x, 3, 3, 56);
+    g.fillStyle = edge;
+    g.fillRect(x, 4, 1, 54);
+    // pointed lower tips sell the portcullis silhouette
+    g.fillStyle = iron;
+    g.fillRect(x + 1, 59, 1, 3);
+  }
+  for (const y of [19, 39]) {
+    g.fillStyle = shadow;
+    g.fillRect(2, y - 1, 60, 5);
+    g.fillStyle = iron;
+    g.fillRect(2, y, 60, 3);
+    g.fillStyle = edge;
+    g.fillRect(3, y, 58, 1);
+  }
+
+  if (door) {
+    // latch plate and ring handle
+    g.fillStyle = "#1c2023";
+    g.fillRect(47, 27, 8, 11);
+    g.fillStyle = "#747b80";
+    g.fillRect(49, 29, 5, 2);
+    g.fillRect(52, 31, 2, 5);
+    g.fillRect(49, 35, 5, 2);
+  }
+  return c;
+}
+
 // The locked gate: stone arch, half-raised portcullis, warm light beyond.
 function gateTexture() {
   const c = stoneTexture(99, { base: "#5d564e" });
@@ -874,7 +935,9 @@ export function buildAssets() {
     5: brickTexture("#8f4f2c", "#3a2c20", 55),
     6: bannerTexture(66),
     7: arrowSlitTexture(77),
+    B: barsTexture(),
     D: doorTexture(),
+    R: barsTexture({ door: true }),
     X: gateTexture(),
   };
   const wallsDark = {};

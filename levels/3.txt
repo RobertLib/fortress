@@ -1,12 +1,12 @@
 ; FORTRESS — floor 3: BARRACKS
-; 1-6 walls, D door, X gate, P player, K key, H potion, F bread,
+; 1-6 walls, B bars, D door, R barred door, X gate, P player, K key, H potion, F bread,
 ; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, ^ arrow trap
 @name BARRACKS
 @floor #45443c
 @ceil #191a16
 @start N
 22222222222222422222222222222
-2P........2.DF......AH2..A..4
+2P........B.RF......AHB..A..4
 222D222.222.222.22222.2D222.2
 2.2...2S..2.2.2.....2...2...2
 2.2.2.222.2.2.2..S.S2.G.222.2
