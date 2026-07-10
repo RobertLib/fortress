@@ -16,6 +16,19 @@ const fogAmount = (dist) => Math.min(0.88, Math.max(0, (dist - 1.4) / 13));
 const SPRITE_SHADES = [1, 0.78, 0.58, 0.42];
 const shadeBucket = (dist) => (dist < 3.5 ? 0 : dist < 6 ? 1 : dist < 9 ? 2 : 3);
 
+const torchFlicker = (time, phase) =>
+  0.84 + Math.sin(time * 17 + phase) * 0.1 + Math.sin(time * 29 + phase * 1.7) * 0.06;
+
+function torchLight(level, x, y, time) {
+  let light = 0;
+  for (const t of level.torches) {
+    const dist = Math.hypot(t.x - x, t.y - y);
+    if (dist >= 3.4) continue;
+    light = Math.max(light, (1 - dist / 3.4) * torchFlicker(time, t.phase));
+  }
+  return light;
+}
+
 export class Renderer {
   constructor(canvas, assets) {
     this.ctx = canvas.getContext("2d");
@@ -90,7 +103,14 @@ export class Renderer {
       if (texX > 63) texX = 63;
       g.drawImage(tex, texX, 0, 1, 64, x, drawStart, 1, lineHeight);
 
-      const fog = fogAmount(hit.dist);
+      const hitX = p.x + rayDirX * hit.dist;
+      const hitY = p.y + rayDirY * hit.dist;
+      const light = torchLight(level, hitX, hitY, game.time);
+      if (light > 0.015) {
+        g.fillStyle = `rgba(255,132,32,${Math.min(0.16, light * 0.14)})`;
+        g.fillRect(x, drawStart, 1, lineHeight);
+      }
+      const fog = Math.max(0, fogAmount(hit.dist) - light * 0.42);
       if (fog > 0.02) {
         g.fillStyle = `rgba(${FOG},${fog})`;
         g.fillRect(x, drawStart, 1, lineHeight);
@@ -101,6 +121,7 @@ export class Renderer {
     // composited afterward and redraw only the bars that are closer than them.
     // This keeps actors correctly in front of or behind a barred surface.
     this.renderTransparentWalls();
+    this.renderTorchGlows(game);
     this.renderSprites(game);
     g.drawImage(this.vignette, 0, 0);
     this.renderWeapon(game);
@@ -238,6 +259,17 @@ export class Renderer {
       else img = lat > 0 ? s.arrow : s.arrowLeft;
       sprites.push({ x: a.x, y: a.y, img, scale: 0.82 });
     }
+    for (const t of game.level.torches) {
+      const frame = Math.floor(game.time * 12 + t.phase * 1.7) & 3;
+      sprites.push({
+        x: t.x,
+        y: t.y,
+        img: this.assets.torches[frame],
+        scale: 0.52,
+        zCenter: 0.58,
+        fullbright: true,
+      });
+    }
     for (const s of sprites) {
       s.dist = (p.x - s.x) ** 2 + (p.y - s.y) ** 2;
     }
@@ -255,15 +287,22 @@ export class Renderer {
       const fullH = Math.abs(VIEW_H / transformY);
       const sprH = fullH * s.scale;
       const sprW = sprH;
-      const bottom = VIEW_H / 2 + fullH / 2;
-      const top = bottom - sprH;
+      const top = s.zCenter == null
+        ? VIEW_H / 2 + fullH / 2 - sprH
+        : VIEW_H / 2 + fullH * (0.5 - s.zCenter) - sprH / 2;
       const startX = Math.floor(screenX - sprW / 2);
       const endX = Math.ceil(screenX + sprW / 2);
       if (endX < 0 || startX >= W || sprW < 1) continue;
 
       // draw in vertical stripes, clipped by the wall z-buffer,
       // darkened with distance to match the wall fog
-      const img = this.shadedSprite(s.img, shadeBucket(transformY));
+      let bucket = shadeBucket(transformY);
+      if (!s.fullbright) {
+        const light = torchLight(game.level, s.x, s.y, game.time);
+        if (light > 0.5) bucket = Math.max(0, bucket - 2);
+        else if (light > 0.15) bucket = Math.max(0, bucket - 1);
+      }
+      const img = s.fullbright ? s.img : this.shadedSprite(s.img, bucket);
       const x0 = Math.max(0, startX);
       const x1 = Math.min(W - 1, endX);
       let runStart = -1;
@@ -279,6 +318,39 @@ export class Renderer {
         }
       }
     }
+  }
+
+  renderTorchGlows(game) {
+    const g = this.ctx;
+    const p = game.player;
+    const invDet = 1 / (p.planeX * p.dirY - p.dirX * p.planeY);
+    g.save();
+    g.beginPath();
+    g.rect(0, 0, W, VIEW_H);
+    g.clip();
+    g.globalCompositeOperation = "screen";
+    for (const t of game.level.torches) {
+      const sx = t.x - p.x;
+      const sy = t.y - p.y;
+      const transformX = invDet * (p.dirY * sx - p.dirX * sy);
+      const transformY = invDet * (-p.planeY * sx + p.planeX * sy);
+      if (transformY <= 0.08) continue;
+      const screenX = (W / 2) * (1 + transformX / transformY);
+      if (screenX < -180 || screenX > W + 180) continue;
+      const zi = Math.max(0, Math.min(W - 1, Math.round(screenX)));
+      if (transformY > this.zbuffer[zi] + 0.15) continue;
+      const fullH = VIEW_H / transformY;
+      const screenY = VIEW_H / 2 + fullH * (0.5 - 0.72);
+      const radius = Math.max(16, Math.min(150, fullH * 0.62));
+      const flicker = torchFlicker(game.time, t.phase);
+      const grad = g.createRadialGradient(screenX, screenY, 0, screenX, screenY, radius);
+      grad.addColorStop(0, `rgba(255,174,55,${0.2 * flicker})`);
+      grad.addColorStop(0.28, `rgba(255,112,22,${0.1 * flicker})`);
+      grad.addColorStop(1, "rgba(255,80,0,0)");
+      g.fillStyle = grad;
+      g.fillRect(screenX - radius, screenY - radius, radius * 2, radius * 2);
+    }
+    g.restore();
   }
 
   renderWeapon(game) {

@@ -13,6 +13,7 @@
 //     A      quiver of bolts   T treasure (score)    M repeating crossbow
 //     G/g    guard (patrol/standing)
 //     S/s    knight         O/o captain
+//     Wall torches are placed automatically on suitable stretches of masonry.
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
@@ -104,6 +105,34 @@ export function parseLevel(text) {
     });
   }
 
+  // Scatter a modest number of torches along walls that border walkable
+  // space. Sorting by a coordinate hash makes the layout stable while the
+  // spacing pass keeps corridors from turning into rows of identical lights.
+  const torchCandidates = [];
+  const dirsOut = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const cell = grid[y * w + x];
+      if (!WALLS.has(cell) || cell === "7" || cell === "B") continue;
+      for (let d = 0; d < dirsOut.length; d++) {
+        const [dx, dy] = dirsOut[d];
+        if (grid[(y + dy) * w + x + dx] !== ".") continue;
+        const hash = Math.imul(x + 17, 73856093) ^ Math.imul(y + 31, 19349663) ^ Math.imul(d + 7, 83492791);
+        torchCandidates.push({ x, y, dx, dy, hash: hash >>> 0 });
+      }
+    }
+  }
+  torchCandidates.sort((a, b) => a.hash - b.hash);
+  const torches = [];
+  const torchLimit = Math.max(7, Math.min(14, Math.round((w * h) / 70)));
+  for (const c of torchCandidates) {
+    const tx = c.x + 0.5 + c.dx * 0.52;
+    const ty = c.y + 0.5 + c.dy * 0.52;
+    if (torches.some((t) => (t.x - tx) ** 2 + (t.y - ty) ** 2 < 18)) continue;
+    torches.push({ x: tx, y: ty, phase: (c.hash % 1000) / 1000 * Math.PI * 2 });
+    if (torches.length >= torchLimit) break;
+  }
+
   if (!player) throw new Error("Level has no player start (P)");
   const dirs = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
   const [dx, dy] = dirs[props.start] ?? dirs.E;
@@ -119,6 +148,7 @@ export function parseLevel(text) {
     enemies,
     doors,
     traps,
+    torches,
     playerStart: { ...player, dx, dy },
     keyCount: items.filter((i) => i.kind === "key").length,
     treasureCount: items.filter((i) => i.kind === "treasure").length,

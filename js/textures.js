@@ -867,6 +867,55 @@ function weaponIcon(kind) {
   return c;
 }
 
+// A compact wall-mounted torch. Four slightly different silhouettes are
+// cycled by the renderer; the chunky shapes preserve the game's pixel-art
+// style even when the sprite is scaled up at close range.
+function torchSprite(frame) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const sway = [-2, 1, 2, -1][frame];
+  const tip = [1, -2, 0, -1][frame];
+
+  // iron wall bracket and its two studs
+  g.fillStyle = "rgba(0,0,0,0.45)";
+  g.fillRect(26, 33, 17, 5);
+  g.fillRect(39, 27, 5, 14);
+  g.fillStyle = "#34373a";
+  g.fillRect(25, 31, 17, 4);
+  g.fillRect(39, 27, 4, 12);
+  g.fillStyle = "#858078";
+  g.fillRect(40, 28, 1, 10);
+  g.fillRect(40, 29, 2, 2);
+  g.fillRect(40, 35, 2, 2);
+
+  // tarred wooden shaft and wrapped grip below the flame
+  g.fillStyle = "#25160d";
+  g.fillRect(27, 28, 8, 29);
+  g.fillStyle = "#68401f";
+  g.fillRect(28, 29, 5, 27);
+  g.fillStyle = "#9a6630";
+  g.fillRect(29, 30, 2, 25);
+  g.fillStyle = "#332014";
+  for (const y of [31, 35, 39]) g.fillRect(26, y, 10, 2);
+
+  // outer red flame, orange body and a hot yellow-white core
+  g.fillStyle = "rgba(120,25,4,0.65)";
+  g.fillRect(22 + sway, 9 + tip, 18, 20 - tip);
+  g.fillRect(25 + sway, 5 + tip, 12, 8);
+  g.fillRect(28 + sway, 2 + tip, 6, 6);
+  g.fillStyle = "#e94b0c";
+  g.fillRect(24 + sway, 10 + tip, 14, 17 - tip);
+  g.fillRect(27 + sway, 6 + tip, 9, 10);
+  g.fillStyle = "#ff9f16";
+  g.fillRect(27 + sway, 13 + tip, 9, 13 - tip);
+  g.fillRect(29 + sway, 9 + tip, 5, 8);
+  g.fillStyle = "#ffe36a";
+  g.fillRect(29 + sway, 17 + tip, 5, 8 - tip);
+  g.fillStyle = "#fff3b0";
+  g.fillRect(30 + sway, 20 + tip, 3, 4);
+  return c;
+}
+
 // ------------------------------------------------------------- HUD crest
 
 // Heraldic shield that takes damage as the player does.
@@ -980,5 +1029,7 @@ export function buildAssets() {
   const crests = {};
   for (const s of ["healthy", "ok", "hurt", "bad", "dead"]) crests[s] = crestSprite(s);
 
-  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, TEX };
+  const torches = [0, 1, 2, 3].map(torchSprite);
+
+  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, TEX };
 }
