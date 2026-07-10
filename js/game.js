@@ -42,6 +42,8 @@ export class Game {
     this.enemies = level.enemies.map((s) => new Enemy(s));
     this.doors = level.doors.map((d) => ({ ...d, open: 0, state: "closed", timer: 0 }));
     this.doorMap = new Map(this.doors.map((d) => [d.y * level.w + d.x, d]));
+    this.traps = level.traps.map((t) => ({ ...t, state: "armed", timer: 0, shots: 0, seen: false }));
+    this.projectiles = [];
 
     this.visited = new Uint8Array(level.w * level.h);
     this.time = 0;
@@ -96,7 +98,9 @@ export class Game {
     this.updatePlayer(dt, input);
     this.updateWeapon(dt, input);
     this.updatePickups();
+    this.updateTraps(dt);
     for (const e of this.enemies) e.update(this, dt);
+    this.updateProjectiles(dt);
     this.markVisited();
     this.decayFx(dt);
   }
@@ -301,6 +305,87 @@ export class Game {
     this.addScore(e.stats.score);
     if (Math.random() < e.stats.drop) {
       this.items.push({ x: e.x, y: e.y, kind: "boltsDrop" });
+    }
+  }
+
+  // --------------------------------------------------------------- traps
+
+  updateTraps(dt) {
+    const p = this.player;
+    for (const t of this.traps) {
+      const onPlate = Math.floor(p.x) === t.x && Math.floor(p.y) === t.y;
+      switch (t.state) {
+        case "armed":
+          if (onPlate) {
+            t.state = "triggered";
+            t.timer = 0.35; // a heartbeat to jump off before the volley
+            t.seen = true;
+            audio.playAt("trapClick", t.x + 0.5, t.y + 0.5, p);
+            this.say("* CLICK *", 1);
+          }
+          break;
+        case "triggered":
+          t.timer -= dt;
+          if (t.timer <= 0) {
+            t.state = "firing";
+            t.shots = 3;
+            t.timer = 0;
+          }
+          break;
+        case "firing":
+          t.timer -= dt;
+          if (t.timer <= 0) {
+            this.projectiles.push({ x: t.originX, y: t.originY, dirX: t.dirX, dirY: t.dirY, dist: 0 });
+            audio.playAt("enemyShot", t.originX, t.originY, p, { rate: 1.25, volume: 0.9 });
+            t.timer = 0.16;
+            if (--t.shots <= 0) {
+              t.state = "cooldown";
+              t.timer = 2.5;
+            }
+          }
+          break;
+        case "cooldown":
+          t.timer -= dt;
+          if (t.timer <= 0 && !onPlate) t.state = "armed";
+          break;
+      }
+    }
+  }
+
+  updateProjectiles(dt) {
+    const p = this.player;
+    const step = (9 * dt) / 3; // substeps so fast arrows can't skip a target
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const a = this.projectiles[i];
+      let dead = false;
+      for (let s = 0; s < 3 && !dead; s++) {
+        a.x += a.dirX * step;
+        a.y += a.dirY * step;
+        a.dist += step;
+        const cx = Math.floor(a.x);
+        const cy = Math.floor(a.y);
+        const cell = this.cellAt(cx, cy);
+        if (cell !== "." && !(cell === "D" && this.doorOpenAmount(cx, cy) > 0.85)) {
+          audio.playAt("arrowHit", a.x, a.y, p, { volume: 0.7 });
+          dead = true;
+          break;
+        }
+        if (!this.playerDead && Math.hypot(p.x - a.x, p.y - a.y) < p.radius + 0.12) {
+          this.hurtPlayer(10 + Math.floor(Math.random() * 9));
+          dead = true;
+          break;
+        }
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          if (Math.hypot(e.x - a.x, e.y - a.y) < e.radius + 0.05) {
+            e.hit(this, 14 + Math.floor(Math.random() * 10));
+            dead = true;
+            break;
+          }
+        }
+        if (a.dist > 14) dead = true;
+      }
+      if (dead) this.projectiles.splice(i, 1);
     }
   }
 

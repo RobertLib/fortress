@@ -186,6 +186,28 @@ function bannerTexture(seed) {
   return c;
 }
 
+// Stone wall pierced by a cross-shaped arrow loophole — trap shooter.
+function arrowSlitTexture(seed) {
+  const c = stoneTexture(seed);
+  const g = c.getContext("2d");
+  // dressed-stone surround
+  g.fillStyle = "#78705f";
+  g.fillRect(24, 6, 16, 52);
+  g.fillStyle = "rgba(255,255,255,0.08)";
+  g.fillRect(24, 6, 16, 2);
+  g.fillStyle = "rgba(0,0,0,0.25)";
+  g.fillRect(24, 56, 16, 2);
+  // the loophole itself
+  g.fillStyle = "#070605";
+  g.fillRect(30, 10, 4, 44);
+  g.fillRect(25, 28, 14, 5);
+  // worn edges catching the torchlight
+  g.fillStyle = "rgba(255,255,255,0.12)";
+  g.fillRect(29, 10, 1, 44);
+  g.fillRect(34, 10, 1, 44);
+  return c;
+}
+
 // Heavy oak door bound with iron.
 function doorTexture() {
   const c = canvas();
@@ -442,6 +464,49 @@ function itemSprite(kind) {
       px(g, 6, 9.8, 4, 2, "#5a3a1e"); // magazine
       px(g, 7, 11.8, 2, 2.5, "#3a2a16"); // stock
       break;
+  }
+  return c;
+}
+
+// Trap paraphernalia: the floor plate (armed / pressed flat) and the arrow
+// that flies out of the slit, drawn at chest height. The arrow comes in four
+// views picked by its flight direction relative to the camera: side-on
+// left/right, point-first (flying at the viewer) and tail-first.
+function trapSprite(kind) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  if (kind === "arrow") {
+    px(g, 2, 7, 10, 0.8, "#6a4a26"); // shaft
+    px(g, 2, 7, 10, 0.3, "#8a6a3a"); // highlight
+    px(g, 12, 6.6, 2.2, 1.6, "#c9d4d8"); // steel head
+    px(g, 1, 6.2, 1.6, 1, "#8c2020"); // fletching
+    px(g, 1, 7.6, 1.6, 1, "#8c2020");
+  } else if (kind === "arrowLeft") {
+    const right = trapSprite("arrow");
+    g.translate(TEX, 0);
+    g.scale(-1, 1);
+    g.drawImage(right, 0, 0);
+  } else if (kind === "arrowToward") {
+    // point-first: dark socket, bright steel tip, fletching peeking behind
+    px(g, 6.6, 5.9, 0.9, 0.9, "#8c2020");
+    px(g, 8.5, 5.9, 0.9, 0.9, "#8c2020");
+    px(g, 6.6, 7.4, 0.9, 0.9, "#8c2020");
+    px(g, 8.5, 7.4, 0.9, 0.9, "#8c2020");
+    px(g, 7, 6.4, 2, 1.6, "#5c666c"); // socket ring
+    px(g, 7.4, 6.7, 1.2, 1, "#e8f0f4"); // gleaming point
+  } else if (kind === "arrowAway") {
+    // tail-first: red fletching cross around the shaft's end
+    px(g, 6, 6.9, 4, 1.2, "#8c2020");
+    px(g, 7.4, 5.5, 1.2, 4, "#8c2020");
+    px(g, 7.4, 6.9, 1.2, 1.2, "#3a2a16"); // shaft butt
+  } else {
+    const pressed = kind === "pressed";
+    px(g, 3, pressed ? 14.2 : 13.2, 10, pressed ? 0.8 : 1.8, pressed ? "#57503f" : "#726a52");
+    px(g, 3, 15, 10, 0.8, pressed ? "#3e382c" : "#514a39"); // front edge
+    px(g, 3, 15.7, 10, 0.3, "#181209"); // ground shadow
+    // iron studs at the corners
+    g.fillStyle = "#23262b";
+    for (const sx of [14, 48]) g.fillRect(sx, (pressed ? 14.4 : 13.6) * 4, 3, 3);
   }
   return c;
 }
@@ -808,6 +873,7 @@ export function buildAssets() {
     4: dungeonTexture(44),
     5: brickTexture("#8f4f2c", "#3a2c20", 55),
     6: bannerTexture(66),
+    7: arrowSlitTexture(77),
     D: doorTexture(),
     X: gateTexture(),
   };
@@ -827,6 +893,15 @@ export function buildAssets() {
   }
   items.boltsDrop = items.bolts;
 
+  const trapSprites = {
+    plate: trapSprite("plate"),
+    pressed: trapSprite("pressed"),
+    arrow: trapSprite("arrow"),
+    arrowLeft: trapSprite("arrowLeft"),
+    arrowToward: trapSprite("arrowToward"),
+    arrowAway: trapSprite("arrowAway"),
+  };
+
   const weapons = {
     dagger: [weaponView("dagger", 0), weaponView("dagger", 1), weaponView("dagger", 2)],
     crossbow: [weaponView("crossbow", 0), weaponView("crossbow", 1), weaponView("crossbow", 2)],
@@ -842,5 +917,5 @@ export function buildAssets() {
   const crests = {};
   for (const s of ["healthy", "ok", "hurt", "bad", "dead"]) crests[s] = crestSprite(s);
 
-  return { walls, wallsDark, enemySprites, items, weapons, weaponIcons, crests, TEX };
+  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, TEX };
 }

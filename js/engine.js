@@ -184,6 +184,22 @@ export class Renderer {
       const scale = it.kind === "key" ? 0.55 : 0.45;
       sprites.push({ x: it.x, y: it.y, img: this.assets.items[it.kind], scale });
     }
+    for (const t of game.traps) {
+      const img = t.state === "armed" ? this.assets.trapSprites.plate : this.assets.trapSprites.pressed;
+      sprites.push({ x: t.x + 0.5, y: t.y + 0.5, img, scale: 0.6 });
+    }
+    for (const a of game.projectiles) {
+      // pick the arrow view from its flight direction in camera space:
+      // depth along the view axis vs. lateral drift across the screen
+      const depth = a.dirX * p.dirX + a.dirY * p.dirY;
+      const lat = (a.dirX * p.planeX + a.dirY * p.planeY) / 0.66;
+      const s = this.assets.trapSprites;
+      let img;
+      if (depth < -Math.abs(lat)) img = s.arrowToward;
+      else if (depth > Math.abs(lat)) img = s.arrowAway;
+      else img = lat > 0 ? s.arrow : s.arrowLeft;
+      sprites.push({ x: a.x, y: a.y, img, scale: 0.82 });
+    }
     for (const s of sprites) {
       s.dist = (p.x - s.x) ** 2 + (p.y - s.y) ** 2;
     }
@@ -293,6 +309,12 @@ export class Renderer {
         g.fillStyle = col;
         g.fillRect(ox + x * cs, oy + y * cs, cs - 0.5, cs - 0.5);
       }
+    }
+    // traps the player has set off
+    for (const t of game.traps) {
+      if (!t.seen) continue;
+      g.fillStyle = "#8c2020";
+      g.fillRect(ox + t.x * cs, oy + t.y * cs, cs - 0.5, cs - 0.5);
     }
     // player arrow
     const p = game.player;

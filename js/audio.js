@@ -67,6 +67,17 @@ class AudioSys {
       return (snap + twang + thunk) * 0.75;
     });
 
+    // --- traps ---
+    B("trapClick", 0.16, (t) => {
+      // two dry mechanical clicks under the flagstone
+      const on = (t % 0.08) < 0.014;
+      return on ? (noise() * 0.4 + sqr(t, 1500) * 0.5) * env(t, 0.16, 1) : 0;
+    });
+    B("arrowHit", 0.09, (t) => {
+      // arrow thocking into wood or stone
+      return (noise() * 0.5 + sin(t, 190 * (1 - t * 3)) * 0.6) * env(t, 0.07, 3) * 0.7;
+    });
+
     // --- player ---
     B("playerPain", 0.22, (t) => saw(t, 280 - 500 * t) * env(t, 0.22) * 0.5);
     B("playerDeath", 0.9, (t) => {
