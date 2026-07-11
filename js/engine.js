@@ -12,6 +12,13 @@ const MAX_STEPS = 96;
 const FOG = "10,8,6"; // rgb of the darkness color
 const fogAmount = (dist) => Math.min(0.88, Math.max(0, (dist - 1.4) / 13));
 
+// wall-box furniture: shallow boxes standing flush against walls, in
+// fractions of a wall cell. Boxes lower than the eye (0.5) also get a lid.
+const BOX_SPECS = {
+  wardrobe: { halfW: 0.46, depth: 0.34, height: 0.8 },
+  chest: { halfW: 0.31, depth: 0.38, height: 0.42 },
+};
+
 // distance buckets for pre-darkened sprite variants
 const SPRITE_SHADES = [1, 0.78, 0.58, 0.42];
 const shadeBucket = (dist) => (dist < 3.5 ? 0 : dist < 6 ? 1 : dist < 9 ? 2 : 3);
@@ -117,9 +124,10 @@ export class Renderer {
       }
     }
 
-    // Wardrobes are opaque geometry: drawn right after the walls, z-tested
-    // and written per column, so bars and sprites clip against them too.
-    this.renderWardrobes(game);
+    // Wall boxes (wardrobes, chests) are opaque geometry: drawn right after
+    // the walls, z-tested and written per column, so bars and sprites clip
+    // against them too.
+    this.renderWallBoxes(game);
 
     // Transparent walls are initially drawn over the opaque scene. Sprites are
     // composited afterward and redraw only the bars that are closer than them.
@@ -236,35 +244,37 @@ export class Renderer {
     }
   }
 
-  // A wardrobe is a shallow box standing flush against a wall cell: a front
-  // face and two short sides, each a vertical quad. The wall behind keeps its
-  // normal texture; the box simply draws over part of it. After backface
-  // culling the visible faces never overlap on screen, so draw order within
-  // one wardrobe does not matter.
-  renderWardrobes(game) {
-    const HALF_W = 0.46;
-    const DEPTH = 0.34;
-    for (const wd of game.level.wardrobes) {
+  // A wall box (wardrobe, chest) stands flush against a wall cell: a front
+  // face and two short sides, each a vertical quad, plus a lid when the box
+  // is low enough to be looked down upon. The wall behind keeps its normal
+  // texture; the box simply draws over part of it. After backface culling
+  // the visible faces never overlap on screen, so draw order within one box
+  // does not matter — except the lid, drawn first so its own front face
+  // (sharing the entry depth) cannot z-reject it.
+  renderWallBoxes(game) {
+    for (const wd of game.level.wallBoxes) {
+      const spec = BOX_SPECS[wd.kind];
+      const texs = this.assets.boxes[wd.kind];
+      if (spec.height < 0.5 && texs.lid) this.drawBoxLid(game, wd, spec, texs.lid);
       const fx = wd.x + 0.5 + wd.dx * 0.5; // centre of the wall face
       const fy = wd.y + 0.5 + wd.dy * 0.5;
       const tx = -wd.dy; // tangent along the wall
       const ty = wd.dx;
-      const ax = fx + tx * HALF_W; // corners at the wall
-      const ay = fy + ty * HALF_W;
-      const bx = fx - tx * HALF_W;
-      const by = fy - ty * HALF_W;
-      const nx = wd.dx * DEPTH; // out to the front corners
-      const ny = wd.dy * DEPTH;
-      this.drawWardrobeFace(game, ax + nx, ay + ny, bx + nx, by + ny, wd.dx, wd.dy, "front");
-      this.drawWardrobeFace(game, ax + nx, ay + ny, ax, ay, tx, ty, "side");
-      this.drawWardrobeFace(game, bx + nx, by + ny, bx, by, -tx, -ty, "side");
+      const ax = fx + tx * spec.halfW; // corners at the wall
+      const ay = fy + ty * spec.halfW;
+      const bx = fx - tx * spec.halfW;
+      const by = fy - ty * spec.halfW;
+      const nx = wd.dx * spec.depth; // out to the front corners
+      const ny = wd.dy * spec.depth;
+      this.drawBoxFace(game, ax + nx, ay + ny, bx + nx, by + ny, wd.dx, wd.dy, texs, "front", spec.height);
+      this.drawBoxFace(game, ax + nx, ay + ny, ax, ay, tx, ty, texs, "side", spec.height);
+      this.drawBoxFace(game, bx + nx, by + ny, bx, by, -tx, -ty, texs, "side", spec.height);
     }
   }
 
   // Perspective-correct textured vertical quad from (x0,y0) to (x1,y1) with
   // outward normal (nx,ny), lit and fogged exactly like the walls.
-  drawWardrobeFace(game, x0, y0, x1, y1, nx, ny, kind) {
-    const HEIGHT = 0.8; // fraction of wall height
+  drawBoxFace(game, x0, y0, x1, y1, nx, ny, texs, kind, HEIGHT) {
     const p = game.player;
     if (((x0 + x1) / 2 - p.x) * nx + ((y0 + y1) / 2 - p.y) * ny >= 0) return; // backface
 
@@ -295,9 +305,8 @@ export class Renderer {
     if (xEnd < xStart) return;
 
     // faces along the y axis take the darker set, like side==1 walls
-    const ws = this.assets.wardrobe;
     const dark = Math.abs(ny) > Math.abs(nx);
-    const tex = kind === "front" ? (dark ? ws.frontDark : ws.front) : (dark ? ws.sideDark : ws.side);
+    const tex = kind === "front" ? (dark ? texs.frontDark : texs.front) : (dark ? texs.sideDark : texs.side);
 
     const g = this.ctx;
     const level = game.level;
@@ -335,6 +344,101 @@ export class Renderer {
     }
   }
 
+  // Horizontal lid of a low box, seen because the eye (0.5) sits above it.
+  // Per column the ray is intersected with the box footprint (slab test in
+  // the box frame); the [near, far] depth span projects to a vertical screen
+  // strip filled from one lid texture column. With the unnormalised ray
+  // direction dir + plane*cameraX, the ray parameter IS the perpendicular
+  // depth, so it compares directly against the z-buffer. The lid never
+  // writes depth: it always sits directly above its own faces on screen.
+  drawBoxLid(game, wd, spec, texLid) {
+    const g = this.ctx;
+    const p = game.player;
+    const level = game.level;
+    const fx = wd.x + 0.5 + wd.dx * 0.5; // centre of the wall face
+    const fy = wd.y + 0.5 + wd.dy * 0.5;
+    const tx = -wd.dy;
+    const ty = wd.dx;
+    // player position in the box frame: n out from the wall, t along it
+    const pn = (p.x - fx) * wd.dx + (p.y - fy) * wd.dy;
+    const pt = (p.x - fx) * tx + (p.y - fy) * ty;
+
+    // conservative column range from the four footprint corners
+    const invDet = 1 / (p.planeX * p.dirY - p.dirX * p.planeY);
+    let sx0 = W;
+    let sx1 = -1;
+    let clipped = false;
+    for (const [n, t] of [[0, -spec.halfW], [0, spec.halfW], [spec.depth, -spec.halfW], [spec.depth, spec.halfW]]) {
+      const wx = fx + wd.dx * n + tx * t - p.x;
+      const wy = fy + wd.dy * n + ty * t - p.y;
+      const camY = invDet * (-p.planeY * wx + p.planeX * wy);
+      if (camY <= 0.05) {
+        clipped = true;
+        continue;
+      }
+      const sx = (W / 2) * (1 + (invDet * (p.dirY * wx - p.dirX * wy)) / camY);
+      sx0 = Math.min(sx0, sx);
+      sx1 = Math.max(sx1, sx);
+    }
+    if (clipped) {
+      sx0 = 0;
+      sx1 = W - 1;
+    }
+    const xStart = Math.max(0, Math.floor(sx0));
+    const xEnd = Math.min(W - 1, Math.ceil(sx1));
+
+    for (let x = xStart; x <= xEnd; x++) {
+      const cameraX = (2 * x) / W - 1;
+      const rdx = p.dirX + p.planeX * cameraX;
+      const rdy = p.dirY + p.planeY * cameraX;
+      const rn = rdx * wd.dx + rdy * wd.dy;
+      const rt = rdx * tx + rdy * ty;
+      let sNear = 0.05;
+      let sFar = Infinity;
+      if (Math.abs(rn) < 1e-9) {
+        if (pn < 0 || pn > spec.depth) continue;
+      } else {
+        const a = (0 - pn) / rn;
+        const b = (spec.depth - pn) / rn;
+        sNear = Math.max(sNear, Math.min(a, b));
+        sFar = Math.max(a, b);
+      }
+      if (Math.abs(rt) < 1e-9) {
+        if (pt < -spec.halfW || pt > spec.halfW) continue;
+      } else {
+        const a = (-spec.halfW - pt) / rt;
+        const b = (spec.halfW - pt) / rt;
+        sNear = Math.max(sNear, Math.min(a, b));
+        sFar = Math.min(sFar, Math.max(a, b));
+      }
+      if (sFar <= sNear || sNear >= this.zbuffer[x]) continue;
+
+      const rise = (0.5 - spec.height) * VIEW_H; // eye sits above the lid
+      const yTop = VIEW_H / 2 + rise / sFar;
+      const yBot = VIEW_H / 2 + rise / sNear;
+      if (yBot - yTop < 0.05) continue;
+      const sMid = (sNear + sFar) / 2;
+      const u = (pt + sMid * rt + spec.halfW) / (spec.halfW * 2);
+      let texX = Math.floor(u * 64);
+      if (texX < 0) texX = 0;
+      if (texX > 63) texX = 63;
+      g.drawImage(texLid, texX, 0, 1, 64, x, yTop, 1, yBot - yTop);
+
+      const hx = p.x + rdx * sMid;
+      const hy = p.y + rdy * sMid;
+      const light = torchLight(level, hx, hy, game.time);
+      if (light > 0.015) {
+        g.fillStyle = `rgba(255,132,32,${Math.min(0.16, light * 0.14)})`;
+        g.fillRect(x, yTop, 1, yBot - yTop);
+      }
+      const fog = Math.max(0, fogAmount(sMid) - light * 0.42);
+      if (fog > 0.02) {
+        g.fillStyle = `rgba(${FOG},${fog})`;
+        g.fillRect(x, yTop, 1, yBot - yTop);
+      }
+    }
+  }
+
   renderSprites(game) {
     const g = this.ctx;
     const p = game.player;
@@ -364,7 +468,7 @@ export class Renderer {
       sprites.push({ x: a.x, y: a.y, img, scale: 0.82 });
     }
     for (const d of game.level.decorations) {
-      if (d.kind === "wardrobe") continue; // drawn as real geometry, not a billboard
+      if (BOX_SPECS[d.kind]) continue; // wall boxes are real geometry, not billboards
       sprites.push({ x: d.x, y: d.y, img: this.assets.decor[d.kind], scale: d.kind === "table" ? 0.7 : 0.64 });
     }
     for (const t of game.level.torches) {

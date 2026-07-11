@@ -1106,6 +1106,64 @@ function wardrobeSideTexture() {
   return c;
 }
 
+// Iron-bound treasure chest. Low enough to be looked down upon, so besides
+// the front and side faces it also has a lid texture (u runs along the wall).
+function chestFrontTexture() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const rand = rng(13579);
+  px(g, 0, 0, 16, 16, "#4a3018"); // oak body
+  for (const y of [5.6, 10.8]) px(g, 0, y, 16, 0.35, "#2a1c0c"); // plank seams
+  px(g, 0, 0, 16, 0.8, "#6a4426"); // lit lid edge
+  px(g, 0, 4.2, 16, 0.7, "#241708"); // lid seam
+  px(g, 0, 4.9, 16, 0.3, "#7c5228");
+  px(g, 0, 15, 16, 1, "#241708"); // base shadow
+  // iron straps
+  for (const x of [2.2, 12.6]) {
+    px(g, x, 0, 1.2, 16, "#2f3338");
+    px(g, x, 0, 0.4, 16, "#565c66");
+  }
+  // lock plate with a keyhole
+  px(g, 6.6, 3.2, 2.8, 3.8, "#2f3338");
+  px(g, 6.6, 3.2, 2.8, 0.4, "#565c66");
+  px(g, 7.6, 4.4, 0.8, 0.9, "#0f0903");
+  px(g, 7.8, 5.2, 0.4, 1.1, "#0f0903");
+  speckle(g, rand, "#000", 55, 0.12);
+  speckle(g, rand, "#c98d4c", 14, 0.05);
+  return c;
+}
+
+function chestSideTexture() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const rand = rng(86420);
+  px(g, 0, 0, 16, 16, "#422b15");
+  for (const y of [5.6, 10.8]) px(g, 0, y, 16, 0.35, "#2a1c0c"); // planks
+  px(g, 0, 0, 16, 0.8, "#5a3a20");
+  px(g, 0, 4.2, 16, 0.7, "#241708"); // lid seam carries around
+  px(g, 0, 15, 16, 1, "#241708");
+  // single strap wrapping the flank
+  px(g, 7.2, 0, 1.4, 16, "#2f3338");
+  px(g, 7.2, 0, 0.5, 16, "#565c66");
+  g.globalAlpha = 0.18;
+  for (let i = 0; i < 30; i++) {
+    g.fillStyle = shadeColor("#6a4426", 0.6 + rand() * 0.7);
+    g.fillRect(Math.floor(rand() * TEX), Math.floor(rand() * TEX), 2 + Math.floor(rand() * 5), 1);
+  }
+  g.globalAlpha = 1;
+  speckle(g, rand, "#000", 45, 0.14);
+  return c;
+}
+
+function chestLidTexture() {
+  // plain flat colour: the lid's screen mapping is only approximate, and a
+  // single tone can never show the distortion
+  const c = canvas();
+  const g = c.getContext("2d");
+  px(g, 0, 0, 16, 16, "#553a1e");
+  return c;
+}
+
 // ------------------------------------------------------------- HUD crest
 
 // Heraldic shield that takes damage as the player does.
@@ -1225,10 +1283,16 @@ export function buildAssets() {
 
   const decor = { table: tableSprite(), chair: chairSprite() };
 
-  // wardrobe faces get the same orientation shading as walls: darker along y
-  const wardrobe = { front: wardrobeFrontTexture(), side: wardrobeSideTexture() };
-  wardrobe.frontDark = darken(wardrobe.front, 0.65);
-  wardrobe.sideDark = darken(wardrobe.side, 0.65);
+  // wall-box furniture; faces get the same orientation shading as walls
+  // (darker along y), lids are horizontal and need no dark variant
+  const boxes = {
+    wardrobe: { front: wardrobeFrontTexture(), side: wardrobeSideTexture() },
+    chest: { front: chestFrontTexture(), side: chestSideTexture(), lid: chestLidTexture() },
+  };
+  for (const b of Object.values(boxes)) {
+    b.frontDark = darken(b.front, 0.65);
+    b.sideDark = darken(b.side, 0.65);
+  }
 
-  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, decor, wardrobe, TEX };
+  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, decor, boxes, TEX };
 }

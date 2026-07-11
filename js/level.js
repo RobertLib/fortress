@@ -16,7 +16,7 @@
 //     V/v    bat swarm (flying about / roosting until disturbed)
 //     Wall torches are placed automatically on suitable stretches of masonry.
 //     Tables and chairs are likewise furnished automatically in larger rooms,
-//     and wardrobes are set flush against flat wall stretches.
+//     and wardrobes and chests are set flush against flat wall stretches.
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
@@ -192,14 +192,14 @@ export function parseLevel(text) {
     }
   }
 
-  // Wardrobes lean against flat wall stretches. The wall cell keeps its own
-  // texture — the renderer draws the cabinet as a shallow box in front of it —
-  // so masonry tiling is never disturbed. A spot needs a plain wall flanked by
-  // more plain wall (so the box sits flush, with no door/bars/slit at its
-  // edges), open floor two cells deep in front (never plugs a corridor), and
-  // clearance from torches and furniture.
-  const wardrobes = [];
-  const wardrobeCandidates = [];
+  // Wall boxes (wardrobes and chests) lean against flat wall stretches. The
+  // wall cell keeps its own texture — the renderer draws the box in front of
+  // it — so masonry tiling is never disturbed. A spot needs a plain wall
+  // flanked by more plain wall (so the box sits flush, with no door/bars/slit
+  // at its edges), open floor two cells deep in front (never plugs a
+  // corridor), and clearance from torches and furniture.
+  const wallBoxes = [];
+  const boxCandidates = [];
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       if (!"123456".includes(grid[y * w + x])) continue;
@@ -213,23 +213,37 @@ export function parseLevel(text) {
         const flankB = grid[(y - dx) * w + (x + dy)];
         if (!"1234567".includes(flankA) || !"1234567".includes(flankB)) continue;
         const hash = (Math.imul(x + 59, 374761393) ^ Math.imul(y + 23, 668265263) ^ Math.imul(d + 3, 40503)) >>> 0;
-        wardrobeCandidates.push({ x, y, dx, dy, hash });
+        boxCandidates.push({ x, y, dx, dy, cell: grid[y * w + x], hash, used: false });
       }
     }
   }
-  wardrobeCandidates.sort((a, b) => a.hash - b.hash);
-  const wardrobeLimit = Math.max(2, Math.min(5, Math.round((w * h) / 130)));
-  for (const c of wardrobeCandidates) {
-    if (wardrobes.length >= wardrobeLimit) break;
-    // collision circle sits at the box centre, just off the wall face
-    const cx = c.x + 0.5 + c.dx * 0.67;
-    const cy = c.y + 0.5 + c.dy * 0.67;
-    if (torches.some((t) => (t.x - cx) ** 2 + (t.y - cy) ** 2 < 1.7)) continue;
-    if (decorations.some((dd) => (dd.x - cx) ** 2 + (dd.y - cy) ** 2 < 1.45)) continue;
-    if (wardrobes.some((wd) => (wd.x + 0.5 - cx) ** 2 + (wd.y + 0.5 - cy) ** 2 < 9)) continue;
-    wardrobes.push({ x: c.x, y: c.y, dx: c.dx, dy: c.dy });
-    decorations.push({ x: cx, y: cy, kind: "wardrobe", radius: 0.4 });
-  }
+  boxCandidates.sort((a, b) => a.hash - b.hash);
+  // backing: wall textures the box may stand against — a tall wardrobe would
+  // awkwardly cover the window of "4" or the banner of "6", a low chest only
+  // clashes with the banner
+  const placeBoxes = (kind, limit, radius, backing) => {
+    let placed = 0;
+    for (const c of boxCandidates) {
+      if (placed >= limit) break;
+      if (c.used || !backing.includes(c.cell)) continue;
+      // collision circle sits at the box centre, just off the wall face
+      const cx = c.x + 0.5 + c.dx * 0.67;
+      const cy = c.y + 0.5 + c.dy * 0.67;
+      if (torches.some((t) => (t.x - cx) ** 2 + (t.y - cy) ** 2 < 1.7)) continue;
+      if (decorations.some((dd) => (dd.x - cx) ** 2 + (dd.y - cy) ** 2 < 1.45)) continue;
+      const near = wallBoxes.some((b) => {
+        const sq = (b.x + 0.5 - cx) ** 2 + (b.y + 0.5 - cy) ** 2;
+        return sq < (b.kind === kind ? 9 : 2.56);
+      });
+      if (near) continue;
+      c.used = true;
+      wallBoxes.push({ x: c.x, y: c.y, dx: c.dx, dy: c.dy, kind });
+      decorations.push({ x: cx, y: cy, kind, radius });
+      placed++;
+    }
+  };
+  placeBoxes("wardrobe", Math.max(2, Math.min(5, Math.round((w * h) / 130))), 0.4, "1235");
+  placeBoxes("chest", Math.max(2, Math.min(4, Math.round((w * h) / 160))), 0.35, "12345");
 
   if (!player) throw new Error("Level has no player start (P)");
   const dirs = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
@@ -248,7 +262,7 @@ export function parseLevel(text) {
     traps,
     torches,
     decorations,
-    wardrobes,
+    wallBoxes,
     playerStart: { ...player, dx, dy },
     keyCount: items.filter((i) => i.kind === "key").length,
     treasureCount: items.filter((i) => i.kind === "treasure").length,
