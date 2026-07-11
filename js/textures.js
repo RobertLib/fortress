@@ -208,6 +208,45 @@ function arrowSlitTexture(seed) {
   return c;
 }
 
+// Wall-mounted lever on dressed stone: an iron backplate whose wooden
+// handle points up while idle and hangs down once pulled.
+function leverTexture(pulled) {
+  const c = stoneTexture(111);
+  const g = c.getContext("2d");
+  // dressed-stone panel behind the mechanism
+  g.fillStyle = "#78705f";
+  g.fillRect(20, 12, 24, 40);
+  g.fillStyle = "rgba(255,255,255,0.08)";
+  g.fillRect(20, 12, 24, 2);
+  g.fillStyle = "rgba(0,0,0,0.25)";
+  g.fillRect(20, 50, 24, 2);
+  // iron backplate with corner rivets and the guide slot
+  g.fillStyle = "#2f3338";
+  g.fillRect(25, 16, 14, 32);
+  g.fillStyle = "#454b52";
+  g.fillRect(25, 16, 14, 2);
+  g.fillStyle = "#7c828e";
+  for (const [rx, ry] of [[27, 18], [35, 18], [27, 44], [35, 44]]) g.fillRect(rx, ry, 2, 2);
+  g.fillStyle = "#101214";
+  g.fillRect(30, 20, 4, 24);
+  // pivot boss in the middle of the slot
+  g.fillStyle = "#565c66";
+  g.fillRect(29, 30, 6, 5);
+  g.fillStyle = "#8d949c";
+  g.fillRect(30, 31, 2, 2);
+  // the handle: wooden shaft with a brass knob, up = armed, down = pulled
+  const dir = pulled ? 1 : -1;
+  g.fillStyle = "#5a3a20";
+  g.fillRect(30, pulled ? 34 : 14, 4, 18);
+  g.fillStyle = "#7a5230";
+  g.fillRect(30, pulled ? 34 : 14, 1, 18);
+  g.fillStyle = "#c9a24a";
+  g.fillRect(28, 32 + dir * 19, 8, 6);
+  g.fillStyle = "#e9c93c";
+  g.fillRect(29, 33 + dir * 19, 3, 2);
+  return c;
+}
+
 // Heavy oak door bound with iron.
 function doorTexture() {
   const c = canvas();
@@ -1309,6 +1348,8 @@ export function buildAssets() {
     D: doorTexture(),
     R: barsTexture({ door: true }),
     X: gateTexture(),
+    L: leverTexture(false),
+    l: leverTexture(true),
   };
   const wallsDark = {};
   for (const k of Object.keys(walls)) wallsDark[k] = darken(walls[k], 0.65);

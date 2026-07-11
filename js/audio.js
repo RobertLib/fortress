@@ -148,6 +148,19 @@ class AudioSys {
       const e = Math.sin(Math.PI * Math.min(1, t / 0.5));
       return (grind + hum) * e;
     });
+    B("lever", 0.3, (t) => {
+      // iron handle thrown: a sharp catch, then the counterweight thunk
+      const click = t < 0.03 ? noise() * 0.6 + sqr(t, 1300) * 0.4 : 0;
+      const thunk = t > 0.09 ? (sin(t - 0.09, 95) * 0.6 + noise() * 0.12) * env(t - 0.09, 0.2, 2) : 0;
+      return click * env(t, 0.03, 1) + thunk;
+    });
+    B("secret", 1.3, (t) => {
+      // hidden masonry grinding aside: slow pulsing stone-on-stone rumble
+      const grind = noise() * (0.5 + 0.5 * Math.sin(2 * Math.PI * 9 * t)) * 0.22;
+      const rumble = sin(t, 46 + sin(t, 0.7) * 8) * 0.4;
+      const e = Math.sin(Math.PI * Math.min(1, t / 1.3));
+      return (grind + rumble) * e;
+    });
     B("locked", 0.32, (t) => {
       const on = (t % 0.16) < 0.11;
       return on ? sqr(t, 130) * 0.35 : 0;

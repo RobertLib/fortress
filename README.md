@@ -28,7 +28,7 @@ a crossbow and a basic supply of bolts.
 | `W A S D` / arrows | move & turn |
 | mouse (click the view) | turn + shoot |
 | `Ctrl` / `J` | shoot |
-| `E` / `Space` | open doors, use the gate |
+| `E` / `Space` | open doors, pull levers, use the gate |
 | `1` / `2` / `3` | dagger, crossbow, repeating crossbow |
 | `Shift` | run |
 | `Tab` | map |
@@ -57,10 +57,19 @@ P    player start              K  key
 H    healing potion (+25)      F  bread (+10)
 A    quiver of bolts           T  treasure (score)
 M    repeating crossbow        G/S/O  guard / knight / captain
+L    lever on a wall           Z  secret wall
 ```
 
 Barred walls and barred doors block movement while closed, but allow both the
 player and enemies to see and shoot through them. `R` opens like a normal door.
+
+A secret wall (`Z`) disguises itself with the texture of the surrounding
+masonry and hides a stash of valuables. Pulling the nearest lever (`L`) with
+`E`/`Space` makes it grind aside for good — found secrets count toward the
+end-of-floor statistics and are worth 500 points each. The lever handle
+appears on exactly one face of its wall cell, picked automatically so it
+always looks out on floor the player can reach; the cell's other faces
+blend into the surrounding masonry.
 
 Wall variants: rough stone masonry, weathered mossy stone, a
 timber-framed wall, a dungeon wall with a barred window, old brick,

@@ -20,6 +20,13 @@
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
+//     Z      secret wall: looks like the surrounding masonry, slides open
+//            when the nearest lever is pulled and then stays open
+//     L      lever on a wall: press use on it to open its secret wall(s).
+//            The lever shows on exactly one face of the cell — one that
+//            looks out on floor the player can reach without any secrets,
+//            so it can never end up buried or sealed away; the other faces
+//            wear the surrounding masonry.
 
 export const WALLS = new Set(["1", "2", "3", "4", "5", "6", "7", "B", "#"]);
 
@@ -47,6 +54,8 @@ export function parseLevel(text) {
   const enemies = [];
   const doors = [];
   const trapPlates = [];
+  const levers = [];
+  const secretCells = [];
   let player = null;
 
   for (let y = 0; y < h; y++) {
@@ -62,6 +71,12 @@ export function parseLevel(text) {
         doors.push({ x, y, kind: ch });
       } else if (ch === "X") {
         cell = "X";
+      } else if (ch === "Z") {
+        cell = "Z";
+        secretCells.push({ x, y });
+      } else if (ch === "L") {
+        cell = "L";
+        levers.push({ x, y, doors: [] });
       } else if (ch === "P") {
         player = { x: x + 0.5, y: y + 0.5 };
       } else if (ch === "^") {
@@ -106,6 +121,81 @@ export function parseLevel(text) {
       originX: best.cx + 0.5 - best.dx * 0.51,
       originY: best.cy + 0.5 - best.dy * 0.51,
     });
+  }
+
+  // Secret walls become sliding doors in disguise: each takes the texture
+  // most common among its plain-wall neighbours so it melts into the
+  // masonry, and is wired to the nearest lever, which will open it.
+  for (const s of secretCells) {
+    const counts = {};
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const c = grid[(s.y + dy) * w + s.x + dx];
+      if (c && "123456".includes(c)) counts[c] = (counts[c] ?? 0) + 1;
+    }
+    const tex = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] ?? "1";
+    doors.push({ x: s.x, y: s.y, kind: "Z", tex });
+    let best = null;
+    for (const l of levers) {
+      const d = (l.x - s.x) ** 2 + (l.y - s.y) ** 2;
+      if (!best || d < best.d) best = { d, lever: l };
+    }
+    if (best) best.lever.doors.push(s.y * w + s.x);
+    else console.warn(`Secret wall at ${s.x},${s.y} has no lever — it will never open`);
+  }
+
+  // Give each lever its one face. Only floor the player can actually walk to
+  // qualifies (flood fill with secrets still closed), so the handle can never
+  // face into a wall, a sealed stash or an unreachable pocket. With several
+  // reachable faces the one nearest the lever's secret wall wins — that is
+  // where the player will be hunting. The other faces of the cell wear the
+  // neighbours' masonry, like the secret walls do.
+  const cardinal = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const reachable = new Uint8Array(w * h);
+  if (player && levers.length) {
+    const stack = [Math.floor(player.y) * w + Math.floor(player.x)];
+    reachable[stack[0]] = 1;
+    while (stack.length) {
+      const idx = stack.pop();
+      const ix = idx % w;
+      const iy = (idx - ix) / w;
+      for (const [dx, dy] of cardinal) {
+        const nx = ix + dx;
+        const ny = iy + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const nIdx = ny * w + nx;
+        if (reachable[nIdx]) continue;
+        const c = grid[nIdx];
+        if (c !== "." && c !== "D" && c !== "R") continue;
+        reachable[nIdx] = 1;
+        stack.push(nIdx);
+      }
+    }
+  }
+  for (const l of levers) {
+    const counts = {};
+    for (const [dx, dy] of cardinal) {
+      const c = grid[(l.y + dy) * w + l.x + dx];
+      if (c && "123456".includes(c)) counts[c] = (counts[c] ?? 0) + 1;
+    }
+    l.tex = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] ?? "1";
+    const doorKey = l.doors[0];
+    const doorX = doorKey != null ? doorKey % w : l.x;
+    const doorY = doorKey != null ? (doorKey - doorX) / w : l.y;
+    let face = null;
+    for (const [dx, dy] of cardinal) {
+      const nx = l.x + dx;
+      const ny = l.y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      if (grid[ny * w + nx] !== "." || !reachable[ny * w + nx]) continue;
+      const d = (nx - doorX) ** 2 + (ny - doorY) ** 2;
+      if (!face || d < face.d) face = { d, dx, dy };
+    }
+    if (!face) {
+      console.warn(`Lever at ${l.x},${l.y} faces no reachable floor — it cannot be pulled`);
+      face = { dx: 1, dy: 0 };
+    }
+    l.dx = face.dx;
+    l.dy = face.dy;
   }
 
   // Scatter a modest number of torches along walls that border walkable
@@ -303,6 +393,8 @@ export function parseLevel(text) {
     enemies,
     doors,
     traps,
+    levers,
+    secretCount: levers.filter((l) => l.doors.length > 0).length,
     torches,
     decorations,
     wallBoxes,

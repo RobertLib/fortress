@@ -224,6 +224,27 @@ export class Renderer {
         overlays.push({ dist, side, tex: "B", wallX });
         continue;
       }
+      if (cell === "Z") {
+        // secret wall: disguised in the neighbours' masonry, and unlike the
+        // recessed doors it sits flush on the cell face; when its lever is
+        // pulled it slides aside exactly like a door leaf
+        const door = game.doorAt(mapX, mapY);
+        const open = door?.open ?? 0;
+        if (wallX >= open) {
+          return { dist, side, tex: door?.tex ?? "1", wallX: wallX - open, overlays };
+        }
+        continue; // ray slips through the revealed gap
+      }
+      if (cell === "L") {
+        // the handle hangs on a single face; the ray sees it only when it
+        // struck that face — every other side is plain masonry
+        const lever = game.leverAt(mapX, mapY);
+        const faceX = side === 0 ? -stepX : 0;
+        const faceY = side === 1 ? -stepY : 0;
+        const onFace = lever && lever.dx === faceX && lever.dy === faceY;
+        const tex = onFace ? (lever.pulled ? "l" : "L") : lever?.tex ?? "1";
+        return { dist, side, tex, wallX, overlays };
+      }
       return { dist, side, tex: cell, wallX, overlays };
     }
     return { dist: 1e9, side: 0, tex: "1", wallX: 0, overlays };
@@ -712,6 +733,10 @@ export class Renderer {
         else if (cell === "B") col = "#59636a";
         else if (cell === "R") col = "#76828a";
         else if (cell === "X") col = "#c9a24a";
+        // secret walls and unpulled levers masquerade as plain wall on the
+        // map; once worked they show up in door brown / lever gold
+        else if (cell === "Z") col = (game.doorAt(x, y)?.open ?? 0) > 0.05 ? "#8a5a28" : "#655743";
+        else if (cell === "L") col = game.leverPulled(x, y) ? "#c9a24a" : "#655743";
         else col = "#655743";
         g.fillStyle = col;
         g.fillRect(ox + x * cs, oy + y * cs, cs - 0.5, cs - 0.5);

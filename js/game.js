@@ -42,6 +42,8 @@ export class Game {
     this.enemies = level.enemies.map((s) => new Enemy(s));
     this.doors = level.doors.map((d) => ({ ...d, open: 0, state: "closed", timer: 0 }));
     this.doorMap = new Map(this.doors.map((d) => [d.y * level.w + d.x, d]));
+    this.levers = level.levers.map((l) => ({ ...l, pulled: false }));
+    this.leverMap = new Map(this.levers.map((l) => [l.y * level.w + l.x, l]));
     this.traps = level.traps.map((t) => ({ ...t, state: "armed", timer: 0, shots: 0, seen: false }));
     this.projectiles = [];
 
@@ -49,8 +51,10 @@ export class Game {
     this.time = 0;
     this.kills = 0;
     this.treasure = 0;
+    this.secretsFound = 0;
     this.totalEnemies = this.enemies.length;
     this.totalTreasure = level.treasureCount;
+    this.totalSecrets = level.secretCount;
 
     this.damageFlash = 0;
     this.pickupFlash = 0;
@@ -221,8 +225,50 @@ export class Game {
         }
         return;
       }
-      return; // plain wall
+      if (cell === "L") {
+        this.pullLever(cx, cy);
+        return;
+      }
+      return; // plain wall (secret walls included — only their lever moves them)
     }
+  }
+
+  pullLever(x, y) {
+    const lever = this.leverMap.get(y * this.level.w + x);
+    if (!lever) return;
+    // the handle sits on one face only — from any other side this is
+    // just blank masonry under the player's hand
+    const facing = (this.player.x - (x + 0.5)) * lever.dx + (this.player.y - (y + 0.5)) * lever.dy;
+    if (facing < 0.3) return;
+    if (lever.pulled) {
+      audio.play("blip");
+      return;
+    }
+    lever.pulled = true;
+    audio.play("lever");
+    let opened = 0;
+    for (const key of lever.doors) {
+      const door = this.doorMap.get(key);
+      if (door && door.state === "closed") {
+        door.state = "opening";
+        audio.playAt("secret", door.x + 0.5, door.y + 0.5, this.player);
+        opened++;
+      }
+    }
+    if (opened) {
+      this.secretsFound++;
+      this.session.totalSecretsFound++;
+      this.addScore(500);
+      this.say("A SECRET PASSAGE GRINDS OPEN!", 3);
+    }
+  }
+
+  leverAt(x, y) {
+    return this.leverMap.get(y * this.level.w + x) ?? null;
+  }
+
+  leverPulled(x, y) {
+    return this.leverAt(x, y)?.pulled ?? false;
   }
 
   // --------------------------------------------------------------- combat
@@ -366,7 +412,7 @@ export class Game {
         const cy = Math.floor(a.y);
         const cell = this.cellAt(cx, cy);
         if (cell === "B" || cell === "R") continue;
-        if (cell !== "." && !((cell === "D" || cell === "R") && this.doorOpenAmount(cx, cy) > 0.85)) {
+        if (cell !== "." && !((cell === "D" || cell === "R" || cell === "Z") && this.doorOpenAmount(cx, cy) > 0.85)) {
           audio.playAt("arrowHit", a.x, a.y, p, { volume: 0.7 });
           dead = true;
           break;
@@ -407,6 +453,7 @@ export class Game {
   }
 
   openDoor(door, byPlayer) {
+    if (door.kind === "Z") return; // secret walls only answer to their lever
     if (door.state === "closed" || door.state === "closing") {
       door.state = "opening";
       audio.playAt("door", door.x + 0.5, door.y + 0.5, this.player, { volume: byPlayer ? 1 : 0.8 });
@@ -416,13 +463,14 @@ export class Game {
   updateDoors(dt) {
     for (const d of this.doors) {
       if (d.state === "opening") {
-        d.open += dt * 1.6;
+        d.open += dt * (d.kind === "Z" ? 0.55 : 1.6); // stone grinds slowly
         if (d.open >= 1) {
           d.open = 1;
           d.state = "open";
           d.timer = 4;
         }
       } else if (d.state === "open") {
+        if (d.kind === "Z") continue; // a revealed passage never seals again
         d.timer -= dt;
         if (d.timer <= 0) {
           if (this.doorwayOccupied(d)) {
@@ -463,7 +511,7 @@ export class Game {
       for (let cx = minX; cx <= maxX; cx++) {
         const cell = this.cellAt(cx, cy);
         if (cell === ".") continue;
-        if ((cell === "D" || cell === "R") && this.doorOpenAmount(cx, cy) > 0.85) continue;
+        if ((cell === "D" || cell === "R" || cell === "Z") && this.doorOpenAmount(cx, cy) > 0.85) continue;
         return true;
       }
     }
@@ -514,7 +562,7 @@ export class Game {
       const cell = this.cellAt(cx, cy);
       if (cell === ".") continue;
       if (cell === "B" || cell === "R") continue;
-      if (cell === "D" && this.doorOpenAmount(cx, cy) > 0.6) continue;
+      if ((cell === "D" || cell === "Z") && this.doorOpenAmount(cx, cy) > 0.6) continue;
       if (cx === tx && cy === ty) return true;
       return false;
     }

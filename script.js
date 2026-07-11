@@ -164,6 +164,8 @@ function newGame() {
     totalTreasure: 0,
     totalEnemies: 0,
     maxTreasure: 0,
+    totalSecretsFound: 0,
+    maxSecrets: 0,
     totalTime: 0,
   };
   startLevel(0, null);
@@ -187,6 +189,7 @@ function nextLevel() {
   const p = game.player;
   session.totalEnemies += game.totalEnemies;
   session.maxTreasure += game.totalTreasure;
+  session.maxSecrets += game.totalSecrets;
   session.totalTime += game.time;
   if (game.levelIndex + 1 >= LEVEL_COUNT) {
     audio.play("victory");
@@ -354,7 +357,7 @@ function drawIntro() {
     ["W A S D / ARROWS", "move & turn"],
     ["MOUSE (CLICK VIEW)", "turn & shoot"],
     ["CTRL / J", "shoot"],
-    ["E / SPACE", "open doors, use the gate"],
+    ["E / SPACE", "open doors, pull levers, use the gate"],
     ["1 / 2 / 3", "dagger, crossbow, repeater"],
     ["SHIFT / TAB / M", "run / map / sound"],
   ];
@@ -414,11 +417,12 @@ function drawLevelComplete() {
     ["TIME", fmtTime(game.time)],
     ["KILLS", `${game.kills}/${game.totalEnemies}  (${killPct}%)`],
     ["TREASURE", `${game.treasure}/${game.totalTreasure}  (${trePct}%)`],
+    ["SECRETS", `${game.secretsFound}/${game.totalSecrets}`],
     ["BONUS", `+${game.bonus}`],
     ["SCORE", `${session.score}`],
   ];
   rows.forEach(([k, v], i) => {
-    const y = 150 + i * 30;
+    const y = 145 + i * 28;
     text(k, W / 2 - 30, y, 15, "#a89878", "right");
     text(v, W / 2 - 5, y, 15, "#ead9b0", "left");
   });
@@ -456,11 +460,12 @@ function drawVictory() {
     ["TOTAL TIME", fmtTime(session.totalTime)],
     ["KILLS", `${session.totalKills}/${session.totalEnemies}  (${killPct}%)`],
     ["TREASURE", `${session.totalTreasure}/${session.maxTreasure}  (${trePct}%)`],
+    ["SECRETS", `${session.totalSecretsFound}/${session.maxSecrets}`],
     ["LIVES LEFT", `${session.lives}`],
     ["FINAL SCORE", `${session.score}`],
   ];
   rows.forEach(([k, v], i) => {
-    const y = 195 + i * 26;
+    const y = 190 + i * 25;
     text(k, W / 2 - 30, y, 14, "#a89878", "right");
     text(v, W / 2 - 5, y, 14, "#ead9b0", "left");
   });
