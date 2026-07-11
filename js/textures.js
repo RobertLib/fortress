@@ -992,6 +992,53 @@ function torchSprite(frame) {
   return c;
 }
 
+// Furniture for the larger halls: a trestle table set with a candle and a
+// pewter mug, and a plain oak chair. Both stand on the floor line so the
+// renderer can drop them in like any other ground sprite.
+function tableSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  // trestle legs with a lit edge, tied by a stretcher beam
+  px(g, 2.2, 9.2, 1.6, 6.8, "#33220f");
+  px(g, 12.2, 9.2, 1.6, 6.8, "#33220f");
+  px(g, 2.2, 9.2, 0.6, 6.8, "#5a3a20");
+  px(g, 12.2, 9.2, 0.6, 6.8, "#5a3a20");
+  px(g, 3.8, 12.6, 8.4, 1.1, "#2a1c0c");
+  // thick oak slab, top catching the torchlight
+  px(g, 0.7, 7.4, 14.6, 2, "#6a4426");
+  px(g, 0.7, 7.4, 14.6, 0.7, "#8a5c30");
+  px(g, 0.7, 9, 14.6, 0.4, "#241708"); // shadow under the lip
+  // candle in an iron holder
+  px(g, 4.2, 7, 2, 0.5, "#2f3338");
+  px(g, 4.7, 5.2, 1, 1.9, "#e8e0c8");
+  px(g, 4.95, 4.3, 0.5, 0.9, "#ffd23c");
+  px(g, 5.05, 4, 0.3, 0.5, "#fff6b0");
+  // pewter mug
+  px(g, 9.4, 5.9, 2, 1.7, "#565c66");
+  px(g, 9.4, 5.9, 2, 0.4, "#8d949c");
+  px(g, 11.4, 6.3, 0.6, 1, "#454b52");
+  return c;
+}
+
+function chairSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  // stiles: back legs running up into the backrest
+  px(g, 4.6, 2.6, 1.2, 13.4, "#4a3018");
+  px(g, 10.2, 2.6, 1.2, 13.4, "#4a3018");
+  px(g, 4.6, 2.6, 0.4, 13.4, "#6a4426");
+  // backrest slats
+  px(g, 5.8, 3.4, 4.4, 1.1, "#5a3a20");
+  px(g, 5.8, 5.6, 4.4, 1.1, "#5a3a20");
+  // seat board
+  px(g, 3.8, 8.6, 8.4, 1.6, "#6a4426");
+  px(g, 3.8, 8.6, 8.4, 0.6, "#8a5c30");
+  // front legs
+  px(g, 4, 10.2, 1, 5.8, "#33220f");
+  px(g, 11, 10.2, 1, 5.8, "#33220f");
+  return c;
+}
+
 // ------------------------------------------------------------- HUD crest
 
 // Heraldic shield that takes damage as the player does.
@@ -1109,5 +1156,7 @@ export function buildAssets() {
 
   const torches = [0, 1, 2, 3].map(torchSprite);
 
-  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, TEX };
+  const decor = { table: tableSprite(), chair: chairSprite() };
+
+  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, decor, TEX };
 }

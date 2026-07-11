@@ -15,6 +15,7 @@
 //     S/s    knight         O/o captain
 //     V/v    bat swarm (flying about / roosting until disturbed)
 //     Wall torches are placed automatically on suitable stretches of masonry.
+//     Tables and chairs are likewise furnished automatically in larger rooms.
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
@@ -134,6 +135,62 @@ export function parseLevel(text) {
     if (torches.length >= torchLimit) break;
   }
 
+  // Furnish the larger rooms: a table wherever the floor opens up wide, with
+  // a chair or two pulled to its sides. A spot qualifies when its 3x3 core is
+  // clear of walls, spawns and pickups and most of the surrounding 5x5 is
+  // open floor — corridors and crossings never pass that test. Openness-first
+  // ordering fills the biggest halls; the hash keeps ties stable.
+  const spawnCells = new Set();
+  const markSpawn = (sx, sy) => spawnCells.add(Math.floor(sy) * w + Math.floor(sx));
+  if (player) markSpawn(player.x, player.y);
+  for (const i of items) markSpawn(i.x, i.y);
+  for (const e of enemies) markSpawn(e.x, e.y);
+  for (const t of trapPlates) spawnCells.add(t.y * w + t.x);
+
+  const isFloor = (x, y) => x >= 0 && y >= 0 && x < w && y < h && grid[y * w + x] === ".";
+  const tableSpots = [];
+  for (let y = 2; y < h - 2; y++) {
+    for (let x = 2; x < w - 2; x++) {
+      let coreOk = true;
+      for (let dy = -1; dy <= 1 && coreOk; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          // walls must clear the whole 3x3; spawns and pickups only matter on
+          // the table cell itself and the orthogonal cells chairs may take
+          if (!isFloor(x + dx, y + dy) || (dx * dy === 0 && spawnCells.has((y + dy) * w + x + dx))) {
+            coreOk = false;
+            break;
+          }
+        }
+      }
+      if (!coreOk) continue;
+      let open = 0;
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) if (isFloor(x + dx, y + dy)) open++;
+      }
+      if (open < 16) continue;
+      const hash = (Math.imul(x + 41, 2654435761) ^ Math.imul(y + 89, 97370749)) >>> 0;
+      tableSpots.push({ x, y, open, hash });
+    }
+  }
+  tableSpots.sort((a, b) => b.open - a.open || a.hash - b.hash);
+  const decorations = [];
+  const tableLimit = Math.max(2, Math.min(6, Math.round((w * h) / 110)));
+  let tables = 0;
+  for (const s of tableSpots) {
+    if (tables >= tableLimit) break;
+    const cx = s.x + 0.5;
+    const cy = s.y + 0.5;
+    if (decorations.some((d) => d.kind === "table" && (d.x - cx) ** 2 + (d.y - cy) ** 2 < 22)) continue;
+    decorations.push({ x: cx, y: cy, kind: "table", radius: 0.36 });
+    tables++;
+    // chairs sit in the (guaranteed clear) neighbour cells, pulled to the table
+    const chairCount = 1 + ((s.hash >>> 3) & 1);
+    for (let k = 0; k < chairCount; k++) {
+      const [dx, dy] = dirsOut[(s.hash + k) % 4];
+      decorations.push({ x: cx + dx * 0.85, y: cy + dy * 0.85, kind: "chair", radius: 0.18 });
+    }
+  }
+
   if (!player) throw new Error("Level has no player start (P)");
   const dirs = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
   const [dx, dy] = dirs[props.start] ?? dirs.E;
@@ -150,6 +207,7 @@ export function parseLevel(text) {
     doors,
     traps,
     torches,
+    decorations,
     playerStart: { ...player, dx, dy },
     keyCount: items.filter((i) => i.kind === "key").length,
     treasureCount: items.filter((i) => i.kind === "treasure").length,

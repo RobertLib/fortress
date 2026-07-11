@@ -468,7 +468,11 @@ export class Game {
       }
     }
     // entities block each other — except bat swarms, which fly right through
+    // (and clear over the furniture too)
     if (self?.stats?.swarm) return false;
+    for (const d of this.level.decorations) {
+      if ((d.x - x) ** 2 + (d.y - y) ** 2 < (r + d.radius) ** 2) return true;
+    }
     for (const e of this.enemies) {
       if (e === self || e.dead || e.stats.swarm) continue;
       const d = Math.hypot(e.x - x, e.y - y);

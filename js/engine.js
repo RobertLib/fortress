@@ -260,6 +260,9 @@ export class Renderer {
       else img = lat > 0 ? s.arrow : s.arrowLeft;
       sprites.push({ x: a.x, y: a.y, img, scale: 0.82 });
     }
+    for (const d of game.level.decorations) {
+      sprites.push({ x: d.x, y: d.y, img: this.assets.decor[d.kind], scale: d.kind === "table" ? 0.7 : 0.64 });
+    }
     for (const t of game.level.torches) {
       const frame = Math.floor(game.time * 12 + t.phase * 1.7) & 3;
       sprites.push({
