@@ -245,6 +245,47 @@ export function parseLevel(text) {
   placeBoxes("wardrobe", Math.max(2, Math.min(5, Math.round((w * h) / 130))), 0.4, "1235");
   placeBoxes("chest", Math.max(2, Math.min(4, Math.round((w * h) / 160))), 0.35, "12345");
 
+  // A suit of armour stands free just off the wall, rendered as a billboard
+  // like the furniture, so it keeps its presence from every angle. It blocks
+  // movement (collision circle) but leaves the rest of the cell walkable.
+  const armorLimit = Math.max(1, Math.min(3, Math.round((w * h) / 220)));
+  let armors = 0;
+  for (const c of boxCandidates) {
+    if (armors >= armorLimit) break;
+    if (c.used || !"1235".includes(c.cell)) continue;
+    const cx = c.x + 0.5 + c.dx * 0.95;
+    const cy = c.y + 0.5 + c.dy * 0.95;
+    if (torches.some((t) => (t.x - cx) ** 2 + (t.y - cy) ** 2 < 1.7)) continue;
+    if (decorations.some((dd) => (dd.x - cx) ** 2 + (dd.y - cy) ** 2 < 2.56)) continue;
+    c.used = true;
+    decorations.push({ x: cx, y: cy, kind: "armor", radius: 0.3 });
+    armors++;
+  }
+
+  // Crossed swords and shields hang flat on the masonry.
+  const hangings = [];
+  const placeHangings = (kind, limit) => {
+    let placed = 0;
+    for (const c of boxCandidates) {
+      if (placed >= limit) break;
+      if (c.used || !"1235".includes(c.cell)) continue;
+      const cx = c.x + 0.5 + c.dx * 0.6;
+      const cy = c.y + 0.5 + c.dy * 0.6;
+      if (torches.some((t) => (t.x - cx) ** 2 + (t.y - cy) ** 2 < 1.7)) continue;
+      if (decorations.some((dd) => (dd.x - cx) ** 2 + (dd.y - cy) ** 2 < 1.45)) continue;
+      const near = hangings.some((hh) => {
+        const sq = (hh.x + 0.5 - cx) ** 2 + (hh.y + 0.5 - cy) ** 2;
+        return sq < (hh.kind === kind ? 9 : 2.56);
+      });
+      if (near) continue;
+      c.used = true;
+      hangings.push({ x: c.x, y: c.y, dx: c.dx, dy: c.dy, kind });
+      placed++;
+    }
+  };
+  placeHangings("shield", Math.max(1, Math.min(3, Math.round((w * h) / 200))));
+  placeHangings("sword", Math.max(1, Math.min(3, Math.round((w * h) / 200))));
+
   if (!player) throw new Error("Level has no player start (P)");
   const dirs = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
   const [dx, dy] = dirs[props.start] ?? dirs.E;
@@ -263,6 +304,7 @@ export function parseLevel(text) {
     torches,
     decorations,
     wallBoxes,
+    hangings,
     playerStart: { ...player, dx, dy },
     keyCount: items.filter((i) => i.kind === "key").length,
     treasureCount: items.filter((i) => i.kind === "treasure").length,

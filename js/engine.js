@@ -19,6 +19,13 @@ const BOX_SPECS = {
   chest: { halfW: 0.31, depth: 0.38, height: 0.42 },
 };
 
+// wall hangings: flat trophies just off the wall face, one oriented quad
+// each, spanning zBot..zTop of the wall height
+const HANGING_SPECS = {
+  sword: { zBot: 0.3, zTop: 0.9, offset: 0.03 },
+  shield: { zBot: 0.35, zTop: 0.85, offset: 0.03 },
+};
+
 // distance buckets for pre-darkened sprite variants
 const SPRITE_SHADES = [1, 0.78, 0.58, 0.42];
 const shadeBucket = (dist) => (dist < 3.5 ? 0 : dist < 6 ? 1 : dist < 9 ? 2 : 3);
@@ -128,6 +135,7 @@ export class Renderer {
     // the walls, z-tested and written per column, so bars and sprites clip
     // against them too.
     this.renderWallBoxes(game);
+    this.renderWallHangings(game);
 
     // Transparent walls are initially drawn over the opaque scene. Sprites are
     // composited afterward and redraw only the bars that are closer than them.
@@ -439,6 +447,79 @@ export class Renderer {
     }
   }
 
+  // Flat decorations against the wall: one perspective-correct quad each,
+  // z-tested per column (so boxes and walls occlude them) but never written —
+  // nothing can stand between a hanging and its wall. Transparent textures
+  // rule out the walls' fog fills, so they shade like sprites instead:
+  // pre-darkened distance buckets, lifted near torches.
+  renderWallHangings(game) {
+    const p = game.player;
+    for (const hg of game.level.hangings) {
+      const spec = HANGING_SPECS[hg.kind];
+      const halfW = (spec.zTop - spec.zBot) / 2; // square quad, square texture
+      const fx = hg.x + 0.5 + hg.dx * (0.5 + spec.offset);
+      const fy = hg.y + 0.5 + hg.dy * (0.5 + spec.offset);
+      if ((fx - p.x) * hg.dx + (fy - p.y) * hg.dy >= 0) continue; // backface
+      const tx = -hg.dy;
+      const ty = hg.dx;
+      let bucket = shadeBucket(Math.hypot(fx - p.x, fy - p.y));
+      const light = torchLight(game.level, fx, fy, game.time);
+      if (light > 0.5) bucket = Math.max(0, bucket - 2);
+      else if (light > 0.15) bucket = Math.max(0, bucket - 1);
+      const tex = this.shadedSprite(this.assets.hangings[hg.kind], bucket);
+      this.drawHangingQuad(game, fx + tx * halfW, fy + ty * halfW, fx - tx * halfW, fy - ty * halfW, tex, spec);
+    }
+  }
+
+  drawHangingQuad(game, x0, y0, x1, y1, tex, spec) {
+    const p = game.player;
+    const invDet = 1 / (p.planeX * p.dirY - p.dirX * p.planeY);
+    const toCam = (wx, wy, u) => {
+      const sx = wx - p.x;
+      const sy = wy - p.y;
+      return { x: invDet * (p.dirY * sx - p.dirX * sy), y: invDet * (-p.planeY * sx + p.planeX * sy), u };
+    };
+    let a = toCam(x0, y0, 0);
+    let b = toCam(x1, y1, 1);
+    const NEAR = 0.05;
+    if (a.y <= NEAR && b.y <= NEAR) return;
+    const clip = (out, inn) => {
+      const t = (NEAR - out.y) / (inn.y - out.y);
+      return { x: out.x + (inn.x - out.x) * t, y: NEAR, u: out.u + (inn.u - out.u) * t };
+    };
+    if (a.y < NEAR) a = clip(a, b);
+    else if (b.y < NEAR) b = clip(b, a);
+    let sxa = (W / 2) * (1 + a.x / a.y);
+    let sxb = (W / 2) * (1 + b.x / b.y);
+    if (sxa > sxb) {
+      [a, b] = [b, a];
+      [sxa, sxb] = [sxb, sxa];
+    }
+    const xStart = Math.max(0, Math.ceil(sxa));
+    const xEnd = Math.min(W - 1, Math.floor(sxb));
+    if (xEnd < xStart) return;
+
+    const g = this.ctx;
+    const span = sxb - sxa;
+    const invYa = 1 / a.y;
+    const invYb = 1 / b.y;
+    const uOverYa = a.u * invYa;
+    const uOverYb = b.u * invYb;
+    for (let x = xStart; x <= xEnd; x++) {
+      const t = (x - sxa) / span;
+      const dist = 1 / (invYa + (invYb - invYa) * t);
+      if (dist >= this.zbuffer[x]) continue;
+      const u = (uOverYa + (uOverYb - uOverYa) * t) * dist;
+      const lineHeight = VIEW_H / dist;
+      const top = VIEW_H / 2 + lineHeight * (0.5 - spec.zTop);
+      const colH = lineHeight * (spec.zTop - spec.zBot);
+      let texX = Math.floor(u * 64);
+      if (texX < 0) texX = 0;
+      if (texX > 63) texX = 63;
+      g.drawImage(tex, texX, 0, 1, 64, x, top, 1, colH);
+    }
+  }
+
   renderSprites(game) {
     const g = this.ctx;
     const p = game.player;
@@ -468,8 +549,9 @@ export class Renderer {
       sprites.push({ x: a.x, y: a.y, img, scale: 0.82 });
     }
     for (const d of game.level.decorations) {
-      if (BOX_SPECS[d.kind]) continue; // wall boxes are real geometry, not billboards
-      sprites.push({ x: d.x, y: d.y, img: this.assets.decor[d.kind], scale: d.kind === "table" ? 0.7 : 0.64 });
+      if (!this.assets.decor[d.kind]) continue; // wall boxes are drawn as quads, not billboards
+      const scale = d.kind === "table" ? 0.7 : d.kind === "armor" ? 0.78 : 0.64;
+      sprites.push({ x: d.x, y: d.y, img: this.assets.decor[d.kind], scale });
     }
     for (const t of game.level.torches) {
       const frame = Math.floor(game.time * 12 + t.phase * 1.7) & 3;

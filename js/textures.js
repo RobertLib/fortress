@@ -1155,6 +1155,79 @@ function chestSideTexture() {
   return c;
 }
 
+// Trophies for the walls — a long sword, a heater shield — and a suit of
+// armour standing against the masonry. Drawn by the renderer as single flat
+// quads with sprite-style distance shading, so they may keep transparency.
+function swordSprite() {
+  // one upright blade, composed twice as a crossed pair of trophies
+  const blade = canvas();
+  const g0 = blade.getContext("2d");
+  px(g0, 7, 0.6, 2, 1.2, "#c9a24a"); // pommel
+  px(g0, 7.4, 1.8, 1.2, 2.6, "#4a3018"); // wrapped grip
+  for (const y of [2.3, 3.3]) px(g0, 7.4, y, 1.2, 0.4, "#2a1c0c");
+  px(g0, 5, 4.4, 6, 1.1, "#3a3f45"); // crossguard
+  px(g0, 5, 4.4, 6, 0.4, "#565c66");
+  px(g0, 7.2, 5.5, 1.6, 8.8, "#8d949c"); // blade, point down
+  px(g0, 7.9, 5.5, 0.4, 8.8, "#c9ced4"); // fuller catching light
+  px(g0, 7.5, 14.3, 1, 0.8, "#8d949c");
+  px(g0, 7.7, 15.1, 0.6, 0.5, "#c9ced4"); // tip
+  const c = canvas();
+  const g = c.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  for (const ang of [-0.55, 0.55]) {
+    g.save();
+    g.translate(32, 32);
+    g.rotate(ang);
+    g.drawImage(blade, -32, -32);
+    g.restore();
+  }
+  return c;
+}
+
+function shieldSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  // steel-rimmed heater shield, tapering to a point
+  px(g, 3, 1.5, 10, 8, "#565c66");
+  px(g, 4, 9.5, 8, 1.5, "#565c66");
+  px(g, 5, 11, 6, 1.5, "#565c66");
+  px(g, 6, 12.5, 4, 1, "#565c66");
+  px(g, 7, 13.5, 2, 1, "#565c66");
+  px(g, 3.8, 2.3, 8.4, 6.6, "#7a1f1f"); // red field
+  px(g, 4.8, 8.9, 6.4, 1.6, "#7a1f1f");
+  px(g, 5.8, 10.5, 4.4, 1.4, "#7a1f1f");
+  px(g, 6.8, 11.9, 2.4, 1, "#7a1f1f");
+  px(g, 7.2, 3, 1.6, 7, "#e9c93c"); // gold cross
+  px(g, 5, 4.6, 6, 1.6, "#e9c93c");
+  px(g, 3.8, 2.3, 1.6, 0.8, "#a84040"); // polished glint
+  return c;
+}
+
+function armorSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  px(g, 5.4, 14.9, 5.2, 1.1, "#241708"); // stand base
+  px(g, 6.6, 0.9, 2.8, 2.4, "#565c66"); // helm
+  px(g, 6.6, 0.9, 2.8, 0.5, "#8d949c");
+  px(g, 6.9, 1.9, 2.2, 0.5, "#0d0b08"); // visor slit
+  px(g, 4.9, 3.3, 6.2, 1.2, "#454b52"); // pauldrons
+  px(g, 4.9, 3.3, 6.2, 0.4, "#6d747e");
+  px(g, 5.8, 4.5, 4.4, 4.1, "#565c66"); // cuirass
+  px(g, 5.8, 4.5, 1, 4.1, "#8d949c");
+  px(g, 4.7, 4.5, 1, 3.8, "#454b52"); // arms hanging
+  px(g, 10.3, 4.5, 1, 3.8, "#454b52");
+  px(g, 4.6, 8.3, 1.2, 1.2, "#3a3f45"); // gauntlets
+  px(g, 10.2, 8.3, 1.2, 1.2, "#3a3f45");
+  px(g, 5.6, 8.6, 4.8, 1.6, "#3a3f45"); // faulds
+  px(g, 5.6, 8.6, 4.8, 0.4, "#565c66");
+  px(g, 6.1, 10.2, 1.3, 4.7, "#454b52"); // legs
+  px(g, 8.6, 10.2, 1.3, 4.7, "#454b52");
+  px(g, 6.1, 10.2, 0.4, 4.7, "#6d747e");
+  px(g, 5.8, 14, 1.9, 0.9, "#3a3f45"); // sabatons
+  px(g, 8.4, 14, 1.9, 0.9, "#3a3f45");
+  return c;
+}
+
 function chestLidTexture() {
   // plain flat colour: the lid's screen mapping is only approximate, and a
   // single tone can never show the distortion
@@ -1281,7 +1354,8 @@ export function buildAssets() {
 
   const torches = [0, 1, 2, 3].map(torchSprite);
 
-  const decor = { table: tableSprite(), chair: chairSprite() };
+  // armour is a free-standing billboard like the furniture
+  const decor = { table: tableSprite(), chair: chairSprite(), armor: armorSprite() };
 
   // wall-box furniture; faces get the same orientation shading as walls
   // (darker along y), lids are horizontal and need no dark variant
@@ -1294,5 +1368,7 @@ export function buildAssets() {
     b.sideDark = darken(b.side, 0.65);
   }
 
-  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, decor, boxes, TEX };
+  const hangings = { sword: swordSprite(), shield: shieldSprite() };
+
+  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, decor, boxes, hangings, TEX };
 }
