@@ -15,8 +15,8 @@ const fogAmount = (dist) => Math.min(0.88, Math.max(0, (dist - 1.4) / 13));
 // wall-box furniture: shallow boxes standing flush against walls, in
 // fractions of a wall cell. Boxes lower than the eye (0.5) also get a lid.
 const BOX_SPECS = {
-  wardrobe: { halfW: 0.46, depth: 0.34, height: 0.8 },
-  chest: { halfW: 0.31, depth: 0.38, height: 0.42 },
+  wardrobe: { halfW: 0.46, depth: 0.22, height: 0.8 },
+  chest: { halfW: 0.31, depth: 0.24, height: 0.42 },
 };
 
 // wall hangings: flat trophies just off the wall face, one oriented quad

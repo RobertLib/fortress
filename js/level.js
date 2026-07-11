@@ -226,9 +226,11 @@ export function parseLevel(text) {
     for (const c of boxCandidates) {
       if (placed >= limit) break;
       if (c.used || !backing.includes(c.cell)) continue;
-      // collision circle sits at the box centre, just off the wall face
-      const cx = c.x + 0.5 + c.dx * 0.67;
-      const cy = c.y + 0.5 + c.dy * 0.67;
+      // collision circle sits on the wall face itself — half of it buried in
+      // the wall — so it barely pokes past the box front and leaves corridors
+      // walkable
+      const cx = c.x + 0.5 + c.dx * 0.5;
+      const cy = c.y + 0.5 + c.dy * 0.5;
       if (torches.some((t) => (t.x - cx) ** 2 + (t.y - cy) ** 2 < 1.7)) continue;
       if (decorations.some((dd) => (dd.x - cx) ** 2 + (dd.y - cy) ** 2 < 1.45)) continue;
       const near = wallBoxes.some((b) => {
@@ -242,8 +244,8 @@ export function parseLevel(text) {
       placed++;
     }
   };
-  placeBoxes("wardrobe", Math.max(2, Math.min(5, Math.round((w * h) / 130))), 0.4, "1235");
-  placeBoxes("chest", Math.max(2, Math.min(4, Math.round((w * h) / 160))), 0.35, "12345");
+  placeBoxes("wardrobe", Math.max(2, Math.min(5, Math.round((w * h) / 130))), 0.28, "1235");
+  placeBoxes("chest", Math.max(2, Math.min(4, Math.round((w * h) / 160))), 0.28, "12345");
 
   // A suit of armour stands against the wall, rendered as a billboard like
   // the furniture, so it keeps its presence from every angle. Pure set
