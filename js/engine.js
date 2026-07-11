@@ -117,6 +117,10 @@ export class Renderer {
       }
     }
 
+    // Wardrobes are opaque geometry: drawn right after the walls, z-tested
+    // and written per column, so bars and sprites clip against them too.
+    this.renderWardrobes(game);
+
     // Transparent walls are initially drawn over the opaque scene. Sprites are
     // composited afterward and redraw only the bars that are closer than them.
     // This keeps actors correctly in front of or behind a barred surface.
@@ -232,6 +236,105 @@ export class Renderer {
     }
   }
 
+  // A wardrobe is a shallow box standing flush against a wall cell: a front
+  // face and two short sides, each a vertical quad. The wall behind keeps its
+  // normal texture; the box simply draws over part of it. After backface
+  // culling the visible faces never overlap on screen, so draw order within
+  // one wardrobe does not matter.
+  renderWardrobes(game) {
+    const HALF_W = 0.46;
+    const DEPTH = 0.34;
+    for (const wd of game.level.wardrobes) {
+      const fx = wd.x + 0.5 + wd.dx * 0.5; // centre of the wall face
+      const fy = wd.y + 0.5 + wd.dy * 0.5;
+      const tx = -wd.dy; // tangent along the wall
+      const ty = wd.dx;
+      const ax = fx + tx * HALF_W; // corners at the wall
+      const ay = fy + ty * HALF_W;
+      const bx = fx - tx * HALF_W;
+      const by = fy - ty * HALF_W;
+      const nx = wd.dx * DEPTH; // out to the front corners
+      const ny = wd.dy * DEPTH;
+      this.drawWardrobeFace(game, ax + nx, ay + ny, bx + nx, by + ny, wd.dx, wd.dy, "front");
+      this.drawWardrobeFace(game, ax + nx, ay + ny, ax, ay, tx, ty, "side");
+      this.drawWardrobeFace(game, bx + nx, by + ny, bx, by, -tx, -ty, "side");
+    }
+  }
+
+  // Perspective-correct textured vertical quad from (x0,y0) to (x1,y1) with
+  // outward normal (nx,ny), lit and fogged exactly like the walls.
+  drawWardrobeFace(game, x0, y0, x1, y1, nx, ny, kind) {
+    const HEIGHT = 0.8; // fraction of wall height
+    const p = game.player;
+    if (((x0 + x1) / 2 - p.x) * nx + ((y0 + y1) / 2 - p.y) * ny >= 0) return; // backface
+
+    const invDet = 1 / (p.planeX * p.dirY - p.dirX * p.planeY);
+    const toCam = (wx, wy, u) => {
+      const sx = wx - p.x;
+      const sy = wy - p.y;
+      return { x: invDet * (p.dirY * sx - p.dirX * sy), y: invDet * (-p.planeY * sx + p.planeX * sy), u };
+    };
+    let a = toCam(x0, y0, 0);
+    let b = toCam(x1, y1, 1);
+    const NEAR = 0.05;
+    if (a.y <= NEAR && b.y <= NEAR) return;
+    const clip = (out, inn) => {
+      const t = (NEAR - out.y) / (inn.y - out.y);
+      return { x: out.x + (inn.x - out.x) * t, y: NEAR, u: out.u + (inn.u - out.u) * t };
+    };
+    if (a.y < NEAR) a = clip(a, b);
+    else if (b.y < NEAR) b = clip(b, a);
+    let sxa = (W / 2) * (1 + a.x / a.y);
+    let sxb = (W / 2) * (1 + b.x / b.y);
+    if (sxa > sxb) {
+      [a, b] = [b, a];
+      [sxa, sxb] = [sxb, sxa];
+    }
+    const xStart = Math.max(0, Math.ceil(sxa));
+    const xEnd = Math.min(W - 1, Math.floor(sxb));
+    if (xEnd < xStart) return;
+
+    // faces along the y axis take the darker set, like side==1 walls
+    const ws = this.assets.wardrobe;
+    const dark = Math.abs(ny) > Math.abs(nx);
+    const tex = kind === "front" ? (dark ? ws.frontDark : ws.front) : (dark ? ws.sideDark : ws.side);
+
+    const g = this.ctx;
+    const level = game.level;
+    const span = sxb - sxa;
+    const invYa = 1 / a.y;
+    const invYb = 1 / b.y;
+    const uOverYa = a.u * invYa;
+    const uOverYb = b.u * invYb;
+    for (let x = xStart; x <= xEnd; x++) {
+      const t = (x - sxa) / span;
+      const dist = 1 / (invYa + (invYb - invYa) * t);
+      if (dist >= this.zbuffer[x]) continue;
+      const u = (uOverYa + (uOverYb - uOverYa) * t) * dist;
+      const lineHeight = VIEW_H / dist;
+      const top = VIEW_H / 2 + lineHeight * (0.5 - HEIGHT);
+      const colH = lineHeight * HEIGHT;
+      let texX = Math.floor(u * 64);
+      if (texX < 0) texX = 0;
+      if (texX > 63) texX = 63;
+      g.drawImage(tex, texX, 0, 1, 64, x, top, 1, colH);
+      this.zbuffer[x] = dist;
+
+      const hx = x0 + (x1 - x0) * u;
+      const hy = y0 + (y1 - y0) * u;
+      const light = torchLight(level, hx, hy, game.time);
+      if (light > 0.015) {
+        g.fillStyle = `rgba(255,132,32,${Math.min(0.16, light * 0.14)})`;
+        g.fillRect(x, top, 1, colH);
+      }
+      const fog = Math.max(0, fogAmount(dist) - light * 0.42);
+      if (fog > 0.02) {
+        g.fillStyle = `rgba(${FOG},${fog})`;
+        g.fillRect(x, top, 1, colH);
+      }
+    }
+  }
+
   renderSprites(game) {
     const g = this.ctx;
     const p = game.player;
@@ -261,6 +364,7 @@ export class Renderer {
       sprites.push({ x: a.x, y: a.y, img, scale: 0.82 });
     }
     for (const d of game.level.decorations) {
+      if (d.kind === "wardrobe") continue; // drawn as real geometry, not a billboard
       sprites.push({ x: d.x, y: d.y, img: this.assets.decor[d.kind], scale: d.kind === "table" ? 0.7 : 0.64 });
     }
     for (const t of game.level.torches) {

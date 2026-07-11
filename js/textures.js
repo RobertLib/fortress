@@ -1039,6 +1039,73 @@ function chairSprite() {
   return c;
 }
 
+// Oak wardrobe faces, drawn by the renderer as a shallow box standing flush
+// against a wall (front face plus two short sides — never a billboard).
+// The renderer fogs the whole column rect, so both textures must be fully
+// opaque edge to edge.
+function wardrobeFrontTexture() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const rand = rng(97531);
+  px(g, 0, 0, 16, 16, "#3a2612"); // carcass
+  // cornice and plinth
+  px(g, 0, 0, 16, 1.4, "#241708");
+  px(g, 0.3, 0.2, 15.4, 0.4, "#6a4426");
+  px(g, 0, 14.6, 16, 1.4, "#241708");
+  px(g, 0, 14.6, 16, 0.3, "#0f0903");
+  // door leaves with recessed panels
+  const door = (x) => {
+    px(g, x, 1.6, 6.6, 13, "#5a3a20");
+    px(g, x, 1.6, 6.6, 0.4, "#8a5c30"); // lit top rail
+    px(g, x, 1.6, 0.4, 13, "#6a4426"); // lit outer stile
+    px(g, x + 6.2, 1.6, 0.4, 13, "#33220f");
+    px(g, x + 1.1, 2.9, 4.4, 4.6, "#3a2814");
+    px(g, x + 1.1, 2.9, 4.4, 0.4, "#241708");
+    px(g, x + 1.1, 7.2, 4.4, 0.3, "#7c5228");
+    px(g, x + 1.1, 8.8, 4.4, 4.6, "#3a2814");
+    px(g, x + 1.1, 8.8, 4.4, 0.4, "#241708");
+    px(g, x + 1.1, 13.1, 4.4, 0.3, "#7c5228");
+  };
+  door(0.9);
+  door(8.5);
+  px(g, 7.7, 1.6, 0.6, 13, "#241708"); // gap between the leaves
+  // strap hinges on the outer stiles
+  for (const y of [3.4, 11.8]) {
+    px(g, 0.9, y, 1.8, 0.7, "#2f3338");
+    px(g, 13.3, y, 1.8, 0.7, "#2f3338");
+    px(g, 0.9, y, 1.8, 0.25, "#565c66");
+    px(g, 13.3, y, 1.8, 0.25, "#565c66");
+  }
+  // iron pull rings either side of the gap
+  px(g, 6.7, 7.5, 0.8, 1.5, "#2f3338");
+  px(g, 8.5, 7.5, 0.8, 1.5, "#2f3338");
+  px(g, 6.85, 7.65, 0.5, 0.5, "#8d949c");
+  px(g, 8.65, 7.65, 0.5, 0.5, "#8d949c");
+  speckle(g, rand, "#000", 70, 0.12);
+  speckle(g, rand, "#c98d4c", 18, 0.05);
+  return c;
+}
+
+function wardrobeSideTexture() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const rand = rng(24680);
+  px(g, 0, 0, 16, 16, "#422b15"); // plain panelled flank
+  for (const x of [4, 8, 12]) px(g, x, 0, 0.35, 16, "#2a1c0c"); // plank seams
+  px(g, 0, 0, 16, 1.4, "#241708"); // cornice
+  px(g, 0.3, 0.2, 15.4, 0.4, "#5a3a20");
+  px(g, 0, 14.6, 16, 1.4, "#241708"); // plinth
+  // wood grain
+  g.globalAlpha = 0.18;
+  for (let i = 0; i < 44; i++) {
+    g.fillStyle = shadeColor("#6a4426", 0.6 + rand() * 0.7);
+    g.fillRect(Math.floor(rand() * TEX), Math.floor(rand() * TEX), 1, 2 + Math.floor(rand() * 6));
+  }
+  g.globalAlpha = 1;
+  speckle(g, rand, "#000", 50, 0.14);
+  return c;
+}
+
 // ------------------------------------------------------------- HUD crest
 
 // Heraldic shield that takes damage as the player does.
@@ -1158,5 +1225,10 @@ export function buildAssets() {
 
   const decor = { table: tableSprite(), chair: chairSprite() };
 
-  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, decor, TEX };
+  // wardrobe faces get the same orientation shading as walls: darker along y
+  const wardrobe = { front: wardrobeFrontTexture(), side: wardrobeSideTexture() };
+  wardrobe.frontDark = darken(wardrobe.front, 0.65);
+  wardrobe.sideDark = darken(wardrobe.side, 0.65);
+
+  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, decor, wardrobe, TEX };
 }
