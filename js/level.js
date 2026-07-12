@@ -23,6 +23,8 @@
 //     and wardrobes and chests are set flush against flat wall stretches.
 //     A fountain plays in the widest court, wherever the floor opens up
 //     enough to hold its basin.
+//     Iron chains are draped on the masonry and hung from the ceiling in
+//     the gloomier corners, purely for atmosphere.
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
@@ -398,11 +400,11 @@ export function parseLevel(text) {
 
   // Crossed swords and shields hang flat on the masonry.
   const hangings = [];
-  const placeHangings = (kind, limit) => {
+  const placeHangings = (kind, limit, backing) => {
     let placed = 0;
     for (const c of boxCandidates) {
       if (placed >= limit) break;
-      if (c.used || !"1235".includes(c.cell)) continue;
+      if (c.used || !backing.includes(c.cell)) continue;
       const cx = c.x + 0.5 + c.dx * 0.6;
       const cy = c.y + 0.5 + c.dy * 0.6;
       if (torches.some((t) => (t.x - cx) ** 2 + (t.y - cy) ** 2 < 1.7)) continue;
@@ -417,8 +419,33 @@ export function parseLevel(text) {
       placed++;
     }
   };
-  placeHangings("shield", Math.max(1, Math.min(3, Math.round((w * h) / 200))));
-  placeHangings("sword", Math.max(1, Math.min(3, Math.round((w * h) / 200))));
+  // trophies suit dressed stone; chains also hang from the rougher dungeon
+  // masonry, where a shield would look out of place
+  placeHangings("shield", Math.max(1, Math.min(3, Math.round((w * h) / 200))), "1235");
+  placeHangings("sword", Math.max(1, Math.min(3, Math.round((w * h) / 200))), "1235");
+  placeHangings("chain", Math.max(1, Math.min(4, Math.round((w * h) / 170))), "1245");
+
+  // More chains hang from the ceiling, kept to cells in front of walls so
+  // they never dangle in the middle of a hall. Pure set dressing like the
+  // armour: no collision circle, and the hook ends around eye level so
+  // walking beneath them reads naturally.
+  const chainLimit = Math.max(1, Math.min(4, Math.round((w * h) / 190)));
+  let chains = 0;
+  for (const c of boxCandidates) {
+    if (chains >= chainLimit) break;
+    if (c.used) continue;
+    const cx = c.x + 0.5 + c.dx;
+    const cy = c.y + 0.5 + c.dy;
+    if (torches.some((t) => (t.x - cx) ** 2 + (t.y - cy) ** 2 < 1)) continue;
+    const crowded = decorations.some((dd) => {
+      const sq = (dd.x - cx) ** 2 + (dd.y - cy) ** 2;
+      return sq < (dd.kind === "chains" ? 16 : 1.45);
+    });
+    if (crowded) continue;
+    c.used = true;
+    decorations.push({ x: cx, y: cy, kind: "chains", radius: 0 });
+    chains++;
+  }
 
   if (!player) throw new Error("Level has no player start (P)");
   const dirs = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };

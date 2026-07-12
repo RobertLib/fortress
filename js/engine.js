@@ -24,6 +24,7 @@ const BOX_SPECS = {
 const HANGING_SPECS = {
   sword: { zBot: 0.3, zTop: 0.9, offset: 0.03 },
   shield: { zBot: 0.35, zTop: 0.85, offset: 0.03 },
+  chain: { zBot: 0.22, zTop: 0.92, offset: 0.03 },
 };
 
 // distance buckets for pre-darkened sprite variants
@@ -574,6 +575,11 @@ export class Renderer {
         // the water animates like the torch flames, just at a calmer pace
         const frame = Math.floor(game.time * 6) & 3;
         sprites.push({ x: d.x, y: d.y, img: this.assets.fountains[frame], scale: 0.85 });
+        continue;
+      }
+      if (d.kind === "chains") {
+        // hung from above: anchored so the mounting plate touches the ceiling
+        sprites.push({ x: d.x, y: d.y, img: this.assets.decor.chains, scale: 0.55, zCenter: 1 - 0.55 / 2 });
         continue;
       }
       if (!this.assets.decor[d.kind]) continue; // wall boxes are drawn as quads, not billboards

@@ -1482,6 +1482,80 @@ function armorSprite() {
   return c;
 }
 
+// Iron chains for the gloomier corners: a pair hung on the masonry ending
+// in a shackle and a ring, and a chain bolted to the ceiling with a heavy
+// hook. Links alternate face-on and edge-on; the face-on holes are cleared
+// so the wall (or the dark) shows through.
+function chainStrand(g, x, y0, y1, sway = 0) {
+  let i = 0;
+  for (let y = y0; y < y1; y += 1.2, i++) {
+    const cx = x + (sway ? Math.sin(i * 1.9) * sway : 0);
+    if (i & 1) {
+      px(g, cx - 0.2, y, 0.4, 1.5, "#31363c"); // edge-on link
+      px(g, cx - 0.2, y, 0.4, 0.5, "#6d747e");
+    } else {
+      px(g, cx - 0.55, y, 1.1, 1.6, "#3a3f45"); // face-on link
+      px(g, cx - 0.55, y, 0.35, 1.6, "#565c66");
+      g.clearRect((cx - 0.2) * 4, (y + 0.45) * 4, 0.4 * 4, 0.75 * 4);
+    }
+  }
+}
+
+function chainWallSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  // ring plates bolted to the stone
+  for (const mx of [4.5, 11]) {
+    px(g, mx - 1, 0.6, 2, 1, "#2c3136");
+    px(g, mx - 1, 0.6, 2, 0.35, "#565c66");
+    px(g, mx - 0.35, 1.6, 0.7, 0.8, "#3a3f45");
+  }
+  chainStrand(g, 4.5, 2.4, 10.6, 0.35);
+  chainStrand(g, 11, 2.4, 7.2, 0.3);
+  // the long chain ends in an open shackle
+  px(g, 3.3, 10.8, 2.4, 0.6, "#454b52");
+  px(g, 3.3, 10.8, 2.4, 0.25, "#6d747e");
+  px(g, 3.3, 11.4, 0.6, 1.6, "#454b52");
+  px(g, 5.1, 11.4, 0.6, 1.6, "#454b52");
+  px(g, 3.3, 13, 0.75, 0.5, "#31363c"); // open jaws
+  px(g, 4.95, 13, 0.75, 0.5, "#31363c");
+  // the short one in a dangling ring
+  px(g, 10.1, 7.3, 1.8, 1.8, "#3a3f45");
+  px(g, 10.1, 7.3, 1.8, 0.4, "#565c66");
+  g.clearRect(10.55 * 4, 7.75 * 4, 0.9 * 4, 0.9 * 4);
+  // a touch of rust where rain never reaches
+  const rand = rng(913);
+  g.globalAlpha = 0.3;
+  for (let i = 0; i < 12; i++) {
+    g.fillStyle = "#6a4426";
+    g.fillRect(Math.floor(12 + rand() * 14), Math.floor(10 + rand() * 40), 2, 2);
+  }
+  g.globalAlpha = 1;
+  return c;
+}
+
+function chainCeilingSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  // mounting plate flush with the ceiling
+  px(g, 6.4, 0, 3.2, 0.7, "#2c3136");
+  px(g, 6.4, 0, 3.2, 0.25, "#565c66");
+  chainStrand(g, 8, 0.7, 11.4, 0.25);
+  // heavy meat hook at the end
+  px(g, 7.65, 11.3, 0.7, 1.7, "#454b52"); // shank
+  px(g, 7.65, 11.3, 0.25, 1.7, "#6d747e");
+  px(g, 6.5, 12.5, 1.6, 0.7, "#454b52"); // curl of the hook
+  px(g, 6.5, 11.6, 0.65, 1.2, "#454b52"); // tip rising back up
+  px(g, 6.5, 11.6, 0.65, 0.4, "#8d949c"); // worn point catches light
+  // a shorter strand swings beside it, ending in a bare ring
+  px(g, 10.9, 0, 1.7, 0.55, "#2c3136");
+  chainStrand(g, 11.7, 0.55, 5.6, 0.2);
+  px(g, 10.9, 5.5, 1.6, 1.6, "#3a3f45");
+  px(g, 10.9, 5.5, 1.6, 0.35, "#565c66");
+  g.clearRect(11.3 * 4, 5.95 * 4, 0.8 * 4, 0.8 * 4);
+  return c;
+}
+
 function chestLidTexture() {
   // plain flat colour: the lid's screen mapping is only approximate, and a
   // single tone can never show the distortion
@@ -1619,8 +1693,9 @@ export function buildAssets() {
   const torches = [0, 1, 2, 3].map(torchSprite);
   const fountains = [0, 1, 2, 3].map(fountainSprite);
 
-  // armour is a free-standing billboard like the furniture
-  const decor = { table: tableSprite(), chair: chairSprite(), armor: armorSprite() };
+  // armour is a free-standing billboard like the furniture; ceiling chains
+  // are billboards too, just anchored to the ceiling by the renderer
+  const decor = { table: tableSprite(), chair: chairSprite(), armor: armorSprite(), chains: chainCeilingSprite() };
 
   // wall-box furniture; faces get the same orientation shading as walls
   // (darker along y), lids are horizontal and need no dark variant
@@ -1633,7 +1708,7 @@ export function buildAssets() {
     b.sideDark = darken(b.side, 0.65);
   }
 
-  const hangings = { sword: swordSprite(), shield: shieldSprite() };
+  const hangings = { sword: swordSprite(), shield: shieldSprite(), chain: chainWallSprite() };
 
   return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, boxes, hangings, TEX };
 }
