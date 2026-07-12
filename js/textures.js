@@ -382,6 +382,57 @@ function gateTexture() {
   return c;
 }
 
+// Mirror portal: a gilded frame set into the masonry around a glass of
+// swirling violet light. Two spiral arms sit 180° apart and advance 45° per
+// frame, so the four frames loop seamlessly. Opaque edge to edge like every
+// wall texture — the renderer fogs the whole column.
+function portalTexture(frame) {
+  const c = stoneTexture(88, { base: "#5d564e" });
+  const g = c.getContext("2d");
+
+  // gilded frame: lit along the top and left, in shadow at the base
+  g.fillStyle = "#7a5c22";
+  g.fillRect(6, 4, 52, 56);
+  g.fillStyle = "#c9a24a";
+  g.fillRect(6, 4, 52, 3);
+  g.fillRect(6, 4, 3, 56);
+  g.fillStyle = "#4a3812";
+  g.fillRect(6, 57, 52, 3);
+  g.fillRect(55, 4, 3, 56);
+  g.fillStyle = "#e9c93c"; // corner bosses
+  for (const [bx, by] of [[7, 5], [53, 5], [7, 55], [53, 55]]) g.fillRect(bx, by, 4, 4);
+
+  // the glass: a near-black void behind the swirl
+  g.fillStyle = "#0b0714";
+  g.fillRect(11, 9, 42, 46);
+
+  // spiral arms wind inward, brightening toward the heart
+  const rot = (frame * Math.PI) / 4;
+  const shades = ["#2a1650", "#45247e", "#6a3fae", "#9a6ad2", "#c9a8ee"];
+  for (let arm = 0; arm < 2; arm++) {
+    for (let r = 19; r > 2; r -= 0.7) {
+      const a = rot + arm * Math.PI + (19 - r) * 0.3;
+      const x = Math.floor(32 + Math.cos(a) * r);
+      const y = Math.floor(32 + Math.sin(a) * r * 1.1);
+      if (x < 12 || x > 50 || y < 10 || y > 52) continue;
+      g.fillStyle = shades[Math.min(shades.length - 1, Math.floor((19 - r) / 4))];
+      g.fillRect(x, y, 2, 2);
+    }
+  }
+  // hot core with a pale heart
+  g.fillStyle = "#e8dcff";
+  g.fillRect(30, 30, 4, 4);
+  g.fillStyle = "#ffffff";
+  g.fillRect(31, 31, 2, 2);
+  // stray motes adrift in the glass, twinkling from frame to frame
+  const rand = rng(880 + frame * 7);
+  g.fillStyle = "#9a6ad2";
+  for (let i = 0; i < 10; i++) {
+    g.fillRect(12 + Math.floor(rand() * 39), 10 + Math.floor(rand() * 43), 1, 1);
+  }
+  return c;
+}
+
 // ---------------------------------------------------------------- sprites
 
 // Logical 16x16 pixel grid scaled x4 into a 64x64 canvas.
@@ -1640,6 +1691,8 @@ export function buildAssets() {
     L: leverTexture(false),
     l: leverTexture(true),
   };
+  // the mirror's vortex churns over four frames, "~0".."~3"
+  for (let f = 0; f < 4; f++) walls[`~${f}`] = portalTexture(f);
   const wallsDark = {};
   for (const k of Object.keys(walls)) wallsDark[k] = darken(walls[k], 0.65);
 

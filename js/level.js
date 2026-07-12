@@ -35,6 +35,11 @@
 //            looks out on floor the player can reach without any secrets,
 //            so it can never end up buried or sealed away; the other faces
 //            wear the surrounding masonry.
+//     ~      mirror portal: a tall glass of swirling light set into the
+//            wall. Portals pair up in reading order (1st with 2nd, 3rd with
+//            4th…); step into the glass and its twin draws you out on the
+//            far side. Only the player fits through — to enemies and bolts
+//            the mirror is solid glass.
 
 export const WALLS = new Set(["1", "2", "3", "4", "5", "6", "7", "B", "#"]);
 
@@ -64,6 +69,7 @@ export function parseLevel(text) {
   const trapPlates = [];
   const levers = [];
   const secretCells = [];
+  const portals = [];
   let player = null;
 
   for (let y = 0; y < h; y++) {
@@ -85,6 +91,9 @@ export function parseLevel(text) {
       } else if (ch === "L") {
         cell = "L";
         levers.push({ x, y, doors: [] });
+      } else if (ch === "~") {
+        cell = "~";
+        portals.push({ x, y });
       } else if (ch === "P") {
         player = { x: x + 0.5, y: y + 0.5 };
       } else if (ch === "^") {
@@ -174,7 +183,7 @@ export function parseLevel(text) {
   // neighbours' masonry, like the secret walls do.
   const cardinal = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const reachable = new Uint8Array(w * h);
-  if (player && levers.length) {
+  if (player && (levers.length || portals.length)) {
     const stack = [Math.floor(player.y) * w + Math.floor(player.x)];
     reachable[stack[0]] = 1;
     while (stack.length) {
@@ -221,6 +230,40 @@ export function parseLevel(text) {
     l.dy = face.dy;
   }
 
+  // Mirror portals pair up in reading order: first with second, third with
+  // fourth. Each picks the floor cell it spills arrivals onto — reachable
+  // floor is preferred, and floor that runs on for a second cell beats a
+  // dead stop against masonry, so the traveller never steps out nose to a
+  // wall when the mirror can help it. Unreachable floor is still fair game:
+  // a vault served only by its mirror is the whole point of one. A mirror
+  // with no twin, or a pair with a walled-in end, stays solid glass.
+  for (const pt of portals) {
+    let face = null;
+    for (const [dx, dy] of cardinal) {
+      const nx = pt.x + dx;
+      const ny = pt.y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h || grid[ny * w + nx] !== ".") continue;
+      const runsOn = grid[(ny + dy) * w + nx + dx] === "." ? 1 : 0;
+      const score = (reachable[ny * w + nx] ? 2 : 0) + runsOn;
+      if (!face || score > face.score) face = { dx, dy, score };
+    }
+    pt.dx = face?.dx ?? 0;
+    pt.dy = face?.dy ?? 0;
+  }
+  for (let i = 0; i < portals.length; i++) {
+    const pt = portals[i];
+    const twin = portals[i ^ 1];
+    if ((i ^ 1) >= portals.length) {
+      pt.pairIndex = -1;
+      console.warn(`Portal at ${pt.x},${pt.y} has no twin — it stays solid glass`);
+    } else if (!twin.dx && !twin.dy) {
+      pt.pairIndex = -1;
+      console.warn(`Portal at ${twin.x},${twin.y} is walled in — the pair stays solid glass`);
+    } else {
+      pt.pairIndex = i ^ 1;
+    }
+  }
+
   // Scatter a modest number of torches along walls that border walkable
   // space. Sorting by a coordinate hash makes the layout stable while the
   // spacing pass keeps corridors from turning into rows of identical lights.
@@ -260,6 +303,10 @@ export function parseLevel(text) {
   for (const i of items) markSpawn(i.x, i.y);
   for (const e of enemies) markSpawn(e.x, e.y);
   for (const t of trapPlates) spawnCells.add(t.y * w + t.x);
+  // keep the cell a portal delivers onto clear of furniture and chests
+  for (const pt of portals) {
+    if (pt.dx || pt.dy) spawnCells.add((pt.y + pt.dy) * w + pt.x + pt.dx);
+  }
 
   const isFloor = (x, y) => x >= 0 && y >= 0 && x < w && y < h && grid[y * w + x] === ".";
   const tableSpots = [];
@@ -463,6 +510,7 @@ export function parseLevel(text) {
     doors,
     traps,
     levers,
+    portals,
     secretCount: levers.filter((l) => l.doors.length > 0).length,
     torches,
     decorations,

@@ -48,6 +48,7 @@ export class Game {
     this.doorMap = new Map(this.doors.map((d) => [d.y * level.w + d.x, d]));
     this.levers = level.levers.map((l) => ({ ...l, pulled: false }));
     this.leverMap = new Map(this.levers.map((l) => [l.y * level.w + l.x, l]));
+    this.portalMap = new Map(level.portals.map((pt) => [pt.y * level.w + pt.x, pt]));
     this.traps = level.traps.map((t) => ({ ...t, state: "armed", timer: 0, shots: 0, seen: false }));
     this.projectiles = [];
 
@@ -62,6 +63,7 @@ export class Game {
 
     this.damageFlash = 0;
     this.pickupFlash = 0;
+    this.portalFlash = 0;
     this.message = "";
     this.messageTimer = 0;
     this.fireTimer = 0;
@@ -116,6 +118,7 @@ export class Game {
   decayFx(dt) {
     this.damageFlash = Math.max(0, this.damageFlash - dt * 1.6);
     this.pickupFlash = Math.max(0, this.pickupFlash - dt * 2.5);
+    this.portalFlash = Math.max(0, this.portalFlash - dt * 1.8);
     this.messageTimer = Math.max(0, this.messageTimer - dt);
   }
 
@@ -190,6 +193,22 @@ export class Game {
     } else {
       p.speedNow = 0;
       p.bobAmount = Math.max(0, p.bobAmount - dt * 6);
+    }
+
+    // stepping into a mirror: once the player's centre crosses into the
+    // glass, the twin draws him out on its own side, facing away from it —
+    // the arrival spot lies outside the cell, so walking back in returns him
+    const portal = this.portalMap.get(Math.floor(p.y) * this.level.w + Math.floor(p.x));
+    if (portal && portal.pairIndex >= 0) {
+      const dest = this.level.portals[portal.pairIndex];
+      p.x = dest.x + 0.5 + dest.dx * 0.8;
+      p.y = dest.y + 0.5 + dest.dy * 0.8;
+      p.dirX = dest.dx;
+      p.dirY = dest.dy;
+      p.planeX = -dest.dy * 0.66;
+      p.planeY = dest.dx * 0.66;
+      this.portalFlash = 0.6;
+      audio.play("portal");
     }
 
     if (input.use) {
@@ -516,6 +535,8 @@ export class Game {
         const cell = this.cellAt(cx, cy);
         if (cell === ".") continue;
         if ((cell === "D" || cell === "R" || cell === "Z") && this.doorOpenAmount(cx, cy) > 0.85) continue;
+        // a paired mirror lets the player (self === null) walk into the glass
+        if (cell === "~" && self === null && (this.portalMap.get(cy * this.level.w + cx)?.pairIndex ?? -1) >= 0) continue;
         return true;
       }
     }

@@ -192,6 +192,15 @@ class AudioSys {
       const e = Math.sin(Math.PI * Math.min(1, t / 1.3));
       return (grind + rumble) * e;
     });
+    B("portal", 0.8, (t) => {
+      // glassy vortex: a hum that sweeps up and folds back on itself,
+      // dusted with a faint high chime
+      const f = 220 + 760 * Math.sin((Math.PI * t) / 0.8);
+      const swirl = sin(t, f + sin(t, 9) * 40) * 0.4;
+      const chime = sin(t, 1319) * env(t % 0.2, 0.18, 2) * 0.1;
+      const e = Math.sin(Math.PI * Math.min(1, t / 0.8));
+      return (swirl + chime + noise() * 0.04) * e * 0.85;
+    });
     B("locked", 0.32, (t) => {
       const on = (t % 0.16) < 0.11;
       return on ? sqr(t, 130) * 0.35 : 0;

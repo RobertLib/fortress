@@ -225,6 +225,11 @@ export class Renderer {
         overlays.push({ dist, side, tex: "B", wallX });
         continue;
       }
+      if (cell === "~") {
+        // mirror portal: the vortex in the glass churns through four
+        // texture frames keyed to the game clock
+        return { dist, side, tex: `~${Math.floor(game.time * 7) & 3}`, wallX, overlays };
+      }
       if (cell === "Z") {
         // secret wall: disguised in the neighbours' masonry, and unlike the
         // recessed doors it sits flush on the cell face; when its lever is
@@ -697,6 +702,10 @@ export class Renderer {
 
   renderFlashes(game) {
     const g = this.ctx;
+    if (game.portalFlash > 0) {
+      g.fillStyle = `rgba(150,90,230,${Math.min(0.55, game.portalFlash)})`;
+      g.fillRect(0, 0, W, VIEW_H);
+    }
     if (game.damageFlash > 0) {
       g.fillStyle = `rgba(190,0,0,${Math.min(0.55, game.damageFlash)})`;
       g.fillRect(0, 0, W, VIEW_H);
@@ -749,6 +758,7 @@ export class Renderer {
         // map; once worked they show up in door brown / lever gold
         else if (cell === "Z") col = (game.doorAt(x, y)?.open ?? 0) > 0.05 ? "#8a5a28" : "#655743";
         else if (cell === "L") col = game.leverPulled(x, y) ? "#c9a24a" : "#655743";
+        else if (cell === "~") col = "#8a4fc0";
         else col = "#655743";
         g.fillStyle = col;
         g.fillRect(ox + x * cs, oy + y * cs, cs - 0.5, cs - 0.5);
