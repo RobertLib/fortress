@@ -108,6 +108,13 @@ function handleStateKey(code) {
       if (enter) {
         audio.play("start");
         newGame();
+      } else if (/^Digit[1-9]$/.test(code)) {
+        // debug: a number key on the title screen warps to that level
+        const n = Number(code[5]);
+        if (n <= LEVEL_COUNT) {
+          audio.play("start");
+          newGame(n - 1);
+        }
       }
       break;
     case "levelstart":
@@ -155,7 +162,7 @@ function setState(s) {
   stateTimer = 0;
 }
 
-function newGame() {
+function newGame(startIndex = 0) {
   session = {
     score: 0,
     lives: 3,
@@ -168,7 +175,7 @@ function newGame() {
     maxSecrets: 0,
     totalTime: 0,
   };
-  startLevel(0, null);
+  startLevel(startIndex, null);
 }
 
 function startLevel(index, persist) {
@@ -477,6 +484,14 @@ function drawVictory() {
 window.FORTRESS = {
   getGame: () => game,
   getState: () => state,
+  // warp(3) in the console starts a fresh run on level 3
+  warp: (n) => {
+    if (!levels) return "levels not loaded yet";
+    const idx = Math.floor(n) - 1;
+    if (idx < 0 || idx >= LEVEL_COUNT) return `level must be 1-${LEVEL_COUNT}`;
+    newGame(idx);
+    return `warped to level ${n} — press ENTER`;
+  },
 };
 
 // ------------------------------------------------------------------ boot
@@ -484,7 +499,13 @@ window.FORTRESS = {
 loadLevels(LEVEL_COUNT)
   .then((lv) => {
     levels = lv;
-    setState("intro");
+    // debug: ?level=N skips the title screen and starts on that level
+    const warp = Number(new URLSearchParams(location.search).get("level"));
+    if (Number.isInteger(warp) && warp >= 1 && warp <= LEVEL_COUNT) {
+      newGame(warp - 1);
+    } else {
+      setState("intro");
+    }
   })
   .catch((err) => {
     errorMsg = String(err.message ?? err);

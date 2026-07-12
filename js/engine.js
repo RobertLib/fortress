@@ -570,6 +570,12 @@ export class Renderer {
       sprites.push({ x: a.x, y: a.y, img, scale: 0.82 });
     }
     for (const d of game.level.decorations) {
+      if (d.kind === "fountain") {
+        // the water animates like the torch flames, just at a calmer pace
+        const frame = Math.floor(game.time * 6) & 3;
+        sprites.push({ x: d.x, y: d.y, img: this.assets.fountains[frame], scale: 0.85 });
+        continue;
+      }
       if (!this.assets.decor[d.kind]) continue; // wall boxes are drawn as quads, not billboards
       const scale = d.kind === "table" ? 0.7 : d.kind === "armor" ? 0.78 : 0.64;
       sprites.push({ x: d.x, y: d.y, img: this.assets.decor[d.kind], scale });

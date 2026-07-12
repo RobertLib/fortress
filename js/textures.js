@@ -1201,6 +1201,51 @@ function torchSprite(frame) {
   return c;
 }
 
+// Courtyard fountain: an octagonal stone basin with a carved pedestal and an
+// upper bowl. The jet and the spill animate over four frames like the
+// torches, so the water never stands still.
+function fountainSprite(frame) {
+  const c = canvas();
+  const g = c.getContext("2d");
+
+  // pool water first — the stone rim then overlaps its front edge
+  px(g, 2.4, 10.4, 11.2, 1.4, "#2e5a7a");
+  const ring = [4, 6, 8, 10][frame];
+  px(g, 8 - ring / 2, 10.7, ring, 0.35, "#4a86b0"); // ripple drifting outward
+  px(g, 6.4, 10.45, 3.2, 0.3, "#9fd4ea"); // churn where the spill lands
+
+  // octagonal basin
+  px(g, 1.6, 11.4, 12.8, 3.4, "#5c554b");
+  px(g, 2.4, 14.8, 11.2, 0.7, "#37322b"); // plinth in shadow
+  px(g, 1.6, 11.4, 12.8, 0.5, "#8a8074"); // lit rim
+  px(g, 1.6, 11.4, 0.7, 3.4, "#6b6157"); // corner catching the light
+  px(g, 13.7, 11.4, 0.7, 3.4, "#443e36");
+  for (const x of [4.8, 8, 11.2]) px(g, x, 12.4, 0.35, 2.4, "#443e36"); // panel joints
+
+  // pedestal and upper bowl, brimming over
+  px(g, 7, 6.2, 2, 4.6, "#5c554b");
+  px(g, 7, 6.2, 0.6, 4.6, "#7a7268");
+  px(g, 4.9, 5.2, 6.2, 1.2, "#6b6157");
+  px(g, 4.9, 5.2, 6.2, 0.4, "#8a8074");
+  px(g, 5.6, 4.9, 4.8, 0.5, "#3a6f94");
+
+  // the jet rises, feathers at the tip and falls back into the bowl
+  const rise = [0, -0.5, -0.9, -0.5][frame];
+  const sway = [0, 0.3, 0, -0.3][frame];
+  px(g, 7.6 + sway, 2.2 + rise, 0.8, 2.9 - rise, "#4a86b0");
+  px(g, 7.8 + sway, 1.6 + rise, 0.4, 1.4, "#9fd4ea");
+  px(g, 7.9, 4.6, 0.35, 0.7, "#9fd4ea"); // splash where it lands
+
+  // twin streams spilling from the bowl, broken into falling drops
+  for (const sx of [5.3, 10.4]) {
+    for (let i = 0; i < 4; i++) {
+      const y = 6.6 + i * 1.1 + ((frame + i) % 2) * 0.45;
+      px(g, sx, y, 0.4, 0.8, i % 2 === (frame & 1) ? "#9fd4ea" : "#4a86b0");
+    }
+  }
+  return c;
+}
+
 // Furniture for the larger halls: a trestle table set with a candle and a
 // pewter mug, and a plain oak chair. Both stand on the floor line so the
 // renderer can drop them in like any other ground sprite.
@@ -1572,6 +1617,7 @@ export function buildAssets() {
   for (const s of ["healthy", "ok", "hurt", "bad", "dead"]) crests[s] = crestSprite(s);
 
   const torches = [0, 1, 2, 3].map(torchSprite);
+  const fountains = [0, 1, 2, 3].map(fountainSprite);
 
   // armour is a free-standing billboard like the furniture
   const decor = { table: tableSprite(), chair: chairSprite(), armor: armorSprite() };
@@ -1589,5 +1635,5 @@ export function buildAssets() {
 
   const hangings = { sword: swordSprite(), shield: shieldSprite() };
 
-  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, decor, boxes, hangings, TEX };
+  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, boxes, hangings, TEX };
 }

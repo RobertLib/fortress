@@ -35,6 +35,14 @@ a crossbow and a basic supply of bolts.
 | `M` | sound on/off |
 | `Esc` | pause |
 
+### Debug
+
+Three ways to jump straight to a chosen level:
+
+- open `http://localhost:8000/?level=3`
+- press the level's number key (`1`–`5`) on the title screen
+- run `FORTRESS.warp(3)` in the browser console
+
 ### Enemies
 
 - **Guard** (leather armor, kettle hat) — patrols, weak

@@ -21,6 +21,8 @@
 //     Wall torches are placed automatically on suitable stretches of masonry.
 //     Tables and chairs are likewise furnished automatically in larger rooms,
 //     and wardrobes and chests are set flush against flat wall stretches.
+//     A fountain plays in the widest court, wherever the floor opens up
+//     enough to hold its basin.
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
@@ -284,13 +286,34 @@ export function parseLevel(text) {
   }
   tableSpots.sort((a, b) => b.open - a.open || a.hash - b.hash);
   const decorations = [];
+
+  // A stone fountain graces the widest court. It takes the very best spots
+  // before the furniture is brought in, demands nearly all of its 5x5 to be
+  // open floor — so cramped keeps simply go without — and the tables then
+  // keep a respectful distance from its basin.
+  const fountainLimit = w * h >= 900 ? 2 : 1;
+  let fountainsPlaced = 0;
+  for (const s of tableSpots) {
+    if (fountainsPlaced >= fountainLimit) break;
+    if (s.open < 19) continue;
+    const cx = s.x + 0.5;
+    const cy = s.y + 0.5;
+    if (decorations.some((d) => (d.x - cx) ** 2 + (d.y - cy) ** 2 < 100)) continue;
+    decorations.push({ x: cx, y: cy, kind: "fountain", radius: 0.42 });
+    fountainsPlaced++;
+  }
+
   const tableLimit = Math.max(2, Math.min(6, Math.round((w * h) / 110)));
   let tables = 0;
   for (const s of tableSpots) {
     if (tables >= tableLimit) break;
     const cx = s.x + 0.5;
     const cy = s.y + 0.5;
-    if (decorations.some((d) => d.kind === "table" && (d.x - cx) ** 2 + (d.y - cy) ** 2 < 22)) continue;
+    const crowded = decorations.some((d) => {
+      const sq = (d.x - cx) ** 2 + (d.y - cy) ** 2;
+      return sq < (d.kind === "table" ? 22 : d.kind === "fountain" ? 8 : 0);
+    });
+    if (crowded) continue;
     decorations.push({ x: cx, y: cy, kind: "table", radius: 0.36 });
     tables++;
     // chairs sit in the (guaranteed clear) neighbour cells, pulled to the table
