@@ -581,6 +581,176 @@ function batSwarmSprite(pose) {
   return c;
 }
 
+// War hound billboards. Unlike the soldiery (always drawn face-on), the
+// hound reads wrong without a heading: stand/walk poses therefore exist in
+// four views — front, back and both profiles — and Enemy.sprite() picks one
+// from the dog's heading in camera space, the way the arrows do. Pose keys
+// still match the soldier set: "fire" doubles as the bite (jaws head-on at
+// the viewer), "aim" is never entered by the dog AI. dogSprite() draws the
+// right-facing profile plus the shared pain/death poses.
+function dogSprite(pose) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const fur = "#5d4326";
+  const dark = "#3b2a16";
+  const belly = "#7d5f3a";
+  const tongue = "#c04040";
+
+  if (pose === "dead" || pose === "die2") {
+    // stretched out on its side
+    px(g, 3, 13.6, 10, 1.6, fur);
+    px(g, 1.6, 13.9, 1.8, 1.3, dark); // head flat on the flagstones
+    px(g, 13, 13.2, 2.2, 0.7, dark); // tail
+    px(g, 4.5, 15.1, 6.5, 0.9, dark); // legs folded together
+    if (pose === "dead") px(g, 5, 15.5, 5.5, 0.5, "#5c0f0f");
+    return c;
+  }
+  if (pose === "die1") {
+    // legs buckling, muzzle dropping
+    px(g, 3.5, 12, 8.5, 2.6, fur);
+    px(g, 2, 12.8, 2.2, 2.2, dark); // head sagging
+    px(g, 5, 14.4, 1.3, 1.6, dark);
+    px(g, 9.5, 14.4, 1.3, 1.6, dark);
+    px(g, 12, 11.6, 2, 0.8, dark); // tail down
+    return c;
+  }
+
+  if (pose === "fire") {
+    // the bite, head-on: ears flat, jaws wide, teeth bared
+    px(g, 5, 6, 6, 5, fur); // head
+    px(g, 3.6, 5.4, 1.6, 1.8, dark); // ears swept flat
+    px(g, 10.8, 5.4, 1.6, 1.8, dark);
+    px(g, 6.1, 7.4, 1, 1, "#e8d84a"); // eyes ablaze
+    px(g, 8.9, 7.4, 1, 1, "#e8d84a");
+    px(g, 5.4, 10.4, 5.2, 3.6, dark); // open maw
+    px(g, 5.9, 10.7, 4.2, 1.2, "#7c1616"); // gullet
+    px(g, 5.9, 11.9, 4.2, 1.6, tongue);
+    for (let i = 0; i < 4; i++) {
+      px(g, 5.9 + i * 1.15, 10.4, 0.6, 0.9, "#e8e4d8"); // fangs top & bottom
+      px(g, 5.9 + i * 1.15, 13.2, 0.6, 0.8, "#e8e4d8");
+    }
+    px(g, 4.2, 13.8, 7.6, 1.6, fur); // shoulders below
+    px(g, 4.6, 15.2, 2, 0.8, dark); // forepaws
+    px(g, 9.4, 15.2, 2, 0.8, dark);
+    return c;
+  }
+
+  // side profile: stand / walk1 / walk2 / pain / aim
+  const y0 = pose === "pain" ? 10.8 : 10; // back line; pain cowers lower
+  px(g, 2, y0 - 0.6, 1.4, 0.8, dark); // tail raised
+  px(g, 2.7, y0 + 0.2, 1, 0.9, dark);
+  px(g, 3.4, y0, 8, 3, fur); // body
+  px(g, 4, y0 + 2.3, 7, 0.9, belly);
+  px(g, 10.8, y0 - 2, 2.6, 2.9, fur); // head
+  px(g, 13.2, y0 - 1.3, 2, 1.2, fur); // muzzle
+  px(g, 14.9, y0 - 1.3, 0.6, 0.7, "#16120c"); // nose
+  px(g, 10.9, y0 - 2.8, 0.9, 1.1, dark); // ear pricked up
+  px(g, 12.3, y0 - 1.6, 0.6, 0.6, "#141414"); // eye
+  if (pose === "pain") px(g, 13.4, y0 - 0.1, 1.4, 0.6, tongue); // yelping
+
+  if (pose === "walk1") {
+    // full gallop stretch: hind legs swept back, forelegs reaching
+    px(g, 2.4, y0 + 2.9, 1.7, 1.2, fur);
+    px(g, 1.4, y0 + 3.7, 1.2, 1, dark);
+    px(g, 11.2, y0 + 2.9, 1.7, 1.2, fur);
+    px(g, 12.6, y0 + 3.7, 1.2, 1, dark);
+  } else if (pose === "walk2") {
+    // legs gathered under the body
+    px(g, 5.2, y0 + 2.8, 1.3, 2.7, fur);
+    px(g, 8.8, y0 + 2.8, 1.3, 2.7, fur);
+    px(g, 5, y0 + 5, 1.6, 0.7, dark);
+    px(g, 8.6, y0 + 5, 1.6, 0.7, dark);
+  } else {
+    // standing square on all fours
+    px(g, 4.2, y0 + 3, 1.1, 2.8, fur);
+    px(g, 5.9, y0 + 3.2, 1, 2.6, dark);
+    px(g, 9.2, y0 + 3, 1.1, 2.8, fur);
+    px(g, 10.9, y0 + 3.2, 1, 2.6, dark);
+  }
+  return c;
+}
+
+// The hound head-on: pricked ears, chest between the forelegs. Gallop
+// frames alternate the legs and bob the whole body.
+function dogFrontSprite(pose) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const fur = "#5d4326";
+  const dark = "#3b2a16";
+  const belly = "#7d5f3a";
+  const bob = pose === "walk2" ? 0.4 : 0;
+
+  px(g, 4.6, 11 + bob, 1, 2.6, dark); // haunches peeking past the shoulders
+  px(g, 10.4, 11 + bob, 1, 2.6, dark);
+  px(g, 5.4, 9.8 + bob, 5.2, 4, fur); // chest & shoulders
+  px(g, 6.6, 11.6 + bob, 2.8, 2.2, belly); // chest blaze
+  px(g, 5.8, 5.6 + bob, 1, 1.5, dark); // pricked ears
+  px(g, 9.2, 5.6 + bob, 1, 1.5, dark);
+  px(g, 6, 6.6 + bob, 4, 3.2, fur); // head
+  px(g, 6.7, 7.5 + bob, 0.8, 0.8, "#141414"); // eyes
+  px(g, 8.5, 7.5 + bob, 0.8, 0.8, "#141414");
+  px(g, 7.1, 8.5 + bob, 1.8, 1.5, dark); // muzzle
+  px(g, 7.5, 8.5 + bob, 1, 0.7, "#16120c"); // nose
+
+  if (pose === "walk1") {
+    px(g, 5.8, 13.4, 1.3, 2.5, fur); // near leg planted
+    px(g, 8.9, 13.4, 1.3, 1.7, dark); // off leg lifted
+  } else if (pose === "walk2") {
+    px(g, 8.9, 13.4, 1.3, 2.5, fur);
+    px(g, 5.8, 13.4, 1.3, 1.7, dark);
+  } else {
+    px(g, 5.8, 13.6, 1.3, 2.2, fur);
+    px(g, 8.9, 13.6, 1.3, 2.2, fur);
+    px(g, 5.6, 15.3, 1.6, 0.6, dark); // paws
+    px(g, 8.7, 15.3, 1.6, 0.6, dark);
+  }
+  return c;
+}
+
+// The hound from behind: rump and hind legs, ears past the head, the tail
+// in front of everything and swaying with the gallop.
+function dogBackSprite(pose) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const fur = "#5d4326";
+  const dark = "#3b2a16";
+  const bob = pose === "walk2" ? 0.4 : 0;
+  const sway = pose === "walk1" ? -0.5 : pose === "walk2" ? 0.5 : 0;
+
+  px(g, 6, 5.8 + bob, 1, 1.4, dark); // ears from behind
+  px(g, 8.8, 5.8 + bob, 1, 1.4, dark);
+  px(g, 6.2, 6.8 + bob, 3.6, 3.1, fur); // back of the head, no face
+  px(g, 5.2, 9.8 + bob, 5.6, 4, fur); // rump
+  px(g, 5.6, 12.4 + bob, 4.8, 1.4, dark); // shadow under it
+
+  if (pose === "walk1") {
+    px(g, 5.7, 13.6, 1.3, 2.3, fur);
+    px(g, 8.8, 13.6, 1.3, 1.6, dark); // off leg tucked
+  } else if (pose === "walk2") {
+    px(g, 8.8, 13.6, 1.3, 2.3, fur);
+    px(g, 5.7, 13.6, 1.3, 1.6, dark);
+  } else {
+    px(g, 5.7, 13.8, 1.3, 2.1, fur);
+    px(g, 8.8, 13.8, 1.3, 2.1, fur);
+    px(g, 5.5, 15.3, 1.6, 0.6, dark);
+    px(g, 8.6, 15.3, 1.6, 0.6, dark);
+  }
+  // tail last: nearest the viewer, raised over the rump
+  px(g, 8.3 + sway, 7.4 + bob, 0.9, 2.8, dark);
+  px(g, 8.1 + sway, 6.7 + bob, 1.3, 0.9, dark);
+  return c;
+}
+
+// Right-facing profiles flipped for the left view.
+function mirrorSprite(src) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  g.translate(64, 0);
+  g.scale(-1, 1);
+  g.drawImage(src, 0, 0);
+  return c;
+}
+
 const PAL_GUARD = { uniform: "#6e5638", dark: "#463621", trim: "#a3823f", skin: "#dba377", helmet: "#8d949c", style: "kettle" };
 const PAL_KNIGHT = { uniform: "#8d959f", dark: "#565e66", trim: "#c9a24a", skin: "#dba377", helmet: "#9aa2ac", style: "greathelm" };
 const PAL_CAPTAIN = { uniform: "#8c2020", dark: "#5a1414", trim: "#c9a24a", skin: "#dba377", helmet: "#8d949c", style: "plume" };
@@ -1362,6 +1532,14 @@ export function buildAssets() {
   }
   enemySprites.bat = {};
   for (const p of poses) enemySprites.bat[p] = batSwarmSprite(p);
+  enemySprites.dog = {};
+  for (const p of poses) enemySprites.dog[p] = dogSprite(p);
+  for (const p of ["stand", "walk1", "walk2"]) {
+    enemySprites.dog[`${p}_right`] = enemySprites.dog[p];
+    enemySprites.dog[`${p}_left`] = mirrorSprite(enemySprites.dog[p]);
+    enemySprites.dog[`${p}_front`] = dogFrontSprite(p);
+    enemySprites.dog[`${p}_back`] = dogBackSprite(p);
+  }
 
   const items = {};
   for (const k of ["key", "potion", "bread", "bolts", "treasure", "arbalest"]) {

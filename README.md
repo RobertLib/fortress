@@ -40,6 +40,10 @@ a crossbow and a basic supply of bolts.
 - **Guard** (leather armor, kettle hat) — patrols, weak
 - **Knight** (plate armor, great helm) — tough, hits hard
 - **Captain** (red tabard with a plume) — fast and accurate
+- **Bat swarm** — flies over everything and swoops in to bite
+- **War hound** — fast melee runner; one placed near a soldier heels to
+  him as its handler, barks him awake when it spots you, and trots back
+  to his side when it loses your trail
 
 Enemies patrol, and once they spot you (or hear a crossbow shot) they
 raise the alarm and give chase — they stop to shoot and can open doors.
@@ -57,6 +61,7 @@ P    player start              K  key
 H    healing potion (+25)      F  bread (+10)
 A    quiver of bolts           T  treasure (score)
 M    repeating crossbow        G/S/O  guard / knight / captain
+V/v  bat swarm (flying/roosting)  C/c  war hound (roaming/staying put)
 L    lever on a wall           Z  secret wall
 ```
 

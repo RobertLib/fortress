@@ -2,6 +2,10 @@
 // with pain staggers and a small death animation. Rendered as billboards.
 // The bat swarm is the odd one out: it flies (drawn head-high, passes
 // through other actors), swoops at the player, bites and veers away.
+// War hounds are melee runners: one leashed to a handler heels to him,
+// barks him awake when it spots the player (and springs up when HE joins
+// a fight), charges in to bite, and trots back to the master's side when
+// the trail goes cold. A masterless hound guards its ground the same way.
 
 import { audio } from "./audio.js";
 
@@ -12,7 +16,12 @@ const TYPES = {
   bat: {
     hp: 16, speed: 3.1, range: 0.8, cooldown: [0.9, 1.6], dmg: 7, score: 150, drop: 0,
     swarm: true, radius: 0.25, scale: 0.6,
-    alertSound: "batAlert", painSound: "batSqueak", deathSound: "batDeath",
+    alertSound: "batAlert", painSound: "batSqueak", deathSound: "batDeath", biteSound: "batBite",
+  },
+  dog: {
+    hp: 18, speed: 4.1, range: 0.95, cooldown: [0.7, 1.3], dmg: 10, score: 200, drop: 0,
+    melee: true, radius: 0.24, scale: 0.62,
+    alertSound: "dogBark", painSound: "dogPain", deathSound: "dogDeath", biteSound: "dogBite",
   },
 };
 
@@ -33,9 +42,24 @@ export class Enemy {
     this.radius = this.stats.radius ?? 0.3;
 
     this.state = spawn.patrol ? "patrol" : "stand";
+    // hounds: index of the handler in the enemies array (resolved by Game
+    // into this.master once every enemy exists), and the spot to fall back
+    // to when there is no handler to return to
+    this.masterIndex = spawn.master ?? null;
+    this.master = null;
+    if (this.masterIndex != null) this.state = "follow";
+    this.homeX = spawn.x;
+    this.homeY = spawn.y;
+    this.spawnPatrol = !!spawn.patrol;
+    this.lostTimer = 0;
+    this.growlTimer = 0;
+    this.lastSeenX = null;
+    this.lastSeenY = null;
     const [dx, dy] = CARDINALS[Math.floor(Math.random() * 4)];
     this.dirX = dx;
     this.dirY = dy;
+    this.faceX = dx; // heading the hound was last moving in (drives its view)
+    this.faceY = dy;
     this.timer = 0;
     this.animTime = Math.random() * 10;
     this.moving = false;
@@ -102,12 +126,59 @@ export class Enemy {
             this.moving = true;
           }
         }
-        if (this.canSeePlayer(game)) {
+        if (this.stats.melee) {
+          this.watchForPlayer(game, dt);
+        } else if (this.canSeePlayer(game)) {
           this.reaction += dt;
           if (this.reaction > 0.25 + Math.random() * 0.3) this.wake(game);
         } else {
           this.reaction = Math.max(0, this.reaction - dt);
         }
+        return;
+      }
+
+      case "follow": {
+        // at heel: trail the handler, sit tight when close
+        const m = this.master;
+        if (!m || m.dead) {
+          // the handler has fallen — the hound guards the spot instead
+          if (m) {
+            this.homeX = m.x;
+            this.homeY = m.y;
+          }
+          this.state = "stand";
+          return;
+        }
+        const d = Math.hypot(m.x - this.x, m.y - this.y);
+        if (d > 1.4) {
+          const step = this.stats.speed * (d > 3 ? 0.85 : 0.5) * dt;
+          this.moveToward(game, m.x, m.y, step);
+        }
+        this.watchForPlayer(game, dt);
+        return;
+      }
+
+      case "return": {
+        // the trail went cold: trot back to the handler (or the guard post),
+        // ready to spring again the moment the player shows himself
+        const m = this.master && !this.master.dead ? this.master : null;
+        const tx = m ? m.x : this.homeX;
+        const ty = m ? m.y : this.homeY;
+        const d = Math.hypot(tx - this.x, ty - this.y);
+        if (d < 1.2) {
+          this.state = m ? "follow" : this.spawnPatrol ? "patrol" : "stand";
+          this.reaction = 0;
+          return;
+        }
+        const nx = (tx - this.x) / d;
+        const ny = (ty - this.y) / d;
+        if (!this.moveToward(game, tx, ty, this.stats.speed * 0.8 * dt)) {
+          this.state = m ? "follow" : "stand"; // wedged: settle where it stands
+        }
+        // noses doors open on the way home
+        const door = game.doorAt(Math.floor(this.x + nx * 0.8), Math.floor(this.y + ny * 0.8));
+        if (door) game.openDoor(door, false);
+        this.watchForPlayer(game, dt);
         return;
       }
 
@@ -124,6 +195,41 @@ export class Enemy {
           if (dist < this.stats.range && this.attackCooldown <= 0) this.bite(game);
           const door = game.doorAt(Math.floor(this.x + nx * 0.8), Math.floor(this.y + ny * 0.8));
           if (door) game.openDoor(door, false);
+          return;
+        }
+        if (this.stats.melee) {
+          // run down the player — or the spot he was last seen at; once the
+          // trail stays cold too long, give up the hunt and head home
+          const seen = game.lineOfSight(this.x, this.y, p.x, p.y);
+          if (seen) {
+            this.lastSeenX = p.x;
+            this.lastSeenY = p.y;
+            this.lostTimer = 0;
+          } else {
+            this.lostTimer += dt;
+            if (this.lostTimer > 3.5) {
+              this.lostTimer = 0;
+              this.state = "return";
+              return;
+            }
+          }
+          const tx = this.lastSeenX ?? p.x;
+          const ty = this.lastSeenY ?? p.y;
+          const d = Math.hypot(tx - this.x, ty - this.y);
+          const nx = (tx - this.x) / (d || 1);
+          const ny = (ty - this.y) / (d || 1);
+          if (d > 0.3) this.moveToward(game, tx, ty, this.stats.speed * dt);
+          const door = game.doorAt(Math.floor(this.x + nx * 0.8), Math.floor(this.y + ny * 0.8));
+          if (door) game.openDoor(door, false);
+          if (seen && dist < this.stats.range && this.attackCooldown <= 0) {
+            this.bite(game);
+            return;
+          }
+          this.growlTimer -= dt;
+          if (this.growlTimer <= 0) {
+            this.growlTimer = 1.1 + Math.random() * 1.2;
+            audio.playAt("dogGrowl", this.x, this.y, p, { volume: 0.7, rate: 0.9 + Math.random() * 0.3 });
+          }
           return;
         }
         const los = game.lineOfSight(this.x, this.y, p.x, p.y);
@@ -171,8 +277,18 @@ export class Enemy {
         return;
       }
 
+      case "bite": {
+        // hounds only: jaws shown for a beat before darting off
+        this.timer -= dt;
+        if (this.timer <= 0) {
+          this.state = "swoop";
+          this.timer = 0.3 + Math.random() * 0.2;
+        }
+        return;
+      }
+
       case "swoop": {
-        // bats only: after a bite the swarm veers off before circling back
+        // after a bite the swarm (or hound) veers off before circling back
         this.timer -= dt;
         this.tryMove(game, this.dirX, this.dirY, this.stats.speed * 0.85 * dt);
         this.moving = true;
@@ -184,7 +300,7 @@ export class Enemy {
 
   bite(game) {
     const p = game.player;
-    audio.playAt("batBite", this.x, this.y, p);
+    audio.playAt(this.stats.biteSound, this.x, this.y, p);
     game.hurtPlayer(Math.max(2, Math.round(2 + Math.random() * this.stats.dmg)));
     const [a, b] = this.stats.cooldown;
     this.attackCooldown = a + Math.random() * (b - a);
@@ -195,8 +311,39 @@ export class Enemy {
     const side = Math.random() < 0.5 ? 1 : -1;
     this.dirX = (dx / d) * 0.6 + (-dy / d) * side;
     this.dirY = (dy / d) * 0.6 + (dx / d) * side;
-    this.state = "swoop";
-    this.timer = 0.4 + Math.random() * 0.25;
+    if (this.stats.melee) {
+      this.state = "bite";
+      this.timer = 0.2;
+    } else {
+      this.state = "swoop";
+      this.timer = 0.4 + Math.random() * 0.25;
+    }
+  }
+
+  // Dog perception: quicker on the uptake than the soldiery, and a hound
+  // whose handler joins a fight springs up with him even without a sighting.
+  watchForPlayer(game, dt) {
+    const m = this.master;
+    if (m && !m.dead && (m.state === "chase" || m.state === "aim" || m.state === "fire")) {
+      this.wake(game);
+      return;
+    }
+    if (this.canSeePlayer(game)) {
+      this.reaction += dt;
+      if (this.reaction > 0.1 + Math.random() * 0.15) this.wake(game);
+    } else {
+      this.reaction = Math.max(0, this.reaction - dt);
+    }
+  }
+
+  moveToward(game, tx, ty, step) {
+    const nx = tx - this.x;
+    const ny = ty - this.y;
+    if (this.tryMove(game, nx, ny, step)) this.moving = true;
+    else if (this.tryMove(game, Math.sign(nx), 0, step)) this.moving = true;
+    else if (this.tryMove(game, 0, Math.sign(ny), step)) this.moving = true;
+    else return false;
+    return true;
   }
 
   flutterWings(game, dt) {
@@ -214,10 +361,15 @@ export class Enemy {
   }
 
   wake(game, silent = false) {
-    if (this.dead || this.state === "chase" || this.state === "aim" || this.state === "fire" || this.state === "swoop") return;
+    if (this.dead || this.state === "chase" || this.state === "aim" || this.state === "fire" || this.state === "swoop" || this.state === "bite") return;
     this.state = "chase";
     this.attackCooldown = 0.35 + Math.random() * 0.4;
+    this.lostTimer = 0;
+    this.lastSeenX = game.player.x;
+    this.lastSeenY = game.player.y;
     if (!silent) audio.playAt(this.stats.alertSound ?? "alert", this.x, this.y, game.player, { rate: 0.9 + Math.random() * 0.25 });
+    // a barking hound brings its handler running
+    if (this.master && !this.master.dead) this.master.wake(game, true);
   }
 
   fire(game) {
@@ -270,10 +422,24 @@ export class Enemy {
       this.y = ty;
       moved = true;
     }
+    if (moved && this.stats.melee) {
+      this.faceX = nx / len;
+      this.faceY = ny / len;
+    }
     return moved;
   }
 
-  sprite(assets) {
+  // Which of the four hound views the player sees: its heading projected
+  // into camera space, bucketed the same way the arrow sprites are.
+  viewFrom(p) {
+    const depth = this.faceX * p.dirX + this.faceY * p.dirY;
+    const lat = (this.faceX * p.planeX + this.faceY * p.planeY) / 0.66;
+    if (depth < -Math.abs(lat)) return "front"; // running at the viewer
+    if (depth > Math.abs(lat)) return "back"; // running away
+    return lat > 0 ? "right" : "left";
+  }
+
+  sprite(assets, player) {
     const set = assets.enemySprites[this.type];
     switch (this.state) {
       case "dead":
@@ -285,11 +451,13 @@ export class Enemy {
       case "aim":
         return set.aim;
       case "fire":
+      case "bite":
         return set.fire;
       default: {
-        if (!this.moving) return set.stand;
-        const f = Math.floor(this.animTime * (this.stats.swarm ? 11 : 5)) % 2;
-        return f ? set.walk1 : set.walk2;
+        const f = Math.floor(this.animTime * (this.stats.swarm ? 11 : this.stats.melee ? 9 : 5)) % 2;
+        const frame = !this.moving ? "stand" : f ? "walk1" : "walk2";
+        if (this.stats.melee && player) return set[`${frame}_${this.viewFrom(player)}`];
+        return set[frame];
       }
     }
   }

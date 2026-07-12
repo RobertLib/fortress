@@ -14,6 +14,10 @@
 //     G/g    guard (patrol/standing)
 //     S/s    knight         O/o captain
 //     V/v    bat swarm (flying about / roosting until disturbed)
+//     C/c    war hound (roaming/staying put). A hound with a soldier within
+//            4 cells is leashed to him instead: it heels to its handler,
+//            barks him awake when it spots the player, and returns to his
+//            side when it loses the chase.
 //     Wall torches are placed automatically on suitable stretches of masonry.
 //     Tables and chairs are likewise furnished automatically in larger rooms,
 //     and wardrobes and chests are set flush against flat wall stretches.
@@ -31,7 +35,7 @@
 export const WALLS = new Set(["1", "2", "3", "4", "5", "6", "7", "B", "#"]);
 
 const ITEM_CHARS = { K: "key", H: "potion", F: "bread", A: "bolts", T: "treasure", M: "arbalest" };
-const ENEMY_CHARS = { G: "guard", S: "knight", O: "captain", V: "bat" };
+const ENEMY_CHARS = { G: "guard", S: "knight", O: "captain", V: "bat", C: "dog" };
 
 export function parseLevel(text) {
   const props = { name: "FLOOR", floor: "#707070", ceil: "#383838", start: "E" };
@@ -89,6 +93,21 @@ export function parseLevel(text) {
       }
       grid[y * w + x] = cell;
     }
+  }
+
+  // Every war hound is leashed to the nearest man-at-arms within earshot
+  // (4 cells): it heels to him, springs when he fights and barks him awake
+  // in turn. A hound with no soldier nearby just guards its own ground.
+  for (const dog of enemies) {
+    if (dog.type !== "dog") continue;
+    let best = null;
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (e.type === "dog" || e.type === "bat") continue;
+      const d = (e.x - dog.x) ** 2 + (e.y - dog.y) ** 2;
+      if (d <= 16 && (!best || d < best.d)) best = { d, i };
+    }
+    if (best) dog.master = best.i;
   }
 
   // Resolve each trap's shooter: the nearest wall in a cardinal direction

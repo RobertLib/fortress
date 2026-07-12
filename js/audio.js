@@ -118,6 +118,37 @@ class AudioSys {
       return noise() * beat * env(t, 0.24, 1) * 0.3;
     });
 
+    // --- dogs ---
+    B("dogBark", 0.34, (t) => {
+      // two rough falling-pitch barks
+      const k = t < 0.16 ? t : t - 0.18;
+      if (k < 0 || k > 0.12) return 0;
+      const f = Math.max(90, 420 - 1800 * k);
+      return (saw(k, f) * 0.55 + noise() * 0.3) * env(k, 0.12, 1.5) * 0.8;
+    });
+    B("dogGrowl", 0.5, (t) => {
+      // low rolling growl, throat-rattle pulsed
+      const rumble = saw(t, 70 + sin(t, 9) * 10) * 0.4;
+      const rattle = 0.6 + 0.4 * Math.sin(2 * Math.PI * 16 * t);
+      return (rumble + noise() * 0.15) * rattle * env(t, 0.5, 1) * 0.7;
+    });
+    B("dogBite", 0.13, (t) => {
+      // jaws snapping shut
+      const snap = noise() * env(t, 0.03, 2) * 0.7;
+      const clamp = sin(t, 160 * (1 - t * 2)) * env(t, 0.11, 2) * 0.6;
+      return (snap + clamp) * 0.85;
+    });
+    B("dogPain", 0.28, (t) => {
+      // sharp yelp: pitch spikes up, then tumbles
+      const f = t < 0.06 ? 700 + 9000 * t : Math.max(220, 1240 - 2600 * (t - 0.06));
+      return sin(t, f) * env(t, 0.26, 1.5) * 0.5;
+    });
+    B("dogDeath", 0.8, (t) => {
+      // long fading whine with a slow warble
+      const f = 900 - 650 * t + sin(t, 7) * 40;
+      return sin(t, f) * env(t, 0.8, 1.2) * 0.45;
+    });
+
     // --- pickups ---
     B("pickup", 0.14, (t) => sin(t, 620 + 1800 * t) * env(t, 0.14) * 0.4);
     B("pickupAmmo", 0.12, (t) => sqr(t, 330 + 500 * t) * env(t, 0.12) * 0.25);

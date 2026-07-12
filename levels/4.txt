@@ -1,6 +1,6 @@
 ; FORTRESS — floor 4: THE VAULT
 ; 1-6 walls, B bars, D door, R barred door, X gate, P player, K key, H potion, F bread,
-; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, ^ arrow trap, L lever, Z secret wall
+; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, ^ arrow trap, L lever, Z secret wall
 @name THE VAULT
 @floor #3c3f42
 @ceil #15171a
@@ -8,7 +8,7 @@
 4444444454544454444454444444444
 4PB...4...RO.....HD...B...D...4
 4.4.T.4.4444444L44444...44544.5
-4D4...4.4...4TZ.G....O..4.....4
+4D4...4.4...4TZ.Gc...O..4.....4
 4...4.4.4.4.444...4.....4.444.4
 4.4.4.4...T...OG4.4.......4.4.4
 4.4.4D454...44444.4.4444.54...4
@@ -18,7 +18,7 @@
 4T5SL44444444.4.44444.4544.54.4
 4T4.......S....V....4...4...4.5
 444.4444...S44544...444.4T4.4.4
-4.D...5...............4..K5.4.4
+4.D...5..........C....4..K5.4.4
 4.4.4.4.4.T.5.4.54444.44444.4.4
 4.4...v.....4.4.....4...H...D.4
 4...444.4.444.4.44..544.4.4.4.4
@@ -28,5 +28,5 @@
 4..4444.444S....444F4.4.4.4.4A4
 4.K.H...D.A.....4...4.....4.4.4
 44445555444.54....444444444.4.5
-4...GT.A..SK....4..F.....G....4
+4...GT.A..SK....4..F....cG....4
 4X44444444444444444445444444444

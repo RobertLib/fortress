@@ -40,6 +40,10 @@ export class Game {
 
     this.items = level.items.map((i) => ({ ...i }));
     this.enemies = level.enemies.map((s) => new Enemy(s));
+    // leash each war hound to its handler now that every enemy exists
+    for (const e of this.enemies) {
+      if (e.masterIndex != null) e.master = this.enemies[e.masterIndex];
+    }
     this.doors = level.doors.map((d) => ({ ...d, open: 0, state: "closed", timer: 0 }));
     this.doorMap = new Map(this.doors.map((d) => [d.y * level.w + d.x, d]));
     this.levers = level.levers.map((l) => ({ ...l, pulled: false }));
