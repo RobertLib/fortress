@@ -208,6 +208,28 @@ function arrowSlitTexture(seed) {
   return c;
 }
 
+// Back wall of a niche: the renderer carves the cell's face back to half
+// depth door-style, and this masonry lines the recess — the same stone in
+// shadow, gloom pooling under the vault and in the corners the torchlight
+// never reaches.
+function nicheTexture(seed) {
+  const c = stoneTexture(seed, { base: "#57504a" });
+  const g = c.getContext("2d");
+  g.fillStyle = "rgba(0,0,0,0.38)";
+  g.fillRect(0, 0, TEX, 8);
+  g.fillStyle = "rgba(0,0,0,0.2)";
+  g.fillRect(0, 8, TEX, 6);
+  g.fillStyle = "rgba(0,0,0,0.3)";
+  g.fillRect(0, 0, 6, TEX);
+  g.fillRect(TEX - 6, 0, 6, TEX);
+  g.fillStyle = "rgba(0,0,0,0.15)";
+  g.fillRect(6, 0, 5, TEX);
+  g.fillRect(TEX - 11, 0, 5, TEX);
+  g.fillStyle = "rgba(0,0,0,0.22)"; // the floor of the recess in shadow too
+  g.fillRect(0, TEX - 4, TEX, 4);
+  return c;
+}
+
 // Wall-mounted lever on dressed stone: an iron backplate whose wooden
 // handle points up while idle and hangs down once pulled.
 function leverTexture(pulled) {
@@ -1533,6 +1555,68 @@ function armorSprite() {
   return c;
 }
 
+// Display pieces for the wall niches: a weathered stone figure and a clay
+// amphora, each on its own plinth. Billboards like the armour — the recess
+// opening clips them per column through the z-buffer.
+function statueSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const stone = "#8a857c";
+  const lit = "#a8a39a";
+  const dark = "#5f5b53";
+  // plinth
+  px(g, 4.6, 12.2, 6.8, 0.9, lit);
+  px(g, 5, 13.1, 6, 2.3, stone);
+  px(g, 5, 13.1, 0.8, 2.3, lit);
+  px(g, 4.6, 15.1, 6.8, 0.9, dark);
+  // robe falling to the plinth, flaring at the hem
+  px(g, 6.2, 5.4, 3.6, 6.8, stone);
+  px(g, 5.8, 10.6, 4.4, 1.6, stone);
+  px(g, 6.2, 5.4, 0.9, 6.8, lit); // fold catching the torchlight
+  px(g, 9, 5.8, 0.8, 6.4, dark); // fold in shadow
+  px(g, 7.6, 6.6, 0.4, 5.6, dark); // crease down the middle
+  // arms folded across the chest
+  px(g, 6, 6.8, 4, 1.1, stone);
+  px(g, 6, 6.8, 4, 0.4, lit);
+  // head with a hood's shadow across the face
+  px(g, 7, 3.2, 2.2, 2.2, stone);
+  px(g, 6.7, 3, 2.8, 0.7, lit);
+  px(g, 7.2, 4.1, 1.8, 0.7, dark);
+  // chips and stains of age
+  px(g, 6.6, 9.2, 0.5, 0.5, dark);
+  px(g, 8.4, 12.6, 0.6, 0.4, dark);
+  return c;
+}
+
+function urnSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const clay = "#9c5a30";
+  const lit = "#c07a44";
+  const dark = "#6e3d1e";
+  // low plinth
+  px(g, 4.8, 13.6, 6.4, 0.8, "#8a857c");
+  px(g, 5.2, 14.4, 5.6, 1.2, "#5f5b53");
+  // foot and belly of the amphora
+  px(g, 7, 12.4, 2, 1.2, dark);
+  px(g, 6, 11.6, 4, 0.9, clay);
+  px(g, 5.2, 8, 5.6, 3.7, clay);
+  px(g, 5.6, 7.2, 4.8, 0.9, clay);
+  px(g, 5.2, 8, 1, 3.7, lit); // glaze catching the light
+  px(g, 9.6, 8.2, 1, 3.4, dark);
+  // painted band around the shoulder
+  px(g, 5.6, 8.6, 4.8, 0.7, "#3a2a16");
+  // neck and flared rim
+  px(g, 7, 6, 2, 1.3, clay);
+  px(g, 6.4, 5.2, 3.2, 0.9, lit);
+  // handles arching from rim to shoulder
+  px(g, 4.6, 6.4, 0.8, 2.2, dark);
+  px(g, 5.2, 6, 1.2, 0.7, dark);
+  px(g, 10.6, 6.4, 0.8, 2.2, dark);
+  px(g, 9.6, 6, 1.2, 0.7, dark);
+  return c;
+}
+
 // Iron chains for the gloomier corners: a pair hung on the masonry ending
 // in a shackle and a ring, and a chain bolted to the ceiling with a heavy
 // hook. Links alternate face-on and edge-on; the face-on holes are cleared
@@ -1690,6 +1774,7 @@ export function buildAssets() {
     X: gateTexture(),
     L: leverTexture(false),
     l: leverTexture(true),
+    N: nicheTexture(121),
   };
   // the mirror's vortex churns over four frames, "~0".."~3"
   for (let f = 0; f < 4; f++) walls[`~${f}`] = portalTexture(f);
@@ -1748,7 +1833,14 @@ export function buildAssets() {
 
   // armour is a free-standing billboard like the furniture; ceiling chains
   // are billboards too, just anchored to the ceiling by the renderer
-  const decor = { table: tableSprite(), chair: chairSprite(), armor: armorSprite(), chains: chainCeilingSprite() };
+  const decor = {
+    table: tableSprite(),
+    chair: chairSprite(),
+    armor: armorSprite(),
+    chains: chainCeilingSprite(),
+    statue: statueSprite(),
+    urn: urnSprite(),
+  };
 
   // wall-box furniture; faces get the same orientation shading as walls
   // (darker along y), lids are horizontal and need no dark variant

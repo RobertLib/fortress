@@ -208,6 +208,24 @@ export class Renderer {
         continue; // door open at this spot — ray passes through
       }
 
+      if (cell === "N") {
+        // niche: the face is carved back to the middle of the cell, tested
+        // door-style on the mid plane; rays that clip past the opening run
+        // on into the neighbours, whose sides become the jambs
+        let distMid, coord;
+        if (side === 0) {
+          distMid = (mapX - posX + (1 - stepX) / 2 + stepX * 0.5) / rayDirX;
+          coord = posY + distMid * rayDirY - mapY;
+        } else {
+          distMid = (mapY - posY + (1 - stepY) / 2 + stepY * 0.5) / rayDirY;
+          coord = posX + distMid * rayDirX - mapX;
+        }
+        if (coord >= 0 && coord < 1) {
+          return { dist: distMid, side, tex: "N", wallX: coord, overlays };
+        }
+        continue;
+      }
+
       // solid wall (or exit door "X")
       let dist, wallX;
       if (side === 0) {
@@ -588,7 +606,8 @@ export class Renderer {
         continue;
       }
       if (!this.assets.decor[d.kind]) continue; // wall boxes are drawn as quads, not billboards
-      const scale = d.kind === "table" ? 0.7 : d.kind === "armor" ? 0.78 : 0.64;
+      const scale =
+        d.kind === "table" ? 0.7 : d.kind === "armor" ? 0.78 : d.kind === "statue" ? 0.72 : d.kind === "urn" ? 0.5 : 0.64;
       sprites.push({ x: d.x, y: d.y, img: this.assets.decor[d.kind], scale });
     }
     for (const t of game.level.torches) {
@@ -759,6 +778,7 @@ export class Renderer {
         else if (cell === "Z") col = (game.doorAt(x, y)?.open ?? 0) > 0.05 ? "#8a5a28" : "#655743";
         else if (cell === "L") col = game.leverPulled(x, y) ? "#c9a24a" : "#655743";
         else if (cell === "~") col = "#8a4fc0";
+        else if (cell === "N") col = "#57493a";
         else col = "#655743";
         g.fillStyle = col;
         g.fillRect(ox + x * cs, oy + y * cs, cs - 0.5, cs - 0.5);

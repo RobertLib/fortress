@@ -25,6 +25,8 @@
 //     enough to hold its basin.
 //     Iron chains are draped on the masonry and hung from the ceiling in
 //     the gloomier corners, purely for atmosphere.
+//     Niches are carved into quiet stretches of wall — the masonry recedes
+//     to half depth and keeps a stone figure or an old urn on display.
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
@@ -492,6 +494,38 @@ export function parseLevel(text) {
     c.used = true;
     decorations.push({ x: cx, y: cy, kind: "chains", radius: 0 });
     chains++;
+  }
+
+  // Niches: a wall cell carved back to half its depth ("N"), with a statue
+  // or an urn on display in the recess. The renderer draws the sunken face
+  // door-style and the flanking walls provide real jambs; the piece inside
+  // is an ordinary billboard that the z-buffer clips to the opening. Only
+  // cells carrying nothing else on any face give up their masonry, so a
+  // torch, box or hanging can never end up floating in front of a recess.
+  // Any masonry will do for the backing: the carved face replaces the
+  // cell's own texture entirely.
+  const nicheLimit = Math.max(1, Math.min(4, Math.round((w * h) / 180)));
+  const nicheCells = [];
+  for (const c of boxCandidates) {
+    if (nicheCells.length >= nicheLimit) break;
+    if (c.used) continue;
+    if (grid[c.y * w + c.x] !== c.cell) continue; // another face already carved it
+    if (wallBoxes.some((b) => b.x === c.x && b.y === c.y)) continue;
+    if (hangings.some((hh) => hh.x === c.x && hh.y === c.y)) continue;
+    if (torches.some((t) => (t.x - c.x - 0.5) ** 2 + (t.y - c.y - 0.5) ** 2 < 0.9)) continue;
+    const cx = c.x + 0.5 + c.dx * 0.5; // centre of the opening
+    const cy = c.y + 0.5 + c.dy * 0.5;
+    if (decorations.some((dd) => (dd.x - cx) ** 2 + (dd.y - cy) ** 2 < 1.45)) continue;
+    if (nicheCells.some((n) => (n.x - c.x) ** 2 + (n.y - c.y) ** 2 < 9)) continue;
+    c.used = true;
+    grid[c.y * w + c.x] = "N";
+    nicheCells.push({ x: c.x, y: c.y });
+    decorations.push({
+      x: c.x + 0.5 + c.dx * 0.25, // in the recess, in front of the sunken face
+      y: c.y + 0.5 + c.dy * 0.25,
+      kind: (c.hash >>> 4) & 1 ? "urn" : "statue",
+      radius: 0,
+    });
   }
 
   if (!player) throw new Error("Level has no player start (P)");
