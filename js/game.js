@@ -154,8 +154,8 @@ export class Game {
     const speed = 3.4 * run * dt;
     const rotSpeed = 2.7 * dt;
 
-    if (input.turnLeft) this.rotatePlayer(-rotSpeed);
-    if (input.turnRight) this.rotatePlayer(rotSpeed);
+    if (input.turnLeft && !input.strafeMod) this.rotatePlayer(-rotSpeed);
+    if (input.turnRight && !input.strafeMod) this.rotatePlayer(rotSpeed);
     if (input.mouseDX) {
       this.rotatePlayer(input.mouseDX * 0.0026);
       input.mouseDX = 0;
@@ -171,11 +171,11 @@ export class Game {
       mx -= p.dirX;
       my -= p.dirY;
     }
-    if (input.strafeLeft) {
+    if (input.strafeLeft || (input.strafeMod && input.turnLeft)) {
       mx += p.dirY;
       my += -p.dirX;
     }
-    if (input.strafeRight) {
+    if (input.strafeRight || (input.strafeMod && input.turnRight)) {
       mx += -p.dirY;
       my += p.dirX;
     }

@@ -34,6 +34,7 @@ const input = {
   turnLeft: false,
   turnRight: false,
   run: false,
+  strafeMod: false,
   fire: false,
   use: false,
   weapon: null,
@@ -51,13 +52,17 @@ const KEYMAP = {
   ArrowRight: "turnRight",
   ShiftLeft: "run",
   ShiftRight: "run",
+  AltLeft: "strafeMod",
+  AltRight: "strafeMod",
   ControlLeft: "fire",
   ControlRight: "fire",
   KeyJ: "fire",
 };
 
 window.addEventListener("keydown", (e) => {
-  if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
+  if (
+    ["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "AltLeft", "AltRight"].includes(e.code)
+  ) {
     e.preventDefault();
   }
   audio.init();
@@ -79,6 +84,12 @@ window.addEventListener("keydown", (e) => {
 
 window.addEventListener("keyup", (e) => {
   if (KEYMAP[e.code] !== undefined) input[KEYMAP[e.code]] = false;
+});
+
+window.addEventListener("blur", () => {
+  for (const key of Object.keys(input)) {
+    if (typeof input[key] === "boolean") input[key] = false;
+  }
 });
 
 canvas.addEventListener("mousedown", (e) => {
