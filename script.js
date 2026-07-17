@@ -15,8 +15,9 @@ const assets = buildAssets();
 const renderer = new Renderer(canvas, assets);
 
 let levels = null;
-let state = "loading"; // loading | intro | levelstart | playing | paused |
-//                        died | levelcomplete | gameover | victory | error
+let state = "loading"; // loading | intro | menu | controls | quit | levelstart |
+//                        playing | paused | died | levelcomplete | gameover |
+//                        victory | error
 let errorMsg = "";
 let game = null;
 let session = null;
@@ -110,6 +111,90 @@ window.addEventListener("mousemove", (e) => {
   }
 });
 
+// ------------------------------------------------------------------ menus
+
+const soundLabel = () => `SOUND: ${audio.enabled ? "ON" : "OFF"}`;
+
+let resumable = false; // a run was left via the menu and can be picked back up
+
+const CONTINUE_ITEM = {
+  label: () => "CONTINUE",
+  action: () => {
+    audio.play("blip");
+    setState("playing");
+  },
+};
+
+const MAIN_MENU = [
+  {
+    label: () => "NEW GAME",
+    action: () => {
+      audio.play("start");
+      newGame();
+    },
+  },
+  {
+    label: () => "CONTROLS",
+    action: () => {
+      audio.play("blip");
+      setState("controls");
+    },
+  },
+  {
+    label: soundLabel,
+    action: () => {
+      audio.enabled = !audio.enabled;
+      audio.play("blip");
+    },
+  },
+  {
+    label: () => "QUIT GAME",
+    action: () => {
+      audio.play("blip");
+      setState("quit");
+    },
+  },
+];
+
+const PAUSE_MENU = [
+  {
+    label: () => "RESUME",
+    action: () => {
+      audio.play("blip");
+      setState("playing");
+    },
+  },
+  {
+    label: soundLabel,
+    action: () => {
+      audio.enabled = !audio.enabled;
+      audio.play("blip");
+    },
+  },
+  {
+    label: () => "QUIT TO MENU",
+    action: () => {
+      audio.play("blip");
+      resumable = true;
+      mainMenuIndex = 0;
+      setState("menu");
+    },
+  },
+];
+
+let mainMenuIndex = 0;
+let pauseMenuIndex = 0;
+
+const mainMenuItems = () => (resumable ? [CONTINUE_ITEM, ...MAIN_MENU] : MAIN_MENU);
+
+function menuNav(code, items, index) {
+  const up = code === "ArrowUp" || code === "KeyW";
+  const down = code === "ArrowDown" || code === "KeyS";
+  if (!up && !down) return index;
+  audio.play("blip");
+  return (index + (up ? -1 : 1) + items.length) % items.length;
+}
+
 function handleStateKey(code) {
   const enter = code === "Enter" || code === "NumpadEnter";
   const esc = code === "Escape";
@@ -117,8 +202,9 @@ function handleStateKey(code) {
   switch (state) {
     case "intro":
       if (enter) {
-        audio.play("start");
-        newGame();
+        audio.play("blip");
+        mainMenuIndex = 0;
+        setState("menu");
       } else if (/^Digit[1-9]$/.test(code)) {
         // debug: a number key on the title screen warps to that level
         const n = Number(code[5]);
@@ -128,22 +214,44 @@ function handleStateKey(code) {
         }
       }
       break;
+    case "menu":
+      mainMenuIndex = menuNav(code, mainMenuItems(), mainMenuIndex);
+      if (enter) {
+        mainMenuItems()[mainMenuIndex].action();
+      } else if (esc) {
+        audio.play("blip");
+        setState("intro");
+      }
+      break;
+    case "controls":
+    case "quit":
+      if (enter || esc) {
+        audio.play("blip");
+        setState("menu");
+      }
+      break;
     case "levelstart":
       if (enter) beginLevel();
       break;
     case "playing":
       if (esc) {
         setState("paused");
+        pauseMenuIndex = 0;
         document.exitPointerLock?.();
         audio.play("blip");
       }
       break;
     case "paused":
-      if (esc || enter) {
-        setState("playing");
+      pauseMenuIndex = menuNav(code, PAUSE_MENU, pauseMenuIndex);
+      if (esc) {
         audio.play("blip");
+        setState("playing");
+      } else if (enter) {
+        PAUSE_MENU[pauseMenuIndex].action();
       } else if (code === "KeyQ") {
-        setState("intro");
+        resumable = true;
+        mainMenuIndex = 0;
+        setState("menu");
       }
       break;
     case "died":
@@ -171,9 +279,12 @@ function handleStateKey(code) {
 function setState(s) {
   state = s;
   stateTimer = 0;
+  // once the run has ended there is nothing left to continue
+  if (s === "gameover" || s === "victory") resumable = false;
 }
 
 function newGame(startIndex = 0) {
+  resumable = false;
   session = {
     score: 0,
     lives: 3,
@@ -287,6 +398,15 @@ function render() {
     case "intro":
       drawIntro();
       break;
+    case "menu":
+      drawMainMenu();
+      break;
+    case "controls":
+      drawControls();
+      break;
+    case "quit":
+      drawQuit();
+      break;
     case "levelstart":
       drawLevelStart();
       break;
@@ -346,20 +466,44 @@ function drawError() {
   text("then open http://localhost:8000", W / 2, 296, 14, "#e8e8e8");
 }
 
+function drawMenu(items, index, cy, lineH, size) {
+  items.forEach((it, i) => {
+    const y = cy + i * lineH;
+    const sel = i === index;
+    const label = it.label();
+    if (sel) {
+      titleText(label, W / 2, y, size, blink() ? "#e9c93c" : "#ead9b0");
+      // a bolt-tip pointer beside the chosen line, Wolf3D-style
+      ctx.font = `bold ${size}px Georgia, serif`;
+      const half = ctx.measureText(label).width / 2;
+      const py = y - size * 0.34;
+      ctx.fillStyle = blink() ? "#e9c93c" : "#c9a24a";
+      ctx.beginPath();
+      ctx.moveTo(W / 2 - half - 26, py - size * 0.3);
+      ctx.lineTo(W / 2 - half - 26, py + size * 0.3);
+      ctx.lineTo(W / 2 - half - 12, py);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      text(label, W / 2, y, size, "#a89878");
+    }
+  });
+}
+
 function drawIntro() {
   ctx.fillStyle = "#140e08";
   ctx.fillRect(0, 0, W, H);
   // torch glow behind the title
-  const glow = ctx.createRadialGradient(W / 2, 90, 10, W / 2, 90, 260);
+  const glow = ctx.createRadialGradient(W / 2, 105, 10, W / 2, 105, 280);
   glow.addColorStop(0, "rgba(200,120,40,0.22)");
   glow.addColorStop(1, "rgba(200,120,40,0)");
   ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, W, 240);
-  ctx.fillStyle = "#c9a24a";
-  ctx.fillRect(W / 2 - 150, 116, 300, 2);
+  ctx.fillRect(0, 0, W, H);
 
-  titleText("F O R T R E S S", W / 2, 95, 52, "#e9c93c");
-  text("A MEDIEVAL RAYCASTING ADVENTURE", W / 2, 140, 11, "#a89878");
+  titleText("F O R T R E S S", W / 2, 110, 52, "#e9c93c");
+  ctx.fillStyle = "#c9a24a";
+  ctx.fillRect(W / 2 - 150, 130, 300, 2);
+  text("A MEDIEVAL RAYCASTING ADVENTURE", W / 2, 158, 11, "#a89878");
 
   const story = [
     "Betrayed and thrown into the fortress dungeons,",
@@ -367,9 +511,41 @@ function drawIntro() {
     "garrison stand between you and the night. Find the",
     "3 KEYS on each floor, unlock the GATE, and escape.",
   ];
-  story.forEach((l, i) => text(l, W / 2, 172 + i * 18, 12, "#d8cbaa"));
+  story.forEach((l, i) => text(l, W / 2, 205 + i * 20, 12, "#d8cbaa"));
 
-  if (blink()) titleText("PRESS ENTER TO BEGIN", W / 2, 268, 18, "#ead9b0");
+  if (blink()) titleText("PRESS ENTER", W / 2, 335, 18, "#ead9b0");
+}
+
+function drawMainMenu() {
+  ctx.fillStyle = "#140e08";
+  ctx.fillRect(0, 0, W, H);
+  // torch glow behind the heading
+  const glow = ctx.createRadialGradient(W / 2, 80, 10, W / 2, 80, 240);
+  glow.addColorStop(0, "rgba(200,120,40,0.22)");
+  glow.addColorStop(1, "rgba(200,120,40,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  titleText("F O R T R E S S", W / 2, 80, 34, "#e9c93c");
+  ctx.fillStyle = "#c9a24a";
+  ctx.fillRect(W / 2 - 120, 98, 240, 2);
+
+  // centre the block between the heading rule (~y100) and the hint line
+  // (~y360); baselines sit under the glyphs, so offset by the cap height
+  const items = mainMenuItems();
+  const capH = 24 * 0.72;
+  const cy = Math.round((100 + 360) / 2 + capH / 2 - ((items.length - 1) * 42) / 2);
+  drawMenu(items, mainMenuIndex, cy, 42, 24);
+
+  text("ARROWS — SELECT      ENTER — CONFIRM      ESC — BACK", W / 2, 370, 10, "#786850");
+}
+
+function drawControls() {
+  ctx.fillStyle = "#140e08";
+  ctx.fillRect(0, 0, W, H);
+  titleText("CONTROLS", W / 2, 90, 36, "#e9c93c");
+  ctx.fillStyle = "#c9a24a";
+  ctx.fillRect(W / 2 - 120, 108, 240, 2);
 
   const controls = [
     ["W A S D / ARROWS", "move & turn"],
@@ -378,12 +554,24 @@ function drawIntro() {
     ["E / SPACE", "open doors, pull levers, use the gate"],
     ["1 / 2 / 3", "dagger, crossbow, repeater"],
     ["SHIFT / TAB / M", "run / map / sound"],
+    ["ESC", "pause menu"],
   ];
   controls.forEach(([k, v], i) => {
-    const y = 296 + i * 15;
-    text(k, W / 2 - 12, y, 11, "#c9a24a", "right");
-    text(v, W / 2 + 2, y, 11, "#a89878", "left");
+    const y = 150 + i * 24;
+    text(k, W / 2 - 12, y, 13, "#c9a24a", "right");
+    text(v, W / 2 + 2, y, 13, "#d8cbaa", "left");
   });
+
+  if (blink()) text("ESC / ENTER — BACK", W / 2, 350, 13, "#ead9b0");
+}
+
+function drawQuit() {
+  ctx.fillStyle = "#140e08";
+  ctx.fillRect(0, 0, W, H);
+  titleText("FLEEING ALREADY?", W / 2, 140, 32, "#e9c93c");
+  text("The fortress will be waiting for your return.", W / 2, 185, 14, "#d8cbaa");
+  text("You may close this tab now...", W / 2, 215, 14, "#d8cbaa");
+  if (blink()) text("...OR PRESS ENTER TO STAY AND FIGHT", W / 2, 270, 14, "#ead9b0");
 }
 
 function drawLevelStart() {
@@ -400,9 +588,8 @@ function drawLevelStart() {
 function drawPauseOverlay() {
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.fillRect(0, 0, W, VIEW_H);
-  titleText("PAUSED", W / 2, 140, 34, "#e9c93c");
-  text("ESC / ENTER — resume", W / 2, 180, 13, "#d8cbaa");
-  text("Q — quit to title", W / 2, 202, 13, "#d8cbaa");
+  titleText("PAUSED", W / 2, 110, 34, "#e9c93c");
+  drawMenu(PAUSE_MENU, pauseMenuIndex, 165, 28, 17);
 }
 
 function drawDeathFade() {
