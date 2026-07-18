@@ -94,22 +94,36 @@ window.addEventListener("blur", () => {
   }
 });
 
+// canvas is CSS-scaled, so map client coordinates back to the 640x400 space
+function canvasPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: ((e.clientX - r.left) / r.width) * W,
+    y: ((e.clientY - r.top) / r.height) * H,
+  };
+}
+
 canvas.addEventListener("mousedown", (e) => {
   audio.init();
+  if (e.button !== 0) return;
   if (state === "playing") {
     if (document.pointerLockElement !== canvas) {
       canvas.requestPointerLock?.();
     }
-    if (e.button === 0) input.fire = true;
+    input.fire = true;
+    return;
   }
+  handleStateClick(canvasPos(e));
 });
 window.addEventListener("mouseup", (e) => {
   if (e.button === 0) input.fire = false;
 });
 window.addEventListener("mousemove", (e) => {
-  if (document.pointerLockElement === canvas && state === "playing") {
-    input.mouseDX += e.movementX;
+  if (document.pointerLockElement === canvas) {
+    if (state === "playing") input.mouseDX += e.movementX;
+    return;
   }
+  handleStateHover(canvasPos(e));
 });
 
 // ------------------------------------------------------------------ menus
@@ -211,6 +225,22 @@ let pauseMenuIndex = 0;
 
 const mainMenuItems = () => (resumable ? [CONTINUE_ITEM, ...MAIN_MENU] : MAIN_MENU);
 
+// vertical spans the fitted menus are drawn into: [top, bottom, maxLineH, maxSize]
+const MAIN_MENU_SPAN = [100, 360, 42, 24];
+const PAUSE_MENU_SPAN = [125, VIEW_H - 10, 28, 17];
+
+// screens where a click anywhere acts like ENTER
+const CLICK_STATES = new Set([
+  "intro",
+  "controls",
+  "quit",
+  "levelstart",
+  "died",
+  "levelcomplete",
+  "gameover",
+  "victory",
+]);
+
 function menuNav(code, items, index) {
   const up = code === "ArrowUp" || code === "KeyW";
   const down = code === "ArrowDown" || code === "KeyS";
@@ -296,6 +326,50 @@ function handleStateKey(code) {
       if (enter || esc) setState("intro");
       break;
   }
+}
+
+function handleStateClick({ x, y }) {
+  switch (state) {
+    case "menu": {
+      const items = mainMenuItems();
+      const i = menuHitTest(items, MAIN_MENU_SPAN, x, y);
+      if (i >= 0) {
+        mainMenuIndex = i;
+        items[i].action();
+      }
+      break;
+    }
+    case "paused": {
+      const i = menuHitTest(PAUSE_MENU, PAUSE_MENU_SPAN, x, y);
+      if (i >= 0) {
+        pauseMenuIndex = i;
+        PAUSE_MENU[i].action();
+        // resuming by click should re-grab the mouse right away
+        if (state === "playing") canvas.requestPointerLock?.();
+      }
+      break;
+    }
+    default:
+      if (CLICK_STATES.has(state)) handleStateKey("Enter");
+  }
+}
+
+function handleStateHover({ x, y }) {
+  let hit = -1;
+  if (state === "menu") {
+    hit = menuHitTest(mainMenuItems(), MAIN_MENU_SPAN, x, y);
+    if (hit >= 0 && hit !== mainMenuIndex) {
+      mainMenuIndex = hit;
+      audio.play("blip");
+    }
+  } else if (state === "paused") {
+    hit = menuHitTest(PAUSE_MENU, PAUSE_MENU_SPAN, x, y);
+    if (hit >= 0 && hit !== pauseMenuIndex) {
+      pauseMenuIndex = hit;
+      audio.play("blip");
+    }
+  }
+  canvas.style.cursor = hit >= 0 || CLICK_STATES.has(state) ? "pointer" : "";
 }
 
 // ------------------------------------------------------------------ flow
@@ -516,14 +590,32 @@ function drawMenu(items, index, cy, lineH, size) {
 
 // Fit a menu into the vertical span [top, bottom]: full size while it fits,
 // proportionally smaller line height and font once items no longer do.
-function drawMenuFitted(items, index, top, bottom, maxLineH, maxSize) {
+function menuLayout(items, [top, bottom, maxLineH, maxSize]) {
   const lineH = Math.min(maxLineH, Math.floor((bottom - top) / (items.length + 1)));
   const size = Math.round((maxSize * lineH) / maxLineH);
   // centre the block in the span; baselines sit under the glyphs, so
   // offset by the cap height
   const capH = size * 0.72;
   const cy = Math.round((top + bottom) / 2 + capH / 2 - ((items.length - 1) * lineH) / 2);
+  return { cy, lineH, size };
+}
+
+function drawMenuFitted(items, index, span) {
+  const { cy, lineH, size } = menuLayout(items, span);
   drawMenu(items, index, cy, lineH, size);
+}
+
+// index of the menu item under (x, y), or -1
+function menuHitTest(items, span, x, y) {
+  const { cy, lineH, size } = menuLayout(items, span);
+  for (let i = 0; i < items.length; i++) {
+    const by = cy + i * lineH;
+    if (y < by - size * 0.9 || y > by + size * 0.35) continue;
+    ctx.font = `bold ${size}px Georgia, serif`;
+    const half = ctx.measureText(items[i].label()).width / 2 + 28;
+    if (Math.abs(x - W / 2) <= half) return i;
+  }
+  return -1;
 }
 
 function drawIntro() {
@@ -567,9 +659,9 @@ function drawMainMenu() {
   ctx.fillRect(W / 2 - 120, 98, 240, 2);
 
   // the block lives between the heading rule (~y100) and the hint line (~y360)
-  drawMenuFitted(mainMenuItems(), mainMenuIndex, 100, 360, 42, 24);
+  drawMenuFitted(mainMenuItems(), mainMenuIndex, MAIN_MENU_SPAN);
 
-  text("ARROWS — SELECT      ENTER — CONFIRM      ESC — BACK", W / 2, 370, 10, "#786850");
+  text("ARROWS / MOUSE — SELECT      ENTER / CLICK — CONFIRM      ESC — BACK", W / 2, 370, 10, "#786850");
 }
 
 function drawControls() {
@@ -622,7 +714,7 @@ function drawPauseOverlay() {
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.fillRect(0, 0, W, VIEW_H);
   titleText("PAUSED", W / 2, 110, 34, "#e9c93c");
-  drawMenuFitted(PAUSE_MENU, pauseMenuIndex, 125, VIEW_H - 10, 28, 17);
+  drawMenuFitted(PAUSE_MENU, pauseMenuIndex, PAUSE_MENU_SPAN);
 }
 
 function drawDeathFade() {
