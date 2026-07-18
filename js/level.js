@@ -34,6 +34,10 @@
 //     votive candles on display.
 //     Standing candelabra light the stretches the torches never reach,
 //     their flames flickering with a soft glow of their own.
+//     A fireplace blazes against plain masonry in one of the larger halls
+//     (two on the biggest floors) — a stone surround set flat into the
+//     wall with logs alight in the grate, lighting the room like an
+//     oversized torch.
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
@@ -434,6 +438,53 @@ export function parseLevel(text) {
       placed++;
     }
   };
+  // Wall hangings (trophies, portraits, webs, cracks — and the fireplace,
+  // which the renderer draws the same flat-on-the-wall way).
+  const hangings = [];
+
+  // A fireplace blazes in one hall (two on the biggest floors): a stone
+  // surround set into plain masonry with logs alight in the grate, drawn
+  // flat on the wall face like the hangings so it holds its place from
+  // every angle. It burns like an oversized torch, so it claims a stretch
+  // the torches left dark, and it would rather have flanking floor on both
+  // sides, so it reads as the heart of a room instead of a plug in a
+  // corridor — but a floor with no such spot still gets its fire in a
+  // snugger nook. Placed before the wardrobes and chests: the hearth is
+  // the centrepiece and picks its wall first. A collision circle
+  // half-buried in the wall keeps anyone from standing in the flames.
+  const fireplaceLimit = w * h >= 900 ? 2 : 1;
+  let fireplacesPlaced = 0;
+  for (const roomy of [true, false]) {
+    if (fireplacesPlaced > 0) break; // the strict pass found a hall
+    for (const c of boxCandidates) {
+      if (fireplacesPlaced >= fireplaceLimit) break;
+      if (c.used || !"1235".includes(c.cell)) continue;
+      const ffx = c.x + c.dx;
+      const ffy = c.y + c.dy;
+      if (roomy && (!isFloor(ffx - c.dy, ffy + c.dx) || !isFloor(ffx + c.dy, ffy - c.dx))) continue;
+      const cx = c.x + 0.5 + c.dx * 0.56;
+      const cy = c.y + 0.5 + c.dy * 0.56;
+      if (torches.some((t) => (t.x - cx) ** 2 + (t.y - cy) ** 2 < 4)) continue;
+      const crowded = decorations.some((dd) => {
+        const sq = (dd.x - cx) ** 2 + (dd.y - cy) ** 2;
+        return sq < (dd.kind === "fireplace" ? 100 : 2.56);
+      });
+      if (crowded) continue;
+      c.used = true;
+      hangings.push({ x: c.x, y: c.y, dx: c.dx, dy: c.dy, kind: "fireplace", seed: c.hash });
+      // the decoration carries no sprite of its own — just the collision
+      // circle and the light the fire throws (position, phase)
+      decorations.push({
+        x: cx,
+        y: cy,
+        kind: "fireplace",
+        radius: 0.26,
+        phase: ((c.hash >>> 8) % 1000) / 1000 * Math.PI * 2,
+      });
+      fireplacesPlaced++;
+    }
+  }
+
   placeBoxes("wardrobe", Math.max(2, Math.min(5, Math.round((w * h) / 130))), 0.28, "1235");
   placeBoxes("chest", Math.max(2, Math.min(4, Math.round((w * h) / 160))), 0.28, "12345");
 
@@ -473,7 +524,6 @@ export function parseLevel(text) {
   }
 
   // Crossed swords and shields hang flat on the masonry.
-  const hangings = [];
   const placeHangings = (kind, limit, backing) => {
     let placed = 0;
     for (const c of boxCandidates) {
@@ -588,6 +638,8 @@ export function parseLevel(text) {
     portals,
     secretCount: levers.filter((l) => l.doors.length > 0).length,
     torches,
+    // hearths feed the wall/floor light model exactly like torches do
+    fireLights: decorations.filter((d) => d.kind === "fireplace"),
     decorations,
     wallBoxes,
     hangings,

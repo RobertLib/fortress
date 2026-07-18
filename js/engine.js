@@ -28,6 +28,7 @@ const HANGING_SPECS = {
   portrait: { zBot: 0.32, zTop: 0.84, offset: 0.03 },
   cobweb: { zBot: 0.55, zTop: 1, offset: 0.02 },
   crack: { zBot: 0, zTop: 1, offset: 0.02 },
+  fireplace: { zBot: 0, zTop: 0.62, offset: 0.03 },
 };
 
 // distance buckets for pre-darkened sprite variants
@@ -43,6 +44,12 @@ function torchLight(level, x, y, time) {
     const dist = Math.hypot(t.x - x, t.y - y);
     if (dist >= 3.4) continue;
     light = Math.max(light, (1 - dist / 3.4) * torchFlicker(time, t.phase));
+  }
+  // the hearths burn like oversized torches and reach a little further
+  for (const f of level.fireLights) {
+    const dist = Math.hypot(f.x - x, f.y - y);
+    if (dist >= 4.2) continue;
+    light = Math.max(light, (1 - dist / 4.2) * torchFlicker(time, f.phase));
   }
   return light;
 }
@@ -590,6 +597,14 @@ export class Renderer {
       else if (light > 0.15) bucket = Math.max(0, bucket - 1);
       const tex = this.shadedSprite(img, bucket);
       this.drawHangingQuad(game, fx + tx * halfW, fy + ty * halfW, fx - tx * halfW, fy - ty * halfW, tex, spec);
+      if (hg.kind === "fireplace") {
+        // the blaze rides the same quad unshaded, so it registers with the
+        // firebox exactly and keeps burning through the distance fog; each
+        // hearth flickers on its own schedule
+        const frame = (Math.floor(game.time * 10) + ((hg.x * 31 + hg.y * 17) & 3)) & 3;
+        const flames = this.assets.fireFlames[frame];
+        this.drawHangingQuad(game, fx + tx * halfW, fy + ty * halfW, fx - tx * halfW, fy - ty * halfW, flames, spec);
+      }
     }
   }
 
@@ -832,6 +847,29 @@ export class Renderer {
       grad.addColorStop(0, `rgba(255,196,96,${0.13 * flicker})`);
       grad.addColorStop(0.35, `rgba(255,140,40,${0.06 * flicker})`);
       grad.addColorStop(1, "rgba(255,90,10,0)");
+      g.fillStyle = grad;
+      g.fillRect(screenX - radius, screenY - radius, radius * 2, radius * 2);
+    }
+    // the hearths throw the broadest bloom of all — low, wide and ruddy,
+    // pooling on the floor in front of the fire
+    for (const d of game.level.fireLights) {
+      const sx = d.x - p.x;
+      const sy = d.y - p.y;
+      const transformX = invDet * (p.dirY * sx - p.dirX * sy);
+      const transformY = invDet * (-p.planeY * sx + p.planeX * sy);
+      if (transformY <= 0.08) continue;
+      const screenX = (W / 2) * (1 + transformX / transformY);
+      if (screenX < -220 || screenX > W + 220) continue;
+      const zi = Math.max(0, Math.min(W - 1, Math.round(screenX)));
+      if (transformY > this.zbuffer[zi] + 0.15) continue;
+      const fullH = VIEW_H / transformY;
+      const screenY = VIEW_H / 2 + fullH * (0.5 - 0.19); // centred on the firebox
+      const radius = Math.max(16, Math.min(170, fullH * 0.7));
+      const flicker = torchFlicker(game.time, d.phase);
+      const grad = g.createRadialGradient(screenX, screenY, 0, screenX, screenY, radius);
+      grad.addColorStop(0, `rgba(255,158,44,${0.22 * flicker})`);
+      grad.addColorStop(0.3, `rgba(255,96,16,${0.11 * flicker})`);
+      grad.addColorStop(1, "rgba(255,70,0,0)");
       g.fillStyle = grad;
       g.fillRect(screenX - radius, screenY - radius, radius * 2, radius * 2);
     }

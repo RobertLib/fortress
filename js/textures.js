@@ -1764,6 +1764,78 @@ function candleFlamesSprite(frame, spots) {
   return c;
 }
 
+// A stone fireplace set into the masonry: mantel shelf, jambs, and a
+// firebox with logs stacked on iron dogs. Rendered like the wall hangings —
+// one flat quad on the wall face spanning the lower part of the wall — so
+// it hugs the masonry from every angle instead of turning with the camera.
+// Drawn cold: the renderer lays the animated blaze over the same quad
+// fullbright, the trick the candle stands use.
+function fireplaceSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const stone = "#6b6157";
+  const lit = "#8a8074";
+  const dark = "#443e36";
+  const mortar = "#37322b";
+  // mantel shelf spanning the full breast, top edge catching the light
+  px(g, 0.8, 0, 14.4, 1.8, stone);
+  px(g, 0.8, 0, 14.4, 0.6, lit);
+  px(g, 0.8, 1.2, 14.4, 0.6, dark);
+  // jambs framing the firebox
+  px(g, 1.6, 1.8, 2.6, 12.4, stone);
+  px(g, 1.6, 1.8, 0.7, 12.4, lit);
+  px(g, 11.8, 1.8, 2.6, 12.4, stone);
+  px(g, 13.7, 1.8, 0.7, 12.4, dark);
+  px(g, 1.6, 5.8, 2.6, 0.4, mortar);
+  px(g, 1.6, 10, 2.6, 0.4, mortar);
+  px(g, 11.8, 5.8, 2.6, 0.4, mortar);
+  px(g, 11.8, 10, 2.6, 0.4, mortar);
+  // firebox: sooted back wall, blackest at the throat
+  px(g, 4.2, 1.8, 7.6, 12.4, "#100c09");
+  px(g, 4.2, 1.8, 7.6, 1.6, "#030202");
+  // iron fire dogs carrying the logs
+  px(g, 5, 11, 0.7, 3.2, "#1d1f21");
+  px(g, 10.3, 11, 0.7, 3.2, "#1d1f21");
+  px(g, 4.7, 10.5, 1.3, 0.6, "#34373a");
+  px(g, 10, 10.5, 1.3, 0.6, "#34373a");
+  // logs stacked across the dogs, sawn ends pale
+  px(g, 4.6, 12.2, 6.8, 1.4, "#3c2417");
+  px(g, 4.6, 12.2, 6.8, 0.45, "#68401f");
+  px(g, 5.3, 11, 5.4, 1.3, "#4a2c1a");
+  px(g, 5.3, 11, 5.4, 0.4, "#7a4c24");
+  px(g, 4.6, 12.2, 0.8, 1.4, "#9a6630");
+  px(g, 10.6, 12.2, 0.8, 1.4, "#9a6630");
+  // hearthstone slab proud of the floor
+  px(g, 0.8, 14.2, 14.4, 1.8, "#5f5b53");
+  px(g, 0.8, 14.2, 14.4, 0.6, "#8a857c");
+  return c;
+}
+
+// the blaze alone, one canvas per frame; three tongues of flame licking up
+// between the logs out of step, over an ember bed that breathes with them
+function fireplaceFlamesSprite(frame) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const glow = [0.85, 1, 0.9, 0.75][frame];
+  g.globalAlpha = 0.8 * glow;
+  px(g, 4.8, 13.3, 6.4, 0.9, "#e94b0c");
+  px(g, 6, 13.5, 4, 0.7, "#ff9f16");
+  g.globalAlpha = 1;
+  const base = 11.6;
+  for (let i = 0; i < 3; i++) {
+    const x = [5.7, 7.9, 10][i];
+    const f = (frame + i) & 3;
+    const sway = [-0.3, 0.3, 0.45, -0.2][f];
+    const h = [3.6, 4.8, 3.1][i] + [0.5, -0.6, 0.15, -0.25][f];
+    px(g, x - 1 + sway * 0.4, base - h, 2, h, "rgba(120,25,4,0.65)");
+    px(g, x - 0.65 + sway * 0.7, base - h * 0.8, 1.3, h * 0.8, "#e94b0c");
+    px(g, x - 0.4 + sway, base - h * 0.55, 0.8, h * 0.55, "#ff9f16");
+    px(g, x - 0.25 + sway, base - h * 0.3, 0.5, h * 0.3, "#ffe36a");
+    px(g, x - 0.15 + sway * 0.5, base - h * 0.14, 0.3, h * 0.14, "#fff6b0");
+  }
+  return c;
+}
+
 // Iron chains for the gloomier corners: a pair hung on the masonry ending
 // in a shackle and a ring, and a chain bolted to the ceiling with a heavy
 // hook. Links alternate face-on and edge-on; the face-on holes are cleared
@@ -2285,6 +2357,9 @@ export function buildAssets() {
     candles: [0, 1, 2, 3].map((f) => candleFlamesSprite(f, CANDLE_CLUSTER_FLAMES)),
   };
 
+  // the hearth blaze, overlaid fullbright on the fireplace's wall quad
+  const fireFlames = [0, 1, 2, 3].map(fireplaceFlamesSprite);
+
   // wall-box furniture; faces get the same orientation shading as walls
   // (darker along y), lids are horizontal and need no dark variant
   const boxes = {
@@ -2296,7 +2371,7 @@ export function buildAssets() {
     b.sideDark = darken(b.side, 0.65);
   }
 
-  const hangings = { sword: swordSprite(), shield: shieldSprite(), chain: chainWallSprite() };
+  const hangings = { sword: swordSprite(), shield: shieldSprite(), chain: chainWallSprite(), fireplace: fireplaceSprite() };
 
   // cobwebs come in two weaves — the second keeps its weaver — and each is
   // built left- and right-anchored, so the renderer can tuck one into either
@@ -2318,5 +2393,5 @@ export function buildAssets() {
     return frames;
   });
 
-  return { walls, wallsDark, enemySprites, items, sparkle, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, candleFlames, boxes, hangings, cobwebs, cracks, portraits, TEX };
+  return { walls, wallsDark, enemySprites, items, sparkle, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, candleFlames, fireFlames, boxes, hangings, cobwebs, cracks, portraits, TEX };
 }
