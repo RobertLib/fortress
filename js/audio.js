@@ -119,35 +119,67 @@ class AudioSys {
     });
 
     // --- dogs ---
-    B("dogBark", 0.34, (t) => {
-      // two rough falling-pitch barks
-      const k = t < 0.16 ? t : t - 0.18;
-      if (k < 0 || k > 0.12) return 0;
-      const f = Math.max(90, 420 - 1800 * k);
-      return (saw(k, f) * 0.55 + noise() * 0.3) * env(k, 0.12, 1.5) * 0.8;
-    });
-    B("dogGrowl", 0.5, (t) => {
-      // low rolling growl, throat-rattle pulsed
-      const rumble = saw(t, 70 + sin(t, 9) * 10) * 0.4;
-      const rattle = 0.6 + 0.4 * Math.sin(2 * Math.PI * 16 * t);
-      return (rumble + noise() * 0.15) * rattle * env(t, 0.5, 1) * 0.7;
-    });
+    // Dog voices are a phase-accumulated glottal pulse train (so pitch bends
+    // stay clean) shaped by fixed vocal-tract formants via ring modulation.
+    B("dogBark", 0.5, (() => {
+      let ph = 0, lt = 0;
+      return (t) => {
+        const dt = t - lt; lt = t;
+        const k = t < 0.24 ? t : t - 0.26; // two barks
+        if (k < 0 || k > 0.15) return 0;
+        // "wo-of": pitch jumps up fast, then droops
+        const f0 = 120 + 330 * Math.sin(Math.PI * Math.min(1, k / 0.13));
+        ph += 2 * Math.PI * f0 * (1 + 0.06 * noise()) * dt;
+        const pulse = Math.pow(0.5 + 0.5 * Math.sin(ph), 3);
+        const voice = pulse * (sin(k, 620) * 0.8 + sin(k, 1250) * 0.45) + Math.sin(ph) * 0.45;
+        const breath = noise() * 0.2 * env(k, 0.05, 2);
+        const a = Math.min(1, k / 0.012) * env(k, 0.15, 1.4);
+        return (voice + breath) * a * 0.8;
+      };
+    })());
+    B("dogGrowl", 0.6, (() => {
+      let ph = 0, lt = 0, f = 68;
+      return (t) => {
+        const dt = t - lt; lt = t;
+        // irregular low pulse rate reads as a throaty rattle
+        f += (66 - f) * 0.002 + noise() * 1.4;
+        ph += 2 * Math.PI * f * dt;
+        const pulse = Math.pow(0.5 + 0.5 * Math.sin(ph), 2);
+        const voice = pulse * (sin(t, 300) * 0.8 + sin(t, 660) * 0.3) + Math.sin(ph) * 0.4;
+        const breath = noise() * (0.1 + 0.25 * pulse);
+        const e = Math.sin(Math.PI * Math.min(1, t / 0.6));
+        return (voice + breath) * e * 0.55;
+      };
+    })());
     B("dogBite", 0.13, (t) => {
       // jaws snapping shut
       const snap = noise() * env(t, 0.03, 2) * 0.7;
       const clamp = sin(t, 160 * (1 - t * 2)) * env(t, 0.11, 2) * 0.6;
       return (snap + clamp) * 0.85;
     });
-    B("dogPain", 0.28, (t) => {
-      // sharp yelp: pitch spikes up, then tumbles
-      const f = t < 0.06 ? 700 + 9000 * t : Math.max(220, 1240 - 2600 * (t - 0.06));
-      return sin(t, f) * env(t, 0.26, 1.5) * 0.5;
-    });
-    B("dogDeath", 0.8, (t) => {
-      // long fading whine with a slow warble
-      const f = 900 - 650 * t + sin(t, 7) * 40;
-      return sin(t, f) * env(t, 0.8, 1.2) * 0.45;
-    });
+    B("dogPain", 0.3, (() => {
+      let ph = 0, lt = 0;
+      return (t) => {
+        const dt = t - lt; lt = t;
+        // sharp "yipe!": shoots up, cracks, tumbles back down
+        const f0 = 480 + 750 * Math.sin(Math.PI * Math.pow(t / 0.3, 0.6));
+        ph += 2 * Math.PI * f0 * dt;
+        const v = Math.sin(ph) * 0.6 + Math.sin(2 * ph) * 0.3 + Math.sin(3 * ph) * 0.12;
+        return v * Math.min(1, t / 0.008) * env(t, 0.3, 1.5) * 0.5;
+      };
+    })());
+    B("dogDeath", 0.9, (() => {
+      let ph = 0, lt = 0;
+      return (t) => {
+        const dt = t - lt; lt = t;
+        const k = t / 0.9;
+        // long falling whine, the tremble widening as it fades
+        const vib = Math.sin(2 * Math.PI * 6.5 * t) * (10 + 60 * k);
+        ph += 2 * Math.PI * Math.max(120, 760 - 420 * k + vib) * dt;
+        const v = Math.sin(ph) * 0.55 + Math.sin(2 * ph) * 0.18 + noise() * 0.06 * (1 - k);
+        return v * Math.min(1, t / 0.03) * env(t, 0.9, 1.3) * 0.5;
+      };
+    })());
 
     // --- pickups ---
     B("pickup", 0.14, (t) => sin(t, 620 + 1800 * t) * env(t, 0.14) * 0.4);
