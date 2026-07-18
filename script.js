@@ -78,6 +78,7 @@ window.addEventListener("keydown", (e) => {
     audio.enabled = !audio.enabled;
     if (game) game.say(audio.enabled ? "SOUND ON" : "SOUND OFF", 1.2);
   }
+  if (e.code === "KeyF") toggleFullscreen();
   if (e.code === "Tab" && game && state === "playing") game.showMap = !game.showMap;
 
   handleStateKey(e.code);
@@ -114,6 +115,15 @@ window.addEventListener("mousemove", (e) => {
 // ------------------------------------------------------------------ menus
 
 const soundLabel = () => `SOUND: ${audio.enabled ? "ON" : "OFF"}`;
+const fullscreenLabel = () => `FULLSCREEN: ${document.fullscreenElement ? "ON" : "OFF"}`;
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen?.();
+  } else {
+    document.documentElement.requestFullscreen?.();
+  }
+}
 
 let resumable = false; // a run was left via the menu and can be picked back up
 
@@ -148,6 +158,13 @@ const MAIN_MENU = [
     },
   },
   {
+    label: fullscreenLabel,
+    action: () => {
+      audio.play("blip");
+      toggleFullscreen();
+    },
+  },
+  {
     label: () => "QUIT GAME",
     action: () => {
       audio.play("blip");
@@ -169,6 +186,13 @@ const PAUSE_MENU = [
     action: () => {
       audio.enabled = !audio.enabled;
       audio.play("blip");
+    },
+  },
+  {
+    label: fullscreenLabel,
+    action: () => {
+      audio.play("blip");
+      toggleFullscreen();
     },
   },
   {
@@ -490,6 +514,18 @@ function drawMenu(items, index, cy, lineH, size) {
   });
 }
 
+// Fit a menu into the vertical span [top, bottom]: full size while it fits,
+// proportionally smaller line height and font once items no longer do.
+function drawMenuFitted(items, index, top, bottom, maxLineH, maxSize) {
+  const lineH = Math.min(maxLineH, Math.floor((bottom - top) / (items.length + 1)));
+  const size = Math.round((maxSize * lineH) / maxLineH);
+  // centre the block in the span; baselines sit under the glyphs, so
+  // offset by the cap height
+  const capH = size * 0.72;
+  const cy = Math.round((top + bottom) / 2 + capH / 2 - ((items.length - 1) * lineH) / 2);
+  drawMenu(items, index, cy, lineH, size);
+}
+
 function drawIntro() {
   ctx.fillStyle = "#140e08";
   ctx.fillRect(0, 0, W, H);
@@ -530,12 +566,8 @@ function drawMainMenu() {
   ctx.fillStyle = "#c9a24a";
   ctx.fillRect(W / 2 - 120, 98, 240, 2);
 
-  // centre the block between the heading rule (~y100) and the hint line
-  // (~y360); baselines sit under the glyphs, so offset by the cap height
-  const items = mainMenuItems();
-  const capH = 24 * 0.72;
-  const cy = Math.round((100 + 360) / 2 + capH / 2 - ((items.length - 1) * 42) / 2);
-  drawMenu(items, mainMenuIndex, cy, 42, 24);
+  // the block lives between the heading rule (~y100) and the hint line (~y360)
+  drawMenuFitted(mainMenuItems(), mainMenuIndex, 100, 360, 42, 24);
 
   text("ARROWS — SELECT      ENTER — CONFIRM      ESC — BACK", W / 2, 370, 10, "#786850");
 }
@@ -554,6 +586,7 @@ function drawControls() {
     ["E / SPACE", "open doors, pull levers, use the gate"],
     ["1 / 2 / 3", "dagger, crossbow, repeater"],
     ["SHIFT / TAB / M", "run / map / sound"],
+    ["F", "fullscreen"],
     ["ESC", "pause menu"],
   ];
   controls.forEach(([k, v], i) => {
@@ -589,7 +622,7 @@ function drawPauseOverlay() {
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.fillRect(0, 0, W, VIEW_H);
   titleText("PAUSED", W / 2, 110, 34, "#e9c93c");
-  drawMenu(PAUSE_MENU, pauseMenuIndex, 165, 28, 17);
+  drawMenuFitted(PAUSE_MENU, pauseMenuIndex, 125, VIEW_H - 10, 28, 17);
 }
 
 function drawDeathFade() {
