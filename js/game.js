@@ -72,6 +72,9 @@ export class Game {
     this.playerDead = false;
     this.completed = false;
     this.showMap = false;
+
+    // let positional audio muffle sounds that come from behind walls
+    audio.occlusion = (x0, y0, x1, y1) => this.soundOcclusion(x0, y0, x1, y1);
   }
 
   get score() {
@@ -592,6 +595,45 @@ export class Game {
       return false;
     }
     return false;
+  }
+
+  soundOcclusion(x0, y0, x1, y1) {
+    // How many sound-blocking cells sit on the straight line between the
+    // listener and a sound source. Bars let sound through; doors muffle by
+    // how closed they are. Capped — past a couple of walls it's all the same.
+    let cx = Math.floor(x0);
+    let cy = Math.floor(y0);
+    const tx = Math.floor(x1);
+    const ty = Math.floor(y1);
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const stepX = dx > 0 ? 1 : -1;
+    const stepY = dy > 0 ? 1 : -1;
+    const tDeltaX = dx !== 0 ? Math.abs(1 / dx) : Infinity;
+    const tDeltaY = dy !== 0 ? Math.abs(1 / dy) : Infinity;
+    let tMaxX = dx !== 0 ? (dx > 0 ? cx + 1 - x0 : x0 - cx) * tDeltaX : Infinity;
+    let tMaxY = dy !== 0 ? (dy > 0 ? cy + 1 - y0 : y0 - cy) * tDeltaY : Infinity;
+
+    let walls = 0;
+    for (let i = 0; i < 128 && walls < 3; i++) {
+      if (cx === tx && cy === ty) break;
+      if (tMaxX < tMaxY) {
+        tMaxX += tDeltaX;
+        cx += stepX;
+      } else {
+        tMaxY += tDeltaY;
+        cy += stepY;
+      }
+      if (cx === tx && cy === ty) break;
+      const cell = this.cellAt(cx, cy);
+      if (cell === "." || cell === "B" || cell === "R") continue;
+      if (cell === "D" || cell === "Z") {
+        walls += 1 - this.doorOpenAmount(cx, cy);
+        continue;
+      }
+      walls++;
+    }
+    return Math.min(3, walls);
   }
 
   // --------------------------------------------------------------- items

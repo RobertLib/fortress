@@ -7,6 +7,8 @@ class AudioSys {
     this.buffers = {};
     this.master = null;
     this.enabled = true;
+    // set by Game: (x0, y0, x1, y1) => number of sound-blocking walls between
+    this.occlusion = null;
   }
 
   // Must be called from a user gesture (browsers block AudioContext otherwise).
@@ -270,7 +272,7 @@ class AudioSys {
     });
   }
 
-  play(name, { volume = 1, rate = 1, pan = 0 } = {}) {
+  play(name, { volume = 1, rate = 1, pan = 0, cutoff = 0 } = {}) {
     if (!this.ctx || !this.enabled) return;
     const buf = this.buffers[name];
     if (!buf) return;
@@ -280,13 +282,21 @@ class AudioSys {
     const gain = this.ctx.createGain();
     gain.gain.value = volume;
     src.connect(gain);
+    let tail = gain;
+    if (cutoff > 0) {
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = cutoff;
+      tail.connect(filter);
+      tail = filter;
+    }
     if (this.ctx.createStereoPanner && pan !== 0) {
       const p = this.ctx.createStereoPanner();
       p.pan.value = Math.max(-1, Math.min(1, pan));
-      gain.connect(p);
+      tail.connect(p);
       p.connect(this.master);
     } else {
-      gain.connect(this.master);
+      tail.connect(this.master);
     }
     src.start();
   }
@@ -297,13 +307,20 @@ class AudioSys {
     const dx = x - listener.x;
     const dy = y - listener.y;
     const dist = Math.hypot(dx, dy);
-    const volume = (opts.volume ?? 1) * Math.min(1, 3.5 / (1 + dist * 0.6));
+    let volume = (opts.volume ?? 1) * Math.min(1, 3.5 / (1 + dist * 0.6));
+    // walls between the source and the listener deaden the sound
+    const walls = this.occlusion ? this.occlusion(listener.x, listener.y, x, y) : 0;
+    let cutoff = 0;
+    if (walls > 0) {
+      volume *= Math.pow(0.35, walls);
+      cutoff = 1100 / walls;
+    }
     if (volume < 0.02) return;
     // project onto the player's right vector for stereo pan
     const rightX = -listener.dirY;
     const rightY = listener.dirX;
     const pan = dist > 0.001 ? ((dx * rightX + dy * rightY) / dist) * 0.7 : 0;
-    this.play(name, { ...opts, volume, pan });
+    this.play(name, { ...opts, volume, pan, cutoff });
   }
 }
 
