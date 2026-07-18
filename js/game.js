@@ -62,6 +62,7 @@ export class Game {
     this.totalSecrets = level.secretCount;
 
     this.damageFlash = 0;
+    this.shake = 0;
     this.pickupFlash = 0;
     this.portalFlash = 0;
     this.message = "";
@@ -120,6 +121,7 @@ export class Game {
 
   decayFx(dt) {
     this.damageFlash = Math.max(0, this.damageFlash - dt * 1.6);
+    this.shake = Math.max(0, this.shake - dt * 3.2);
     this.pickupFlash = Math.max(0, this.pickupFlash - dt * 2.5);
     this.portalFlash = Math.max(0, this.portalFlash - dt * 1.8);
     this.messageTimer = Math.max(0, this.messageTimer - dt);
@@ -362,6 +364,7 @@ export class Game {
     if (this.playerDead || this.completed) return;
     p.health -= dmg;
     this.damageFlash = Math.min(0.75, 0.25 + dmg / 40);
+    this.shake = Math.min(1, 0.45 + dmg / 35);
     if (p.health <= 0) {
       p.health = 0;
       this.playerDead = true;

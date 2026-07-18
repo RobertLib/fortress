@@ -103,6 +103,20 @@ export class Renderer {
     const level = game.level;
     const p = game.player;
 
+    // camera shake: jitter the whole view, slightly overscanned so the
+    // displaced frame never exposes the canvas edges
+    const shake = game.shake;
+    if (shake > 0) {
+      const amp = shake * shake * 7;
+      const dx = (Math.random() * 2 - 1) * amp;
+      const dy = (Math.random() * 2 - 1) * amp;
+      const zoom = 1 + (amp * 2) / VIEW_H;
+      g.save();
+      g.translate(W / 2 + dx, VIEW_H / 2 + dy);
+      g.scale(zoom, zoom);
+      g.translate(-W / 2, -VIEW_H / 2);
+    }
+
     // ceiling and floor sink into darkness at the horizon
     if (!this.gradCache || this.gradCache.level !== level) {
       const ceil = g.createLinearGradient(0, 0, 0, VIEW_H / 2);
@@ -170,6 +184,7 @@ export class Renderer {
     this.renderSprites(game);
     g.drawImage(this.vignette, 0, 0);
     this.renderWeapon(game);
+    if (shake > 0) g.restore();
     this.renderFlashes(game);
   }
 
