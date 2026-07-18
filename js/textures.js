@@ -1913,6 +1913,96 @@ function cobwebSprite(seed, mirror, spider = false) {
   return c;
 }
 
+// A settling crack in the masonry: a dark fissure wandering down the wall
+// face, hairline at both ends, its lit edge catching the torchlight. With
+// `spall` a chunk of the facing has broken away around the fissure, and its
+// rubble lies at the foot of the wall. Transparent everywhere else — the
+// renderer lays it over whatever wall the level put it on.
+function crackSprite(seed, { spall = false } = {}) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const rand = rng(seed);
+
+  // the fissure steps down the face the way settling cracks follow the
+  // joints: near-vertical drops with the odd sideways jog along a course
+  const bottom = 46 + Math.floor(rand() * (TEX - 46));
+  const pts = [];
+  let x = 18 + rand() * 28;
+  const drift = rand() < 0.5 ? -1 : 1;
+  for (let y = 0; y < bottom; y++) {
+    pts.push([Math.floor(x), y]);
+    if (rand() < 0.16 && y > 4 && y < bottom - 6) {
+      const dir = rand() < 0.7 ? drift : -drift;
+      const run = 2 + Math.floor(rand() * 4);
+      for (let i = 0; i < run; i++) {
+        x = Math.max(4, Math.min(TEX - 5, x + dir));
+        pts.push([Math.floor(x), y]);
+      }
+    }
+    x = Math.max(4, Math.min(TEX - 5, x + (rand() - 0.5) * 1.1));
+  }
+
+  const carve = (path, wide) => {
+    for (let i = 0; i < path.length; i++) {
+      const [cx, cy] = path[i];
+      const t = i / Math.max(1, path.length - 1);
+      const hairline = t < 0.1 || t > 0.88;
+      g.fillStyle = `rgba(12,9,6,${hairline ? 0.45 : 0.8})`;
+      g.fillRect(cx, cy, wide && t > 0.3 && t < 0.65 ? 2 : 1, 1);
+      if (!hairline) {
+        g.fillStyle = "rgba(235,225,205,0.15)"; // lit edge
+        g.fillRect(cx - 1, cy, 1, 1);
+      }
+    }
+  };
+  carve(pts, true);
+
+  // a side branch forks off partway down and peters out
+  const [bx0, by0] = pts[8 + Math.floor(rand() * (pts.length / 2))];
+  const dir = rand() < 0.5 ? -1 : 1;
+  const len = 8 + Math.floor(rand() * 8);
+  const path = [];
+  let bx = bx0;
+  let by = by0;
+  for (let i = 0; i < len; i++) {
+    path.push([Math.floor(bx), Math.floor(by)]);
+    bx = Math.max(2, Math.min(TEX - 3, bx + dir * (0.4 + rand() * 0.8)));
+    by += 0.5 + rand() * 0.5;
+  }
+  carve(path, false);
+
+  if (spall) {
+    // the spalled patch: facing knocked away in irregular flakes around the
+    // fissure, rough fill showing inside, a pale broken rim up top
+    const [sx, sy] = pts[18 + Math.floor(rand() * 18)];
+    g.fillStyle = "rgba(14,11,8,0.82)";
+    g.fillRect(sx - 2, sy - 1, 5, 3);
+    g.fillRect(sx - 1 + Math.floor(rand() * 2), sy + 2, 4, 2);
+    g.fillRect(sx - 3, sy + Math.floor(rand() * 2), 2, 2);
+    g.fillStyle = "rgba(66,55,43,0.55)";
+    for (let i = 0; i < 4; i++) {
+      g.fillRect(sx - 2 + Math.floor(rand() * 5), sy + Math.floor(rand() * 3), 2, 1);
+    }
+    g.fillStyle = "rgba(235,225,205,0.2)";
+    g.fillRect(sx - 3, sy - 2, 2, 1);
+    g.fillRect(sx + 1, sy - 3, 3, 1);
+    // what fell lies where it landed: rubble along the skirting
+    const fx = pts[pts.length - 1][0];
+    for (let i = 0; i < 4; i++) {
+      const rx = Math.max(2, Math.min(TEX - 6, fx - 7 + Math.floor(rand() * 14)));
+      const rw = 2 + Math.floor(rand() * 2);
+      const ry = TEX - 3 - Math.floor(rand() * 2);
+      g.fillStyle = i % 2 ? "#514a3f" : "#645c4f";
+      g.fillRect(rx, ry, rw, 2);
+      g.fillStyle = "rgba(255,255,255,0.1)";
+      g.fillRect(rx, ry, rw, 1);
+      g.fillStyle = "rgba(0,0,0,0.4)";
+      g.fillRect(rx, Math.min(TEX - 1, ry + 2), rw, 1);
+    }
+  }
+  return c;
+}
+
 // Framed portraits of the fortress's former masters. Each sitter is painted
 // once per gaze: PORTRAIT_COLS steps sweep the pupils from left to right and
 // the second row drops them toward the floor, so the renderer can always
@@ -2213,6 +2303,9 @@ export function buildAssets() {
   // upper corner of a wall face with the threads running into the masonry
   const cobwebs = [cobwebSprite(507, false), cobwebSprite(507, true), cobwebSprite(931, false, true), cobwebSprite(931, true, true)];
 
+  // settling cracks in the masonry, two of them spalled open with rubble
+  const cracks = [crackSprite(19), crackSprite(83, { spall: true }), crackSprite(147), crackSprite(211, { spall: true })];
+
   // portraits: each sitter painted once per gaze direction; the renderer
   // swaps the frames so the eyes follow the player about the room
   const portraits = PORTRAIT_PALS.map((pal, vi) => {
@@ -2225,5 +2318,5 @@ export function buildAssets() {
     return frames;
   });
 
-  return { walls, wallsDark, enemySprites, items, sparkle, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, candleFlames, boxes, hangings, cobwebs, portraits, TEX };
+  return { walls, wallsDark, enemySprites, items, sparkle, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, candleFlames, boxes, hangings, cobwebs, cracks, portraits, TEX };
 }

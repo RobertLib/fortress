@@ -27,6 +27,7 @@ const HANGING_SPECS = {
   chain: { zBot: 0.22, zTop: 0.92, offset: 0.03 },
   portrait: { zBot: 0.32, zTop: 0.84, offset: 0.03 },
   cobweb: { zBot: 0.55, zTop: 1, offset: 0.02 },
+  crack: { zBot: 0, zTop: 1, offset: 0.02 },
 };
 
 // distance buckets for pre-darkened sprite variants
@@ -566,6 +567,9 @@ export class Renderer {
         fx += tx * side * (0.5 - halfW);
         fy += ty * side * (0.5 - halfW);
         img = this.assets.cobwebs[((hg.seed >>> 1) & 1) * 2 + (side > 0 ? 0 : 1)];
+      }
+      if (hg.kind === "crack") {
+        img = this.assets.cracks[hg.seed % this.assets.cracks.length];
       }
       if (hg.kind === "portrait") {
         // the painted eyes follow the player: the angle the player makes

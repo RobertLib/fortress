@@ -503,6 +503,10 @@ export function parseLevel(text) {
   placeHangings("shield", Math.max(1, Math.min(3, Math.round((w * h) / 200))), "1235");
   placeHangings("sword", Math.max(1, Math.min(3, Math.round((w * h) / 200))), "1235");
   placeHangings("chain", Math.max(1, Math.min(4, Math.round((w * h) / 170))), "1245");
+  // the fortress is old and its masonry is giving way: settling cracks
+  // wander down the plainer stonework, some spalled open with the rubble of
+  // the fallen facing at the skirting. Dressed feature walls keep their faces
+  placeHangings("crack", Math.max(2, Math.min(6, Math.round((w * h) / 110))), "1245");
   // cobwebs gather in the corners no chatelaine has dusted in years — any
   // masonry suits them, and the torch check above steers them into the gloom
   placeHangings("cobweb", Math.max(2, Math.min(7, Math.round((w * h) / 90))), "123456");
