@@ -464,7 +464,9 @@ function px(g, x, y, w, h, color) {
 }
 
 // Medieval man-at-arms billboard. pose: stand | walk1 | walk2 | aim | fire |
-// pain | die1 | die2 | dead. pal.style: kettle | greathelm | plume
+// strike1 | strike2 | pain | die1 | die2 | dead. pal.style: kettle |
+// greathelm | plume. pal.melee picks the close-quarters weapon shown in the
+// strike poses: knife | fist
 function soldierSprite(pal, pose) {
   const c = canvas();
   const g = c.getContext("2d");
@@ -565,6 +567,33 @@ function soldierSprite(pal, pose) {
     if (pose === "fire") {
       px(g, 7, 5.5, 2, 1.5, "#fff6b0"); // loosed bolt
       px(g, 7.5, 4, 1, 1.5, "#ffd23c");
+    }
+  } else if (pose === "strike1" || pose === "strike2") {
+    const hand = pal.style === "greathelm" ? pal.helmet : pal.skin;
+    // left arm stays down, guarding
+    px(g, 4, 6, 1, 4, pal.uniform);
+    px(g, 4, 10, 1, 1, hand);
+    if (pose === "strike1") {
+      // right arm cocked high beside the helmet
+      px(g, 11, 4, 1, 3, pal.uniform);
+      px(g, 11, 3, 1, 1, hand);
+      if (pal.melee === "knife") {
+        px(g, 11, 1, 1, 2, "#c3c9d1"); // blade raised skyward
+        px(g, 11, 0.5, 1, 0.5, "#eef2f6"); // point catching the light
+      } else {
+        px(g, 10.5, 2, 2, 1.5, hand); // clenched fist
+      }
+    } else {
+      // strike2: lunging straight at the viewer
+      px(g, 10, 6, 2, 2, pal.uniform); // shoulder driving forward
+      if (pal.melee === "knife") {
+        px(g, 8.5, 6.5, 2, 2, hand); // knife hand looming close
+        px(g, 6.5, 5.5, 2.5, 2, "#dfe4ea"); // blade flashing head-on
+        px(g, 7, 6, 1, 1, "#ffffff"); // glint
+      } else {
+        px(g, 7.5, 5.5, 3, 3, hand); // fist filling the view
+        px(g, 8, 6, 1.5, 1.5, shadeColor(hand, 0.85)); // knuckles
+      }
     }
   } else {
     px(g, 4 + bx, 6, 1, 4, pal.uniform);
@@ -824,9 +853,9 @@ function mirrorSprite(src) {
   return c;
 }
 
-const PAL_GUARD = { uniform: "#6e5638", dark: "#463621", trim: "#a3823f", skin: "#dba377", helmet: "#8d949c", style: "kettle" };
-const PAL_KNIGHT = { uniform: "#8d959f", dark: "#565e66", trim: "#c9a24a", skin: "#dba377", helmet: "#9aa2ac", style: "greathelm" };
-const PAL_CAPTAIN = { uniform: "#8c2020", dark: "#5a1414", trim: "#c9a24a", skin: "#dba377", helmet: "#8d949c", style: "plume" };
+const PAL_GUARD = { uniform: "#6e5638", dark: "#463621", trim: "#a3823f", skin: "#dba377", helmet: "#8d949c", style: "kettle", melee: "fist" };
+const PAL_KNIGHT = { uniform: "#8d959f", dark: "#565e66", trim: "#c9a24a", skin: "#dba377", helmet: "#9aa2ac", style: "greathelm", melee: "knife" };
+const PAL_CAPTAIN = { uniform: "#8c2020", dark: "#5a1414", trim: "#c9a24a", skin: "#dba377", helmet: "#8d949c", style: "plume", melee: "knife" };
 
 function itemSprite(kind) {
   const c = canvas();
@@ -1920,7 +1949,8 @@ export function buildAssets() {
   const enemySprites = {};
   for (const [type, pal] of [["guard", PAL_GUARD], ["knight", PAL_KNIGHT], ["captain", PAL_CAPTAIN]]) {
     enemySprites[type] = {};
-    for (const p of poses) enemySprites[type][p] = soldierSprite(pal, p);
+    // strike1/strike2 (knife/fist windup + lunge) exist for footmen only
+    for (const p of [...poses, "strike1", "strike2"]) enemySprites[type][p] = soldierSprite(pal, p);
   }
   enemySprites.bat = {};
   for (const p of poses) enemySprites.bat[p] = batSwarmSprite(p);

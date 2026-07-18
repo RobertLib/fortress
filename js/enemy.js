@@ -1,5 +1,7 @@
 // Enemy AI: patrol (or stand guard) -> alert -> chase -> stop & shoot,
 // with pain staggers and a small death animation. Rendered as billboards.
+// A footman caught at arm's length doesn't bother with the crossbow: he
+// pulls a knife (or swings a gauntleted fist) instead.
 // The bat swarm is the odd one out: it flies (drawn head-high, passes
 // through other actors), swoops at the player, bites and veers away.
 // War hounds are melee runners: one leashed to a handler heels to him,
@@ -10,9 +12,9 @@
 import { audio } from "./audio.js";
 
 const TYPES = {
-  guard: { hp: 25, speed: 1.7, range: 8, aimTime: 0.42, cooldown: [0.7, 1.5], dmg: 14, score: 100, drop: 0.6 },
-  knight: { hp: 60, speed: 1.9, range: 9, aimTime: 0.36, cooldown: [0.5, 1.2], dmg: 21, score: 500, drop: 0.8 },
-  captain: { hp: 45, speed: 2.7, range: 9, aimTime: 0.26, cooldown: [0.4, 1.0], dmg: 17, score: 400, drop: 0.5 },
+  guard: { hp: 25, speed: 1.7, range: 8, aimTime: 0.42, cooldown: [0.7, 1.5], dmg: 14, score: 100, drop: 0.6, meleeDmg: 10, meleeWeapon: "fist" },
+  knight: { hp: 60, speed: 1.9, range: 9, aimTime: 0.36, cooldown: [0.5, 1.2], dmg: 21, score: 500, drop: 0.8, meleeDmg: 18, meleeWeapon: "knife" },
+  captain: { hp: 45, speed: 2.7, range: 9, aimTime: 0.26, cooldown: [0.4, 1.0], dmg: 17, score: 400, drop: 0.5, meleeDmg: 14, meleeWeapon: "knife" },
   bat: {
     hp: 16, speed: 3.1, range: 0.8, cooldown: [0.9, 1.6], dmg: 7, score: 150, drop: 0,
     swarm: true, radius: 0.25, scale: 0.6,
@@ -233,6 +235,12 @@ export class Enemy {
           return;
         }
         const los = game.lineOfSight(this.x, this.y, p.x, p.y);
+        // at arm's length the crossbow is useless — go for the knife/fists
+        if (los && dist < 1.2 && this.attackCooldown <= 0 && this.stats.meleeDmg) {
+          this.state = "windup";
+          this.timer = 0.26;
+          return;
+        }
         if (los && dist < this.stats.range && this.attackCooldown <= 0 && dist > 0.7) {
           this.state = "aim";
           this.timer = this.stats.aimTime;
@@ -268,6 +276,27 @@ export class Enemy {
       }
 
       case "fire": {
+        this.timer -= dt;
+        if (this.timer <= 0) {
+          const [a, b] = this.stats.cooldown;
+          this.attackCooldown = a + Math.random() * (b - a);
+          this.state = "chase";
+        }
+        return;
+      }
+
+      case "windup": {
+        // arm rearing back for the stab / swing
+        this.timer -= dt;
+        if (this.timer <= 0) {
+          this.strike(game);
+          this.state = "strike";
+          this.timer = 0.18;
+        }
+        return;
+      }
+
+      case "strike": {
         this.timer -= dt;
         if (this.timer <= 0) {
           const [a, b] = this.stats.cooldown;
@@ -320,6 +349,17 @@ export class Enemy {
     }
   }
 
+  // Point-blank knife stab or bare-knuckle swing (footmen only). The blow
+  // lands only if the player hasn't slipped out of reach during the windup.
+  strike(game) {
+    const p = game.player;
+    audio.playAt(this.stats.meleeWeapon === "knife" ? "knifeSlash" : "punch", this.x, this.y, p, { rate: 0.9 + Math.random() * 0.2 });
+    const dist = Math.hypot(p.x - this.x, p.y - this.y);
+    if (dist < 1.45 && game.lineOfSight(this.x, this.y, p.x, p.y)) {
+      game.hurtPlayer(Math.max(3, Math.round(3 + Math.random() * this.stats.meleeDmg)));
+    }
+  }
+
   // Dog perception: quicker on the uptake than the soldiery, and a hound
   // whose handler joins a fight springs up with him even without a sighting.
   watchForPlayer(game, dt) {
@@ -361,7 +401,7 @@ export class Enemy {
   }
 
   wake(game, silent = false) {
-    if (this.dead || this.state === "chase" || this.state === "aim" || this.state === "fire" || this.state === "swoop" || this.state === "bite") return;
+    if (this.dead || this.state === "chase" || this.state === "aim" || this.state === "fire" || this.state === "swoop" || this.state === "bite" || this.state === "windup" || this.state === "strike") return;
     this.state = "chase";
     this.attackCooldown = 0.35 + Math.random() * 0.4;
     this.lostTimer = 0;
@@ -453,6 +493,10 @@ export class Enemy {
       case "fire":
       case "bite":
         return set.fire;
+      case "windup":
+        return set.strike1;
+      case "strike":
+        return set.strike2;
       default: {
         const f = Math.floor(this.animTime * (this.stats.swarm ? 11 : this.stats.melee ? 9 : 5)) % 2;
         const frame = !this.moving ? "stand" : f ? "walk1" : "walk2";

@@ -94,6 +94,19 @@ class AudioSys {
       const f = t < 0.14 ? 470 : 350;
       return (sqr(t, f) * 0.5 + noise() * 0.12) * env(t % 0.15, 0.14, 1.5) * 0.55;
     });
+    B("knifeSlash", 0.18, (t) => {
+      // enemy blade at close quarters: airy sweep ending in a sharp nick
+      const sweep = Math.sin(Math.PI * Math.min(1, t / 0.12));
+      const whoosh = noise() * sweep * sweep * 0.4;
+      const nick = t > 0.11 ? sin(t, 1400 * (1 - (t - 0.11) * 4)) * env(t - 0.11, 0.06, 2) * 0.5 : 0;
+      return whoosh + nick;
+    });
+    B("punch", 0.14, (t) => {
+      // dull bare-knuckle body blow
+      const thud = sin(t, 95 * (1 - t * 2)) * env(t, 0.12, 2) * 0.8;
+      const smack = noise() * env(t, 0.03, 2) * 0.45;
+      return (thud + smack) * 0.9;
+    });
     B("enemyPain", 0.18, (t) => sqr(t, 420 - 700 * t) * env(t, 0.18) * 0.35);
     B("enemyDeath", 0.6, (t) => {
       const f = 380 * Math.pow(0.2, t / 0.6) + 60;
