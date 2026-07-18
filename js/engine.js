@@ -26,6 +26,7 @@ const HANGING_SPECS = {
   shield: { zBot: 0.35, zTop: 0.85, offset: 0.03 },
   chain: { zBot: 0.22, zTop: 0.92, offset: 0.03 },
   portrait: { zBot: 0.32, zTop: 0.84, offset: 0.03 },
+  cobweb: { zBot: 0.55, zTop: 1, offset: 0.02 },
 };
 
 // distance buckets for pre-darkened sprite variants
@@ -551,12 +552,21 @@ export class Renderer {
     for (const hg of game.level.hangings) {
       const spec = HANGING_SPECS[hg.kind];
       const halfW = (spec.zTop - spec.zBot) / 2; // square quad, square texture
-      const fx = hg.x + 0.5 + hg.dx * (0.5 + spec.offset);
-      const fy = hg.y + 0.5 + hg.dy * (0.5 + spec.offset);
+      let fx = hg.x + 0.5 + hg.dx * (0.5 + spec.offset);
+      let fy = hg.y + 0.5 + hg.dy * (0.5 + spec.offset);
       if ((fx - p.x) * hg.dx + (fy - p.y) * hg.dy >= 0) continue; // backface
       const tx = -hg.dy;
       const ty = hg.dx;
       let img = this.assets.hangings[hg.kind];
+      if (hg.kind === "cobweb") {
+        // tucked into one upper corner of the face — the seed picks which —
+        // with the matching left- or right-anchored weave, so the threads
+        // run into the masonry the quad edge touches
+        const side = hg.seed & 1 ? 1 : -1;
+        fx += tx * side * (0.5 - halfW);
+        fy += ty * side * (0.5 - halfW);
+        img = this.assets.cobwebs[((hg.seed >>> 1) & 1) * 2 + (side > 0 ? 0 : 1)];
+      }
       if (hg.kind === "portrait") {
         // the painted eyes follow the player: the angle the player makes
         // with the painting's normal picks a gaze column (texture u runs

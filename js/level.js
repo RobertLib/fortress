@@ -25,6 +25,8 @@
 //     enough to hold its basin.
 //     Iron chains are draped on the masonry and hung from the ceiling in
 //     the gloomier corners, purely for atmosphere.
+//     Cobwebs gather in the upper corners of walls the torchlight barely
+//     reaches — some still keep their spider.
 //     Portraits of the fortress's old masters hang on the cleaner walls;
 //     their painted eyes follow the player through the room.
 //     Niches are carved into quiet stretches of wall — the masonry recedes
@@ -480,6 +482,9 @@ export function parseLevel(text) {
   placeHangings("shield", Math.max(1, Math.min(3, Math.round((w * h) / 200))), "1235");
   placeHangings("sword", Math.max(1, Math.min(3, Math.round((w * h) / 200))), "1235");
   placeHangings("chain", Math.max(1, Math.min(4, Math.round((w * h) / 170))), "1245");
+  // cobwebs gather in the corners no chatelaine has dusted in years — any
+  // masonry suits them, and the torch check above steers them into the gloom
+  placeHangings("cobweb", Math.max(2, Math.min(7, Math.round((w * h) / 90))), "123456");
   // consecutive seeds walk the sitters round-robin, so no floor hangs the
   // same face twice before all of them have had their place
   let sitter = hangings.find((hh) => hh.kind === "portrait")?.seed ?? 0;

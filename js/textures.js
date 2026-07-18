@@ -1734,6 +1734,81 @@ function chainCeilingSprite() {
   return c;
 }
 
+// Cobwebs for the corners no chatelaine has dusted in years: anchor threads
+// fan out of the top corner of the wall face, sagging cross-strands ring
+// them, and a torn strand drifts off the rim. Drawn as quantized 1px dots so
+// the threads stay crisp pixel-art like everything else; one weave keeps its
+// weaver dangling on a dropline.
+function cobwebSprite(seed, mirror, spider = false) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  if (mirror) {
+    g.translate(TEX, 0);
+    g.scale(-1, 1);
+  }
+  const rand = rng(seed);
+  g.fillStyle = "#d8d3c6";
+  const dot = (x, y, a) => {
+    g.globalAlpha = a;
+    g.fillRect(Math.floor(x), Math.floor(y), 1, 1);
+  };
+  const line = (x0, y0, x1, y1, a) => {
+    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0))));
+    for (let i = 0; i <= steps; i++) dot(x0 + ((x1 - x0) * i) / steps, y0 + ((y1 - y0) * i) / steps, a);
+  };
+  // anchor threads fan out of the top corner
+  const spokes = [];
+  const n = 5 + Math.floor(rand() * 2);
+  for (let i = 0; i < n; i++) {
+    const a = ((i + 0.5 + (rand() - 0.5) * 0.35) / n) * (Math.PI / 2);
+    const len = 30 + rand() * 20;
+    spokes.push({ a, len });
+    line(0, 0, Math.cos(a) * len, Math.sin(a) * len, 0.5);
+  }
+  // cross-strands between neighbouring spokes, sagging toward the corner
+  for (let r = 9; r <= 42; r += 7 + rand() * 5) {
+    for (let i = 0; i + 1 < spokes.length; i++) {
+      const s0 = spokes[i];
+      const s1 = spokes[i + 1];
+      if (r > s0.len || r > s1.len) continue;
+      const am = (s0.a + s1.a) / 2;
+      const cx = Math.cos(am) * r * 0.82;
+      const cy = Math.sin(am) * r * 0.82;
+      let lx = Math.cos(s0.a) * r;
+      let ly = Math.sin(s0.a) * r;
+      for (let t = 1; t <= 6; t++) {
+        const tt = t / 6;
+        const mt = 1 - tt;
+        const qx = mt * mt * Math.cos(s0.a) * r + 2 * mt * tt * cx + tt * tt * Math.cos(s1.a) * r;
+        const qy = mt * mt * Math.sin(s0.a) * r + 2 * mt * tt * cy + tt * tt * Math.sin(s1.a) * r;
+        line(lx, ly, qx, qy, 0.38);
+        lx = qx;
+        ly = qy;
+      }
+    }
+  }
+  // a torn strand dangles off the outer rim
+  const torn = spokes[spokes.length - 2];
+  const ex = Math.cos(torn.a) * torn.len;
+  const ey = Math.sin(torn.a) * torn.len;
+  line(ex, ey, ex + 3 + rand() * 3, ey + 8 + rand() * 6, 0.3);
+  if (spider) {
+    // the weaver herself, low on a dropline of her own
+    const sx = Math.floor(11 + rand() * 6);
+    const sy = Math.floor(30 + rand() * 8);
+    line(sx, 6, sx, sy, 0.35);
+    g.globalAlpha = 1;
+    g.fillStyle = "#241f18";
+    g.fillRect(sx - 1, sy, 2, 2); // body
+    g.fillRect(sx - 3, sy, 1, 1); // legs
+    g.fillRect(sx - 2, sy - 1, 1, 1);
+    g.fillRect(sx + 2, sy, 1, 1);
+    g.fillRect(sx + 1, sy - 1, 1, 1);
+  }
+  g.globalAlpha = 1;
+  return c;
+}
+
 // Framed portraits of the fortress's former masters. Each sitter is painted
 // once per gaze: PORTRAIT_COLS steps sweep the pupils from left to right and
 // the second row drops them toward the floor, so the renderer can always
@@ -2021,6 +2096,11 @@ export function buildAssets() {
 
   const hangings = { sword: swordSprite(), shield: shieldSprite(), chain: chainWallSprite() };
 
+  // cobwebs come in two weaves — the second keeps its weaver — and each is
+  // built left- and right-anchored, so the renderer can tuck one into either
+  // upper corner of a wall face with the threads running into the masonry
+  const cobwebs = [cobwebSprite(507, false), cobwebSprite(507, true), cobwebSprite(931, false, true), cobwebSprite(931, true, true)];
+
   // portraits: each sitter painted once per gaze direction; the renderer
   // swaps the frames so the eyes follow the player about the room
   const portraits = PORTRAIT_PALS.map((pal, vi) => {
@@ -2033,5 +2113,5 @@ export function buildAssets() {
     return frames;
   });
 
-  return { walls, wallsDark, enemySprites, items, sparkle, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, boxes, hangings, portraits, TEX };
+  return { walls, wallsDark, enemySprites, items, sparkle, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, boxes, hangings, cobwebs, portraits, TEX };
 }
