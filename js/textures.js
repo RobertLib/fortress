@@ -887,6 +887,20 @@ function itemSprite(kind) {
   return c;
 }
 
+// A four-pointed glint the renderer flashes over a key every few seconds,
+// so a distant key catches the eye through the murk.
+function sparkleSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  px(g, 7.6, 3, 0.8, 10, "rgba(255,214,92,0.5)"); // faint long rays
+  px(g, 3, 7.6, 10, 0.8, "rgba(255,214,92,0.5)");
+  px(g, 7.2, 5.5, 1.6, 5, "#ffd75c"); // bright short rays
+  px(g, 5.5, 7.2, 5, 1.6, "#ffd75c");
+  px(g, 6.9, 6.9, 2.2, 2.2, "#ffefad"); // hot core
+  px(g, 7.4, 7.4, 1.2, 1.2, "#ffffff");
+  return c;
+}
+
 // Trap paraphernalia: the floor plate (armed / pressed flat) and the arrow
 // that flies out of the slit, drawn at chest height. The arrow comes in four
 // views picked by its flight direction relative to the camera: side-on
@@ -1803,6 +1817,7 @@ export function buildAssets() {
     items[k] = itemSprite(k);
   }
   items.boltsDrop = items.bolts;
+  const sparkle = sparkleSprite();
 
   const trapSprites = {
     plate: trapSprite("plate"),
@@ -1855,5 +1870,5 @@ export function buildAssets() {
 
   const hangings = { sword: swordSprite(), shield: shieldSprite(), chain: chainWallSprite() };
 
-  return { walls, wallsDark, enemySprites, items, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, boxes, hangings, TEX };
+  return { walls, wallsDark, enemySprites, items, sparkle, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, boxes, hangings, TEX };
 }

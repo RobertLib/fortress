@@ -44,6 +44,24 @@ function torchLight(level, x, y, time) {
   return light;
 }
 
+// Uncollected keys shed a faint golden shimmer on the nearby masonry — a
+// quiet hint that spills around corners and through open doors. Slower and
+// dimmer than the torches: a glow to notice, not a beacon. Each key breathes
+// on its own phase, derived from where it lies.
+const keyPulse = (time, phase) => 0.72 + Math.sin(time * 2.6 + phase) * 0.28;
+const keyPhase = (it) => it.x * 5.1 + it.y * 7.7;
+
+function keyLight(game, x, y) {
+  let light = 0;
+  for (const it of game.items) {
+    if (it.kind !== "key") continue;
+    const dist = Math.hypot(it.x - x, it.y - y);
+    if (dist >= 2.75) continue;
+    light = Math.max(light, (1 - dist / 2.75) * keyPulse(game.time, keyPhase(it)));
+  }
+  return light;
+}
+
 export class Renderer {
   constructor(canvas, assets) {
     this.ctx = canvas.getContext("2d");
@@ -125,7 +143,12 @@ export class Renderer {
         g.fillStyle = `rgba(255,132,32,${Math.min(0.16, light * 0.14)})`;
         g.fillRect(x, drawStart, 1, lineHeight);
       }
-      const fog = Math.max(0, fogAmount(hit.dist) - light * 0.42);
+      const glow = keyLight(game, hitX, hitY);
+      if (glow > 0.02) {
+        g.fillStyle = `rgba(255,214,92,${Math.min(0.1, glow * 0.1)})`;
+        g.fillRect(x, drawStart, 1, lineHeight);
+      }
+      const fog = Math.max(0, fogAmount(hit.dist) - light * 0.42 - glow * 0.3);
       if (fog > 0.02) {
         g.fillStyle = `rgba(${FOG},${fog})`;
         g.fillRect(x, drawStart, 1, lineHeight);
@@ -389,7 +412,12 @@ export class Renderer {
         g.fillStyle = `rgba(255,132,32,${Math.min(0.16, light * 0.14)})`;
         g.fillRect(x, top, 1, colH);
       }
-      const fog = Math.max(0, fogAmount(dist) - light * 0.42);
+      const glow = keyLight(game, hx, hy);
+      if (glow > 0.02) {
+        g.fillStyle = `rgba(255,214,92,${Math.min(0.1, glow * 0.1)})`;
+        g.fillRect(x, top, 1, colH);
+      }
+      const fog = Math.max(0, fogAmount(dist) - light * 0.42 - glow * 0.3);
       if (fog > 0.02) {
         g.fillStyle = `rgba(${FOG},${fog})`;
         g.fillRect(x, top, 1, colH);
@@ -484,7 +512,12 @@ export class Renderer {
         g.fillStyle = `rgba(255,132,32,${Math.min(0.16, light * 0.14)})`;
         g.fillRect(x, yTop, 1, yBot - yTop);
       }
-      const fog = Math.max(0, fogAmount(sMid) - light * 0.42);
+      const glow = keyLight(game, hx, hy);
+      if (glow > 0.02) {
+        g.fillStyle = `rgba(255,214,92,${Math.min(0.1, glow * 0.1)})`;
+        g.fillRect(x, yTop, 1, yBot - yTop);
+      }
+      const fog = Math.max(0, fogAmount(sMid) - light * 0.42 - glow * 0.3);
       if (fog > 0.02) {
         g.fillStyle = `rgba(${FOG},${fog})`;
         g.fillRect(x, yTop, 1, yBot - yTop);
@@ -576,6 +609,24 @@ export class Renderer {
     for (const it of game.items) {
       const scale = it.kind === "key" ? 0.55 : 0.45;
       sprites.push({ x: it.x, y: it.y, img: this.assets.items[it.kind], scale });
+      if (it.kind === "key") {
+        // every few seconds the key throws a brief glint — fullbright, so it
+        // still reads at the far end of a foggy corridor; each key twinkles
+        // on its own schedule
+        const cycle = ((game.time * 0.38 + keyPhase(it) * 0.11) % 1 + 1) % 1;
+        if (cycle < 0.16) {
+          const a = Math.sin((cycle / 0.16) * Math.PI);
+          sprites.push({
+            x: it.x,
+            y: it.y,
+            img: this.assets.sparkle,
+            scale: 0.34 * (0.55 + 0.45 * a),
+            zCenter: 0.34, // over the key's bow
+            fullbright: true,
+            alpha: a,
+          });
+        }
+      }
     }
     for (const t of game.traps) {
       const img = t.state === "armed" ? this.assets.trapSprites.plate : this.assets.trapSprites.pressed;
@@ -663,7 +714,9 @@ export class Renderer {
         if (!visible && runStart >= 0) {
           const texX0 = ((runStart - startX) / sprW) * 64;
           const texX1 = ((x - startX) / sprW) * 64;
+          if (s.alpha != null) g.globalAlpha = s.alpha;
           g.drawImage(img, texX0, 0, Math.max(0.01, texX1 - texX0), 64, runStart, top, x - runStart, sprH);
+          if (s.alpha != null) g.globalAlpha = 1;
           this.renderTransparentWalls(runStart, x - 1, transformY);
           runStart = -1;
         }
@@ -698,6 +751,30 @@ export class Renderer {
       grad.addColorStop(0, `rgba(255,174,55,${0.2 * flicker})`);
       grad.addColorStop(0.28, `rgba(255,112,22,${0.1 * flicker})`);
       grad.addColorStop(1, "rgba(255,80,0,0)");
+      g.fillStyle = grad;
+      g.fillRect(screenX - radius, screenY - radius, radius * 2, radius * 2);
+    }
+    // keys breathe a soft golden halo in the same pass, hugging the floor
+    // where the key lies
+    for (const it of game.items) {
+      if (it.kind !== "key") continue;
+      const sx = it.x - p.x;
+      const sy = it.y - p.y;
+      const transformX = invDet * (p.dirY * sx - p.dirX * sy);
+      const transformY = invDet * (-p.planeY * sx + p.planeX * sy);
+      if (transformY <= 0.08) continue;
+      const screenX = (W / 2) * (1 + transformX / transformY);
+      if (screenX < -120 || screenX > W + 120) continue;
+      const zi = Math.max(0, Math.min(W - 1, Math.round(screenX)));
+      if (transformY > this.zbuffer[zi] + 0.15) continue;
+      const fullH = VIEW_H / transformY;
+      const screenY = VIEW_H / 2 + fullH * (0.5 - 0.3);
+      const radius = Math.max(10, Math.min(95, fullH * 0.42));
+      const pulse = keyPulse(game.time, keyPhase(it));
+      const grad = g.createRadialGradient(screenX, screenY, 0, screenX, screenY, radius);
+      grad.addColorStop(0, `rgba(255,224,120,${0.13 * pulse})`);
+      grad.addColorStop(0.35, `rgba(255,190,70,${0.06 * pulse})`);
+      grad.addColorStop(1, "rgba(255,170,40,0)");
       g.fillStyle = grad;
       g.fillRect(screenX - radius, screenY - radius, radius * 2, radius * 2);
     }
