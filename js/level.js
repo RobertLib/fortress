@@ -30,7 +30,10 @@
 //     Portraits of the fortress's old masters hang on the cleaner walls;
 //     their painted eyes follow the player through the room.
 //     Niches are carved into quiet stretches of wall — the masonry recedes
-//     to half depth and keeps a stone figure or an old urn on display.
+//     to half depth and keeps a stone figure, an old urn or a cluster of
+//     votive candles on display.
+//     Standing candelabra light the stretches the torches never reach,
+//     their flames flickering with a soft glow of their own.
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
@@ -451,6 +454,24 @@ export function parseLevel(text) {
     armors++;
   }
 
+  // Standing candelabra keep the stretches the torches never reach — the
+  // wide berth demanded of torches below steers them into the gloom, where
+  // their small flames actually read. A sliver of collision keeps the player
+  // from walking through burning candles without ever pinching a corridor.
+  const candelabraLimit = Math.max(1, Math.min(4, Math.round((w * h) / 200)));
+  let candelabras = 0;
+  for (const c of boxCandidates) {
+    if (candelabras >= candelabraLimit) break;
+    if (c.used) continue;
+    const cx = c.x + 0.5 + c.dx * 0.68;
+    const cy = c.y + 0.5 + c.dy * 0.68;
+    if (torches.some((t) => (t.x - cx) ** 2 + (t.y - cy) ** 2 < 4)) continue;
+    if (decorations.some((dd) => (dd.x - cx) ** 2 + (dd.y - cy) ** 2 < 2.56)) continue;
+    c.used = true;
+    decorations.push({ x: cx, y: cy, kind: "candelabra", radius: 0.14 });
+    candelabras++;
+  }
+
   // Crossed swords and shields hang flat on the masonry.
   const hangings = [];
   const placeHangings = (kind, limit, backing) => {
@@ -539,7 +560,7 @@ export function parseLevel(text) {
     decorations.push({
       x: c.x + 0.5 + c.dx * 0.25, // in the recess, in front of the sunken face
       y: c.y + 0.5 + c.dy * 0.25,
-      kind: (c.hash >>> 4) & 1 ? "urn" : "statue",
+      kind: ["statue", "urn", "candles"][(c.hash >>> 4) % 3],
       radius: 0,
     });
   }

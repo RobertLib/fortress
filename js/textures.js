@@ -1660,6 +1660,110 @@ function urnSprite() {
   return c;
 }
 
+// Candles for the corners the torches never reach. The stands are drawn
+// without their flames: the renderer lays a fullbright flame sprite (built in
+// the same 16-unit grid, so it registers pixel-perfect at any scale) over the
+// shaded stand, and the little fires keep glowing through the distance fog
+// the way the key sparkle does.
+
+// wrought-iron standing candelabrum: tripod foot, turned stem, a cross arm
+// carrying two sconces and a third candle riding the stem top
+function candelabraSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const iron = "#34373a";
+  const lit = "#6a6f75";
+  const dark = "#1d1f21";
+  const wax = "#e8e0c8";
+  const waxLit = "#f7f1dd";
+  const waxDark = "#b8ae92";
+  // tripod feet splaying from the stem
+  px(g, 5.4, 15.2, 5.2, 0.8, dark);
+  px(g, 6.2, 14.3, 3.6, 1, iron);
+  px(g, 6.2, 14.3, 3.6, 0.3, lit);
+  // stem with a turned knop at the waist
+  px(g, 7.6, 4.7, 0.8, 9.8, iron);
+  px(g, 7.6, 4.7, 0.3, 9.8, lit);
+  px(g, 7.1, 10.2, 1.8, 1, iron);
+  px(g, 7.1, 10.2, 1.8, 0.3, lit);
+  // cross arm and the risers up to the outer sconces
+  px(g, 4.1, 7, 7.8, 0.7, iron);
+  px(g, 4.1, 7, 7.8, 0.25, lit);
+  px(g, 4.65, 6, 0.5, 1, iron);
+  px(g, 10.85, 6, 0.5, 1, iron);
+  // drip pans, each catching a rim of light
+  px(g, 4, 5.5, 1.8, 0.6, iron);
+  px(g, 4, 5.5, 1.8, 0.22, lit);
+  px(g, 10.4, 5.5, 1.8, 0.6, iron);
+  px(g, 10.4, 5.5, 1.8, 0.22, lit);
+  px(g, 7.1, 4.2, 1.8, 0.6, iron);
+  px(g, 7.1, 4.2, 1.8, 0.22, lit);
+  // candles, burnt to different heights, wax running over the pans
+  px(g, 4.45, 3.6, 0.9, 1.9, wax);
+  px(g, 4.45, 3.6, 0.3, 1.9, waxLit);
+  px(g, 5.05, 4, 0.3, 1.5, waxDark);
+  px(g, 4.25, 4.9, 0.35, 1, wax);
+  px(g, 7.55, 2.3, 0.9, 1.9, wax);
+  px(g, 7.55, 2.3, 0.3, 1.9, waxLit);
+  px(g, 8.15, 2.7, 0.3, 1.5, waxDark);
+  px(g, 10.85, 3.9, 0.9, 1.6, wax);
+  px(g, 10.85, 3.9, 0.3, 1.6, waxLit);
+  px(g, 11.45, 4.3, 0.3, 1.2, waxDark);
+  px(g, 11.7, 5, 0.35, 0.9, wax);
+  return c;
+}
+
+// where each candelabrum flame sits, in the sprite's 16-unit grid
+const CANDELABRA_FLAMES = [[4.9, 3.6], [8, 2.3], [11.3, 3.9]];
+
+// a cluster of half-melted votive candles on a stone slab, for the niches
+function candleClusterSprite() {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const wax = "#e8e0c8";
+  const waxLit = "#f7f1dd";
+  const waxDark = "#b8ae92";
+  // stone slab like the urn's plinth
+  px(g, 3.8, 13.8, 8.4, 0.8, "#8a857c");
+  px(g, 4.2, 14.6, 7.6, 1, "#5f5b53");
+  // stubs of different heights, each with a lit edge and a shaded side
+  const stubs = [
+    [4.9, 10.6, 1.3],
+    [6.6, 9.4, 1.5],
+    [8.5, 11.2, 1.2],
+    [10.1, 10, 1.4],
+  ];
+  for (const [x, top, w] of stubs) {
+    px(g, x, top, w, 13.8 - top, wax);
+    px(g, x, top, 0.35, 13.8 - top, waxLit);
+    px(g, x + w - 0.3, top + 0.3, 0.3, 13.5 - top, waxDark);
+    px(g, x - 0.15, top + 0.4, 0.35, 1.1, wax); // wax run down the side
+  }
+  // pooled wax spilling over the slab edge
+  px(g, 5.6, 13.5, 4.6, 0.4, wax);
+  px(g, 7.2, 14.6, 0.5, 0.8, waxDark);
+  return c;
+}
+
+const CANDLE_CLUSTER_FLAMES = [[5.55, 10.6], [7.35, 9.4], [9.1, 11.2], [10.8, 10]];
+
+// the flames alone, one canvas per animation frame; neighbouring candles
+// flicker out of step so the group never pulses in unison
+function candleFlamesSprite(frame, spots) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  for (let i = 0; i < spots.length; i++) {
+    const [x, y] = spots[i];
+    const f = (frame + i) & 3;
+    const sway = [-0.1, 0.1, 0.15, -0.05][f];
+    const tip = [0.15, -0.25, 0, -0.1][f];
+    px(g, x - 0.35 + sway, y - 1.05 + tip, 0.7, 1.05 - tip, "#ff9f16");
+    px(g, x - 0.2 + sway, y - 0.7, 0.4, 0.7, "#ffe36a");
+    px(g, x - 0.15 + sway * 0.5, y - 0.35, 0.3, 0.35, "#fff6b0");
+  }
+  return c;
+}
+
 // Iron chains for the gloomier corners: a pair hung on the masonry ending
 // in a shackle and a ring, and a chain bolted to the ceiling with a heavy
 // hook. Links alternate face-on and edge-on; the face-on holes are cleared
@@ -2081,6 +2185,14 @@ export function buildAssets() {
     chains: chainCeilingSprite(),
     statue: statueSprite(),
     urn: urnSprite(),
+    candelabra: candelabraSprite(),
+    candles: candleClusterSprite(),
+  };
+
+  // flame overlays for the candle stands, keyed by the decoration they crown
+  const candleFlames = {
+    candelabra: [0, 1, 2, 3].map((f) => candleFlamesSprite(f, CANDELABRA_FLAMES)),
+    candles: [0, 1, 2, 3].map((f) => candleFlamesSprite(f, CANDLE_CLUSTER_FLAMES)),
   };
 
   // wall-box furniture; faces get the same orientation shading as walls
@@ -2113,5 +2225,5 @@ export function buildAssets() {
     return frames;
   });
 
-  return { walls, wallsDark, enemySprites, items, sparkle, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, boxes, hangings, cobwebs, portraits, TEX };
+  return { walls, wallsDark, enemySprites, items, sparkle, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, candleFlames, boxes, hangings, cobwebs, portraits, TEX };
 }

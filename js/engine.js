@@ -696,6 +696,17 @@ export class Renderer {
         sprites.push({ x: d.x, y: d.y, img: this.assets.decor.chains, scale: 0.55, zCenter: 1 - 0.55 / 2 });
         continue;
       }
+      if (d.kind === "candelabra" || d.kind === "candles") {
+        // shaded stand first, then its flames as a fullbright overlay drawn
+        // in the same sprite grid and scale, so they register exactly and
+        // keep glowing through the distance fog; each stand flickers on its
+        // own schedule
+        const scale = d.kind === "candelabra" ? 0.66 : 0.5;
+        sprites.push({ x: d.x, y: d.y, img: this.assets.decor[d.kind], scale });
+        const frame = (Math.floor(game.time * 8) + (Math.floor(d.x * 31 + d.y * 17) & 3)) & 3;
+        sprites.push({ x: d.x, y: d.y, img: this.assets.candleFlames[d.kind][frame], scale, fullbright: true });
+        continue;
+      }
       if (!this.assets.decor[d.kind]) continue; // wall boxes are drawn as quads, not billboards
       const scale =
         d.kind === "table" ? 0.7 : d.kind === "armor" ? 0.78 : d.kind === "statue" ? 0.72 : d.kind === "urn" ? 0.5 : 0.64;
@@ -791,6 +802,32 @@ export class Renderer {
       grad.addColorStop(0, `rgba(255,174,55,${0.2 * flicker})`);
       grad.addColorStop(0.28, `rgba(255,112,22,${0.1 * flicker})`);
       grad.addColorStop(1, "rgba(255,80,0,0)");
+      g.fillStyle = grad;
+      g.fillRect(screenX - radius, screenY - radius, radius * 2, radius * 2);
+    }
+    // candle flames breathe a smaller, calmer halo than the torches — a
+    // glow to notice across a dark hall, not a light to read by
+    for (const d of game.level.decorations) {
+      if (d.kind !== "candelabra" && d.kind !== "candles") continue;
+      const sx = d.x - p.x;
+      const sy = d.y - p.y;
+      const transformX = invDet * (p.dirY * sx - p.dirX * sy);
+      const transformY = invDet * (-p.planeY * sx + p.planeX * sy);
+      if (transformY <= 0.08) continue;
+      const screenX = (W / 2) * (1 + transformX / transformY);
+      if (screenX < -120 || screenX > W + 120) continue;
+      const zi = Math.max(0, Math.min(W - 1, Math.round(screenX)));
+      if (transformY > this.zbuffer[zi] + 0.15) continue;
+      const fullH = VIEW_H / transformY;
+      // centred on the flames: shoulder height for the candelabrum, down by
+      // the slab for the niche cluster
+      const screenY = VIEW_H / 2 + fullH * (0.5 - (d.kind === "candelabra" ? 0.52 : 0.18));
+      const radius = Math.max(10, Math.min(90, fullH * (d.kind === "candelabra" ? 0.38 : 0.28)));
+      const flicker = 0.8 + 0.2 * Math.sin(game.time * 5.3 + d.x * 31 + d.y * 17);
+      const grad = g.createRadialGradient(screenX, screenY, 0, screenX, screenY, radius);
+      grad.addColorStop(0, `rgba(255,196,96,${0.13 * flicker})`);
+      grad.addColorStop(0.35, `rgba(255,140,40,${0.06 * flicker})`);
+      grad.addColorStop(1, "rgba(255,90,10,0)");
       g.fillStyle = grad;
       g.fillRect(screenX - radius, screenY - radius, radius * 2, radius * 2);
     }
