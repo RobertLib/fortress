@@ -25,6 +25,8 @@
 //     enough to hold its basin.
 //     Iron chains are draped on the masonry and hung from the ceiling in
 //     the gloomier corners, purely for atmosphere.
+//     Portraits of the fortress's old masters hang on the cleaner walls;
+//     their painted eyes follow the player through the room.
 //     Niches are carved into quiet stretches of wall — the masonry recedes
 //     to half depth and keeps a stone figure or an old urn on display.
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
@@ -464,15 +466,24 @@ export function parseLevel(text) {
       });
       if (near) continue;
       c.used = true;
-      hangings.push({ x: c.x, y: c.y, dx: c.dx, dy: c.dy, kind });
+      hangings.push({ x: c.x, y: c.y, dx: c.dx, dy: c.dy, kind, seed: c.hash });
       placed++;
     }
   };
+  // portraits of the fortress's old masters claim the cleanest masonry
+  // first — never the mossy or dungeon walls, where oils would rot. Their
+  // painted eyes follow whoever passes; the renderer sees to that. The hash
+  // carried in `seed` picks which of the sitters hangs where.
+  placeHangings("portrait", Math.max(1, Math.min(3, Math.round((w * h) / 210))), "135");
   // trophies suit dressed stone; chains also hang from the rougher dungeon
   // masonry, where a shield would look out of place
   placeHangings("shield", Math.max(1, Math.min(3, Math.round((w * h) / 200))), "1235");
   placeHangings("sword", Math.max(1, Math.min(3, Math.round((w * h) / 200))), "1235");
   placeHangings("chain", Math.max(1, Math.min(4, Math.round((w * h) / 170))), "1245");
+  // consecutive seeds walk the sitters round-robin, so no floor hangs the
+  // same face twice before all of them have had their place
+  let sitter = hangings.find((hh) => hh.kind === "portrait")?.seed ?? 0;
+  for (const hh of hangings) if (hh.kind === "portrait") hh.seed = sitter++;
 
   // More chains hang from the ceiling, kept to cells in front of walls so
   // they never dangle in the middle of a hall. Pure set dressing like the

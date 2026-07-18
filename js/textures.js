@@ -1705,6 +1705,127 @@ function chainCeilingSprite() {
   return c;
 }
 
+// Framed portraits of the fortress's former masters. Each sitter is painted
+// once per gaze: PORTRAIT_COLS steps sweep the pupils from left to right and
+// the second row drops them toward the floor, so the renderer can always
+// pick the frame that looks straight at the player. Everything except the
+// pupils is identical across the frames — the speckle rng reseeds per
+// sitter, not per frame — so a change of gaze never makes the paint shimmer.
+export const PORTRAIT_COLS = 5;
+export const PORTRAIT_ROWS = 2; // row 0: level gaze, row 1: glancing down
+
+const PORTRAIT_PALS = [
+  // the old lord: grey mane, full beard, wine doublet and a chain of office
+  { skin: "#c99b70", shade: "#a2764e", hair: "#8d8478", hairDark: "#5f5b53", cloth: "#6d1a1a", clothLit: "#8c2a2a", trim: "#c9a24a", iris: "#2e2018", beard: true, chain: true },
+  // the lady: pale under a dark hood, sapphire gown, a drop pendant
+  { skin: "#d8b090", shade: "#b0875f", hair: "#2e2620", hairDark: "#191410", cloth: "#26364e", clothLit: "#35486a", trim: "#a8b0b8", iris: "#2a3a28", veil: true, pendant: true },
+  // the steward: cropped dark hair, green doublet, an old scar
+  { skin: "#b98d62", shade: "#8f6a42", hair: "#3a2c1a", hairDark: "#241a0e", cloth: "#2c3c24", clothLit: "#3c5230", trim: "#8d949c", iris: "#241c14", scar: true },
+];
+
+function portraitSprite(pal, gx, gy, seed) {
+  const c = canvas();
+  const g = c.getContext("2d");
+  const rand = rng(seed);
+
+  // the canvas itself: old varnish, murkier toward the frame
+  px(g, 0, 0, 16, 16, "#241b10");
+  px(g, 1.7, 1.7, 12.6, 12.6, "#3a2c1a");
+  px(g, 2.4, 2.2, 11.2, 7, "#463623");
+
+  // the hood falls behind the shoulders before the figure goes on
+  if (pal.veil) px(g, 4.4, 2.8, 7.2, 8.6, pal.hairDark);
+
+  // throat, then shoulders over its base
+  px(g, 7, 9.7, 2, 2.2, pal.skin);
+  px(g, 8.3, 9.7, 0.7, 2.2, pal.shade);
+  px(g, 3.6, 11.6, 8.8, 3.1, pal.cloth);
+  px(g, 3.6, 11.6, 8.8, 0.6, pal.clothLit);
+  px(g, 6.7, 11.2, 2.6, 0.5, pal.trim); // collar
+
+  // head, jaw, the shadowed side of the face
+  px(g, 5.4, 3.8, 5.2, 6, pal.skin);
+  px(g, 5.9, 9.3, 4.2, 0.8, pal.skin);
+  px(g, 9.9, 4.2, 0.7, 5.4, pal.shade);
+
+  if (pal.beard) {
+    px(g, 5.1, 3.2, 5.8, 1.3, pal.hair); // swept-back mane
+    px(g, 5, 4.3, 0.8, 2.6, pal.hair);
+    px(g, 10.2, 4.3, 0.8, 2.6, pal.hair);
+    px(g, 6.2, 3.4, 1.4, 0.5, pal.hairDark);
+  } else if (pal.veil) {
+    px(g, 5.2, 3.4, 5.6, 1.2, pal.hair); // parted beneath the hood
+    px(g, 7.85, 3.4, 0.3, 1.1, pal.hairDark);
+    px(g, 5.1, 4.2, 0.9, 4.6, pal.hair);
+    px(g, 10, 4.2, 0.9, 4.6, pal.hair);
+  } else {
+    px(g, 5.2, 3.2, 5.6, 1.5, pal.hair); // cropped
+    px(g, 5.1, 4.4, 0.6, 1.6, pal.hair);
+    px(g, 10.3, 4.4, 0.6, 1.6, pal.hair);
+  }
+
+  // brows — the steward's knit heavier
+  const browH = pal.scar ? 0.6 : 0.45;
+  px(g, 5.85, 5.65, 1.5, browH, pal.hairDark);
+  px(g, 8.65, 5.65, 1.5, browH, pal.hairDark);
+
+  // eyes: lid line, whites, and the pupils cast toward the onlooker
+  px(g, 5.85, 6.15, 1.5, 0.25, pal.shade);
+  px(g, 8.65, 6.15, 1.5, 0.25, pal.shade);
+  px(g, 5.85, 6.35, 1.5, 1, "#ddd2b8");
+  px(g, 8.65, 6.35, 1.5, 1, "#ddd2b8");
+  const ox = gx * 0.38;
+  const oy = gy * 0.15;
+  for (const ex of [6.25, 9.05]) {
+    px(g, ex + ox, 6.5 + oy, 0.7, 0.65, pal.iris);
+    px(g, ex + 0.15 + ox, 6.6 + oy, 0.35, 0.35, "#0d0906");
+    px(g, ex + 0.5 + ox, 6.55 + oy, 0.18, 0.18, "#e8e0d0"); // catchlight
+  }
+
+  // nose and mouth
+  px(g, 7.7, 6.9, 0.5, 1.7, pal.shade);
+  px(g, 7.4, 8.4, 1.1, 0.4, pal.shade);
+  if (pal.beard) {
+    px(g, 5.8, 9.1, 4.4, 2.3, pal.hair);
+    px(g, 6.6, 11.3, 2.8, 0.9, pal.hair);
+    px(g, 6.6, 8.7, 2.8, 0.6, pal.hair); // moustache
+    px(g, 7.1, 9.4, 1.8, 0.3, "#3a241c"); // the mouth lost in it
+    px(g, 6.4, 9.8, 0.5, 1.6, pal.hairDark);
+    px(g, 9, 9.8, 0.5, 1.6, pal.hairDark);
+  } else {
+    px(g, 6.9, 9, 2.2, 0.45, "#8a5644");
+    px(g, 7.1, 9.45, 1.8, 0.25, pal.shade);
+  }
+  if (pal.scar) px(g, 9.55, 7.4, 0.35, 1.8, "#8a5a48");
+  if (pal.chain) {
+    for (let i = 0; i < 6; i++) px(g, 4.6 + i * 1.2, 12.4 + (i % 2) * 0.35, 0.7, 0.5, pal.trim);
+  }
+  if (pal.pendant) px(g, 7.7, 12.2, 0.6, 0.8, pal.trim);
+
+  // age: craquelure specks over the paint, never over the frame
+  speckle(g, rand, "#000", 50, 0.14);
+  speckle(g, rand, "#e8d8a8", 12, 0.05);
+
+  // gilded frame, lit from above, with a nameplate on the bottom rail
+  px(g, 0, 0, 16, 1.3, "#9a7930");
+  px(g, 0, 14.7, 16, 1.3, "#9a7930");
+  px(g, 0, 0, 1.3, 16, "#9a7930");
+  px(g, 14.7, 0, 1.3, 16, "#9a7930");
+  px(g, 0, 0, 16, 0.5, "#c9a24a");
+  px(g, 0, 0, 0.5, 16, "#c9a24a");
+  px(g, 0, 15.5, 16, 0.5, "#6b5320");
+  px(g, 15.5, 0, 0.5, 16, "#6b5320");
+  px(g, 1.3, 1.3, 13.4, 0.4, "rgba(0,0,0,0.45)"); // lip shadow on the canvas
+  px(g, 1.3, 1.3, 0.4, 13.4, "rgba(0,0,0,0.45)");
+  for (const [bx, by] of [[0.15, 0.15], [14.45, 0.15], [0.15, 14.45], [14.45, 14.45]]) {
+    px(g, bx, by, 1.4, 1.4, "#6b5320");
+    px(g, bx + 0.25, by + 0.25, 0.9, 0.9, "#c9a24a");
+  }
+  px(g, 6.2, 14.95, 3.6, 0.8, "#6b5320");
+  px(g, 6.4, 15.1, 3.2, 0.5, "#c9a24a");
+  return c;
+}
+
 function chestLidTexture() {
   // plain flat colour: the lid's screen mapping is only approximate, and a
   // single tone can never show the distortion
@@ -1870,5 +1991,17 @@ export function buildAssets() {
 
   const hangings = { sword: swordSprite(), shield: shieldSprite(), chain: chainWallSprite() };
 
-  return { walls, wallsDark, enemySprites, items, sparkle, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, boxes, hangings, TEX };
+  // portraits: each sitter painted once per gaze direction; the renderer
+  // swaps the frames so the eyes follow the player about the room
+  const portraits = PORTRAIT_PALS.map((pal, vi) => {
+    const frames = [];
+    for (let row = 0; row < PORTRAIT_ROWS; row++) {
+      for (let col = 0; col < PORTRAIT_COLS; col++) {
+        frames.push(portraitSprite(pal, (col / (PORTRAIT_COLS - 1)) * 2 - 1, row, 400 + vi * 31));
+      }
+    }
+    return frames;
+  });
+
+  return { walls, wallsDark, enemySprites, items, sparkle, trapSprites, weapons, weaponIcons, crests, torches, fountains, decor, boxes, hangings, portraits, TEX };
 }

@@ -2,7 +2,7 @@
 // sprites clipped against a z-buffer, POV weapon, HUD and automap.
 // Torchlit atmosphere: everything fades into darkness with distance.
 
-import { darken } from "./textures.js";
+import { darken, PORTRAIT_COLS } from "./textures.js";
 
 export const W = 640;
 export const H = 400;
@@ -25,6 +25,7 @@ const HANGING_SPECS = {
   sword: { zBot: 0.3, zTop: 0.9, offset: 0.03 },
   shield: { zBot: 0.35, zTop: 0.85, offset: 0.03 },
   chain: { zBot: 0.22, zTop: 0.92, offset: 0.03 },
+  portrait: { zBot: 0.32, zTop: 0.84, offset: 0.03 },
 };
 
 // distance buckets for pre-darkened sprite variants
@@ -540,11 +541,25 @@ export class Renderer {
       if ((fx - p.x) * hg.dx + (fy - p.y) * hg.dy >= 0) continue; // backface
       const tx = -hg.dy;
       const ty = hg.dx;
+      let img = this.assets.hangings[hg.kind];
+      if (hg.kind === "portrait") {
+        // the painted eyes follow the player: the angle the player makes
+        // with the painting's normal picks a gaze column (texture u runs
+        // against +t, so a player on the +t side takes the leftmost gaze),
+        // and standing right in front makes the sitter glance down
+        const fwd = (p.x - fx) * hg.dx + (p.y - fy) * hg.dy;
+        const lat = (p.x - fx) * tx + (p.y - fy) * ty;
+        const a = Math.atan2(-lat, fwd) / (Math.PI / 2); // -1..1 across the wall
+        const col = Math.max(0, Math.min(PORTRAIT_COLS - 1, Math.round(((a + 1) / 2) * (PORTRAIT_COLS - 1))));
+        const row = fwd * fwd + lat * lat < 3.6 ? 1 : 0;
+        const frames = this.assets.portraits[hg.seed % this.assets.portraits.length];
+        img = frames[row * PORTRAIT_COLS + col];
+      }
       let bucket = shadeBucket(Math.hypot(fx - p.x, fy - p.y));
       const light = torchLight(game.level, fx, fy, game.time);
       if (light > 0.5) bucket = Math.max(0, bucket - 2);
       else if (light > 0.15) bucket = Math.max(0, bucket - 1);
-      const tex = this.shadedSprite(this.assets.hangings[hg.kind], bucket);
+      const tex = this.shadedSprite(img, bucket);
       this.drawHangingQuad(game, fx + tx * halfW, fy + ty * halfW, fx - tx * halfW, fy - ty * halfW, tex, spec);
     }
   }
