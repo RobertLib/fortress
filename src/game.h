@@ -66,8 +66,18 @@ typedef struct Trap {
   bool seen; // set off at least once: shows on the map
 } Trap;
 
+// What an arrow in flight does. Trap arrows are real missiles that strike
+// whoever stands in their way. Crossbow bolts only show a shot the hitscan
+// roll has already settled: one bound for its target homes in on it and
+// delivers the damage on arrival, a miss flies on into the masonry.
+typedef enum { SHOT_TRAP, SHOT_MISS, SHOT_AT_PLAYER, SHOT_AT_ENEMY } ShotKind;
+
 typedef struct Projectile {
   float x, y, dir_x, dir_y, dist;
+  float z; // height of the shaft above the floor
+  ShotKind kind;
+  Enemy *target; // SHOT_AT_ENEMY
+  int dmg; // SHOT_AT_PLAYER, SHOT_AT_ENEMY
 } Projectile;
 
 typedef struct Game {
@@ -124,6 +134,9 @@ Listener game_listener(const Game *g);
 
 // events
 void game_open_door(Game *g, Door *door, bool by_player);
+// Loose a crossbow bolt from (x, y) along (aim_x, aim_y). SHOT_AT_PLAYER and
+// SHOT_AT_ENEMY (at target) carry dmg to deliver on arrival.
+void game_loose_bolt(Game *g, float x, float y, float aim_x, float aim_y, ShotKind kind, Enemy *target, int dmg);
 void game_hurt_player(Game *g, int dmg);
 void game_on_enemy_killed(Game *g, const Enemy *e);
 

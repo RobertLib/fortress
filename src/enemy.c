@@ -202,9 +202,16 @@ static void fire(Enemy *e, Game *g) {
   float dist = hypotf(p->x - e->x, p->y - e->y);
   float evade = p->speed_now > 1.5f ? 2.5f : 0;
   float hit_chance = maxf(0.1f, 1 - (dist + evade) / 14);
+  float aim_x = p->x - e->x, aim_y = p->y - e->y;
   if (frand() < hit_chance) {
     float falloff = dist < 2 ? 1 : dist < 6 ? 0.7f : 0.45f;
-    game_hurt_player(g, maxi(3, (int)round_half_up((4 + frand() * e->stats->dmg) * falloff)));
+    int dmg = maxi(3, (int)round_half_up((4 + frand() * e->stats->dmg) * falloff));
+    game_loose_bolt(g, e->x, e->y, aim_x, aim_y, SHOT_AT_PLAYER, NULL, dmg);
+  } else {
+    // a miss hisses past the player's shoulder into the wall behind
+    float side = frand() < 0.5 ? 1.0f : -1.0f;
+    float wide = (0.45f + frandf() * 0.4f) * side / maxf(dist, 0.5f);
+    game_loose_bolt(g, e->x, e->y, aim_x - aim_y * wide, aim_y + aim_x * wide, SHOT_MISS, NULL, 0);
   }
 }
 

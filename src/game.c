@@ -23,6 +23,11 @@ static const WeaponSpec WEAPONS[WEAPON_COUNT] = {
 
 #define EXTRA_LIFE_EVERY 40000
 
+#define SHOT_Z 0.44f // chest height: where arrows and bolts fly
+#define TRAP_ARROW_SPEED 9.0f // tiles per second
+#define BOLT_SPEED 20.0f
+#define BOLT_RANGE 30.0f // strays end in masonry long before this
+
 // How many sound-blocking cells sit on the straight line between the
 // listener and a sound source. Bars let sound through; doors muffle by how
 // closed they are. Capped — past a couple of walls it's all the same.
@@ -524,10 +529,20 @@ static void update_weapon(Game *g, float dt, const Input *in) {
     best = e;
     best_dist = dist;
   }
+  int dmg = 0;
   if (best) {
     float falloff = best_dist < 4 ? 1 : best_dist < 10 ? 0.75f : 0.55f;
     double roll = spec->dmg_lo + frand() * (spec->dmg_hi - spec->dmg_lo);
-    enemy_hit(best, g, (int)round_half_up(roll * falloff));
+    dmg = (int)round_half_up(roll * falloff);
+  }
+  // the dagger strikes home at once; a crossbow looses a bolt that carries
+  // the hit to its mark, or flies on along the view into the wall
+  if (p->weapon == WEAPON_DAGGER) {
+    if (best) enemy_hit(best, g, dmg);
+  } else if (best) {
+    game_loose_bolt(g, p->x, p->y, best->x - p->x, best->y - p->y, SHOT_AT_ENEMY, best, dmg);
+  } else {
+    game_loose_bolt(g, p->x, p->y, p->dir_x, p->dir_y, SHOT_MISS, NULL, 0);
   }
 }
 
@@ -584,7 +599,8 @@ static void update_traps(Game *g, float dt) {
       t->timer -= dt;
       if (t->timer <= 0) {
         if (g->projectile_count < MAX_PROJECTILES)
-          g->projectiles[g->projectile_count++] = (Projectile){s->origin_x, s->origin_y, s->dir_x, s->dir_y, 0};
+          g->projectiles[g->projectile_count++] =
+              (Projectile){s->origin_x, s->origin_y, s->dir_x, s->dir_y, 0, SHOT_Z, SHOT_TRAP, NULL, 0};
         audio_play_at(SND_ENEMY_SHOT, s->origin_x, s->origin_y, &l, 0.9f, 1.25f);
         t->timer = 0.16f;
         if (--t->shots <= 0) {
@@ -601,14 +617,61 @@ static void update_traps(Game *g, float dt) {
   }
 }
 
+// ------------------------------------------------------------------ projectiles
+
+static void land_bolt(Game *g, const Projectile *a) {
+  if (a->kind == SHOT_AT_PLAYER)
+    game_hurt_player(g, a->dmg);
+  else if (a->kind == SHOT_AT_ENEMY)
+    enemy_hit(a->target, g, a->dmg);
+}
+
+void game_loose_bolt(Game *g, float x, float y, float aim_x, float aim_y, ShotKind kind, Enemy *target, int dmg) {
+  float len = hypotf(aim_x, aim_y);
+  if (len == 0) len = 1;
+  Projectile a = {x, y, aim_x / len, aim_y / len, 0, SHOT_Z, kind, target, dmg};
+  if (g->projectile_count < MAX_PROJECTILES)
+    g->projectiles[g->projectile_count++] = a;
+  else
+    land_bolt(g, &a); // no room left in the air: the hit lands at once
+}
+
+// A bolt bound for its mark steers at it every substep, climbing or sinking
+// toward the mark's height, and lands its hit once within reach.
+static bool home_bolt(Game *g, Projectile *a, float step) {
+  const Player *p = &g->player;
+  bool at_player = a->kind == SHOT_AT_PLAYER;
+  float tx = at_player ? p->x : a->target->x;
+  float ty = at_player ? p->y : a->target->y;
+  float tz = !at_player && a->target->flying ? a->target->fly_height : SHOT_Z;
+  float reach = at_player ? p->radius : a->target->radius;
+  float d = hypotf(tx - a->x, ty - a->y);
+  if (d <= step + reach) {
+    land_bolt(g, a);
+    return true;
+  }
+  a->dir_x = (tx - a->x) / d;
+  a->dir_y = (ty - a->y) / d;
+  a->z += (tz - a->z) * step / d;
+  return false;
+}
+
 static void update_projectiles(Game *g, float dt) {
   Player *p = &g->player;
-  float step = (9 * dt) / 3; // substeps so fast arrows can't skip a target
   int kept = 0;
   for (int i = 0; i < g->projectile_count; i++) {
     Projectile *a = &g->projectiles[i];
+    float travel = (a->kind == SHOT_TRAP ? TRAP_ARROW_SPEED : BOLT_SPEED) * dt;
+    int steps = maxi(1, (int)ceilf(travel / 0.05f)); // substeps so fast arrows can't skip a target
+    float step = travel / steps;
     bool dead = false;
-    for (int s = 0; s < 3 && !dead; s++) {
+    for (int s = 0; s < steps && !dead; s++) {
+      // another shot felled the mark first: the bolt flies on past
+      if (a->kind == SHOT_AT_ENEMY && enemy_dead(a->target)) a->kind = SHOT_MISS;
+      if ((a->kind == SHOT_AT_PLAYER || a->kind == SHOT_AT_ENEMY) && home_bolt(g, a, step)) {
+        dead = true;
+        break;
+      }
       a->x += a->dir_x * step;
       a->y += a->dir_y * step;
       a->dist += step;
@@ -620,6 +683,10 @@ static void update_projectiles(Game *g, float dt) {
         audio_play_at(SND_ARROW_HIT, a->x, a->y, &l, 0.7f, 1);
         dead = true;
         break;
+      }
+      if (a->kind != SHOT_TRAP) {
+        if (a->dist > BOLT_RANGE) dead = true;
+        continue; // bolts strike nothing but their mark
       }
       if (!g->player_dead && hypotf(p->x - a->x, p->y - a->y) < p->radius + 0.12f) {
         game_hurt_player(g, 10 + (int)floor(frand() * 9));

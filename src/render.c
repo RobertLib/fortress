@@ -699,7 +699,13 @@ static void collect_sprites(Renderer *r, const Game *g) {
       view = TRAP_ARROW_AWAY;
     else
       view = lat > 0 ? TRAP_ARROW : TRAP_ARROW_LEFT;
-    add_sprite(a->x, a->y, as->trap[view], 0.82f);
+    // right at the eye an arrow is only a smear; one flying away that close
+    // was just loosed by the player, and the POV streak still shows it
+    float min_dist = view == TRAP_ARROW_AWAY ? 1.8f : 0.7f;
+    if (sq(a->x - p->x) + sq(a->y - p->y) < sq(min_dist)) continue;
+    Sprite *s = add_sprite(a->x, a->y, as->trap[view], 0.82f);
+    s->has_z = true;
+    s->z_center = a->z - 0.03f; // the shaft is painted just above the texture's middle
   }
   for (int i = 0; i < lv->decoration_count; i++) {
     const Decoration *d = &lv->decorations[i];
