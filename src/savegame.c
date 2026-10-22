@@ -8,7 +8,7 @@
 
 // Explicit little-endian fields: no struct padding, native enums or pointers
 // reach disk. Bump the version when the schema or gameplay interpretation changes.
-#define SAVE_VERSION 2
+#define SAVE_VERSION 3
 #define SAVE_LIMIT (16 * 1024 * 1024)
 #define TIME_LIMIT 100000000.0f
 static const char MAGIC[8] = {'F', 'R', 'T', 'S', 'A', 'V', 'E', '\0'};
@@ -148,6 +148,14 @@ static uint32_t level_signature(const Level *lv) {
     u32(c, p->x); u32(c, p->y); u32(c, (uint32_t)p->dx);
     u32(c, (uint32_t)p->dy); u32(c, (uint32_t)p->pair);
   }
+  // Preserve signatures of older maps that have no pendulums.
+  if (lv->pendulum_count) {
+    u32(c, lv->pendulum_count);
+    for (int i = 0; i < lv->pendulum_count; i++) {
+      const PendulumSpawn *p = &lv->pendulums[i];
+      u32(c, p->x); u32(c, p->y); u32(c, p->dx); u32(c, p->dy);
+    }
+  }
   uint32_t hash = c->ok ? checksum(c->data, c->size) : 0;
   free(c->data);
   return hash;
@@ -239,6 +247,10 @@ static void transfer_game(Codec *c, Game *g) {
       F(g->wall_dust[i], 0, WALL_DUST_TIME);
       if (g->wall_health[i] && g->wall_dust[i] > 0) c->ok = false;
     }
+  }
+  if (c->version >= 3) {
+    for (int i = 0; c->ok && i < lv->pendulum_count; i++)
+      F(g->pendulums[i].hit_cooldown, 0, PENDULUM_HIT_COOLDOWN);
   }
 }
 

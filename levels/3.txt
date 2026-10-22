@@ -4,6 +4,7 @@
 ; Q gunpowder barrel, q ordinary barrel
 ; 8 cracked masonry: break with weapons or a powder blast
 ; ! open pit: falling in costs a life; walk around it
+; & east-west pendulum, % north-south pendulum: time your crossing
 @name BARRACKS
 @floor #45443c
 @ceil #191a16
@@ -16,7 +17,7 @@
 2...L...2.......T.Q.8...2...2
 2.2Z222.2222222.S...2.......2
 2.2.AT2.....2.D...A.2.2.2.2.2
-2D2222222...2.4222..2.2.2.2.2
+2D2222222.&.2.4222..2.2.2.2.2
 2........V.......w..2.2.D.2.4
 2..cG.22222.2.....222.42242.2
 2...Q.2.HT2....!..D...2...2.2

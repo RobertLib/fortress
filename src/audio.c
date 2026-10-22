@@ -91,6 +91,14 @@ static double sfx_pit_fall(double t, SynthState *s) {
   return rush + impact;
 }
 
+static double sfx_pendulum(double t, SynthState *s) {
+  // Air rushing past a heavy blade, with a rusty ceiling bearing behind it.
+  s->z += (noise() - s->z) * 0.12;
+  double sweep = sin(M_PI * fmin(1, t / 0.45));
+  double creak = (sine(t, 170 + 60 * sin(t * 13)) + sine(t, 510) * 0.3) * env(t, 0.45, 1.8);
+  return s->z * sweep * sweep * 1.4 + creak * 0.12;
+}
+
 static double sfx_explosion(double t, SynthState *s) {
   double n = noise();
   s->z += (n - s->z) * 0.055;
@@ -489,6 +497,7 @@ static const SynthDef SYNTHS[SND_COUNT] = {
   [SND_ENEMY_SHOT] = {0.26, sfx_enemy_shot},
   [SND_TRAP_CLICK] = {0.16, sfx_trap_click},
   [SND_PIT_FALL] = {0.95, sfx_pit_fall},
+  [SND_PENDULUM] = {0.45, sfx_pendulum},
   [SND_ARROW_HIT] = {0.09, sfx_arrow_hit},
   [SND_EXPLOSION] = {0.85, sfx_explosion},
   [SND_WALL_HIT] = {0.15, sfx_wall_hit},

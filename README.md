@@ -183,6 +183,16 @@ a pit. Grounded enemies avoid the holes; bats and spiders on their silk
 threads can pass above them. Sight, sound and arrows pass over the opening.
 Explored pits appear as dark, rust-bordered squares on the map.
 
+### Pendulums
+
+Heavy crescent blades hang from the ceiling and sweep back and forth every
+3.2 seconds, with a metallic creak and a rush of air. Wait for the blade to
+swing aside, then cross beneath the pivot, or walk around its reach. Contact
+costs **30 health on Normal**, **15 on Easy** and **45 on Hard**. A single
+contact cannot deal damage every frame. Each floor has a pendulum; explored
+ones appear on the map with a copper mark showing the swing direction.
+Saving preserves the swing timing and the brief protection after a hit.
+
 ## Levels
 
 Levels are text files in [levels/](levels/) — one character = one tile,
@@ -202,6 +212,7 @@ V/v  bat swarm (flying/roosting)  C/c  war hound (roaming/staying put)
 Y/y  rat (scurrying/lurking)   W/w  spider (prowling/lurking under the ceiling)
 L    lever on a wall           Z  secret wall
 ^    arrow trap                !  open pit (lethal)
+&    pendulum (east-west)      %  pendulum (north-south)
 ~    mirror portal (paired in reading order)
 ```
 
@@ -223,6 +234,9 @@ blend into the surrounding masonry.
 An arrow trap (`^`) is a pressure plate: the nearest wall in a straight line
 becomes an arrow slit that looses a volley when the plate is stepped on.
 Use `!` for an open pit; keep a safe route around it when designing a level.
+Use `&` or `%` for a continuously swinging ceiling blade. Its pivot is at
+the tile centre; the blade swings east-west or north-south respectively.
+Keep its swing and approaches clear. Automatic furniture leaves space around it.
 Mirror portals (`~`) pair up in reading order — step into the glass and its
 twin draws you out on the far side.
 

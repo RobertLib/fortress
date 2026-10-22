@@ -708,6 +708,7 @@ typedef struct {
   bool dropline; // a spider's silk thread runs from the sprite's top to the ceiling
   float dist;
   int order;
+  const PendulumSpawn *pendulum;
 } Sprite;
 
 static Sprite *sprites;
@@ -719,7 +720,7 @@ static Sprite *add_sprite(float x, float y, const Image *img, float scale) {
     sprites = realloc(sprites, sizeof(Sprite) * sprite_cap);
   }
   Sprite *s = &sprites[sprite_count];
-  *s = (Sprite){x, y, img, scale, false, 0, false, 1, false, 0, sprite_count};
+  *s = (Sprite){.x = x, .y = y, .img = img, .scale = scale, .alpha = 1, .order = sprite_count};
   sprite_count++;
   return s;
 }
@@ -790,6 +791,13 @@ static void collect_sprites(Renderer *r, const Game *g) {
     add_sprite(t->spawn->x + 0.5f, t->spawn->y + 0.5f, as->trap[t->state == TRAP_ARMED ? TRAP_PLATE : TRAP_PRESSED],
                0.6f);
   }
+  for (int i = 0; i < lv->pendulum_count; i++) {
+    const PendulumSpawn *trap = &lv->pendulums[i];
+    float offset = PENDULUM_LENGTH * sinf(game_pendulum_angle(trap, g->time));
+    Sprite *s = add_sprite(trap->x + 0.5f + trap->dx * offset,
+                           trap->y + 0.5f + trap->dy * offset, NULL, 1);
+    s->pendulum = trap;
+  }
   for (int i = 0; i < g->projectile_count; i++) {
     // pick the arrow view from its flight direction in camera space:
     // depth along the view axis vs. lateral drift across the screen
@@ -858,12 +866,60 @@ static void collect_sprites(Renderer *r, const Game *g) {
   qsort(sprites, (size_t)sprite_count, sizeof(Sprite), cmp_sprite);
 }
 
+static void pendulum_quad(Renderer *r, Image *fb, const Game *g, const Image *tex,
+                          float x0, float y0, float x1, float y1, float bottom, float top) {
+  QuadSpan q;
+  if (!quad_span(&g->player, x0, y0, x1, y1, &q)) return;
+  for (int x = q.x_start; x <= q.x_end; x++) {
+    float dist, u;
+    quad_at(&q, x, &dist, &u);
+    if (dist >= r->zbuffer[x]) continue;
+    float h = VIEW_H / dist;
+    const Image *img = shaded(tex, shade_bucket(dist));
+    draw_column(fb, img, tex_column(u), x, VIEW_H / 2.0f + h * (0.5f - top), h * (top - bottom), NULL);
+    render_transparent_walls(r, fb, x, x, dist);
+  }
+}
+
+static void render_pendulum(Renderer *r, Image *fb, const Game *g, const PendulumSpawn *s) {
+  float angle = game_pendulum_angle(s, g->time);
+  int frame = clampi((int)round_half_up((angle / PENDULUM_MAX_ANGLE + 1) * 0.5f * (PENDULUM_FRAMES - 1)),
+                     0, PENDULUM_FRAMES - 1);
+  float cx = s->x + 0.5f, cy = s->y + 0.5f;
+  float half = PENDULUM_VIEW_WIDTH / 2;
+  pendulum_quad(r, fb, g, r->assets->pendulum[frame], cx - s->dx * half, cy - s->dy * half,
+                cx + s->dx * half, cy + s->dy * half, 0, 1);
+
+  // A narrow edge and shaft remain visible when looking along the swing's
+  // plane. In a face-on view the painted blade already covers these parts.
+  float facing = fabsf((cx - g->player.x) * s->dy - (cy - g->player.y) * s->dx);
+  float along = fabsf((cx - g->player.x) * s->dx + (cy - g->player.y) * s->dy);
+  if (facing >= along * 0.25f) return;
+  float sn = sinf(angle), cs = cosf(angle);
+  for (int i = 0; i < 12; i++) {
+    float radius = PENDULUM_LENGTH * (i + 0.5f) / 12;
+    float bx = cx + s->dx * radius * sn, by = cy + s->dy * radius * sn;
+    float z = PENDULUM_PIVOT - radius * cs;
+    pendulum_quad(r, fb, g, r->assets->pendulum_edge, bx - s->dy * .015f, by + s->dx * .015f,
+                  bx + s->dy * .015f, by - s->dx * .015f, z - .025f, z + .025f);
+  }
+  float bx = cx + s->dx * PENDULUM_LENGTH * sn, by = cy + s->dy * PENDULUM_LENGTH * sn;
+  float z = PENDULUM_PIVOT - PENDULUM_LENGTH * cs;
+  float height = PENDULUM_BLADE_HEIGHT * cs + PENDULUM_BLADE_WIDTH * fabsf(sn);
+  pendulum_quad(r, fb, g, r->assets->pendulum_edge, bx - s->dy * .035f, by + s->dx * .035f,
+                bx + s->dy * .035f, by - s->dx * .035f, z - height, z + height);
+}
+
 static void render_sprites(Renderer *r, Image *fb, const Game *g) {
   const Player *p = &g->player;
   collect_sprites(r, g);
   float k = inv_det(p);
   for (int i = 0; i < sprite_count; i++) {
     const Sprite *s = &sprites[i];
+    if (s->pendulum) {
+      render_pendulum(r, fb, g, s->pendulum);
+      continue;
+    }
     if (!s->img) continue;
     float sx = s->x - p->x, sy = s->y - p->y;
     float transform_x = k * (p->dir_y * sx - p->dir_x * sy);
@@ -1154,6 +1210,16 @@ void render_map(Renderer *r, Image *fb, const Game *g) {
     const Trap *t = &g->traps[i];
     if (!t->seen) continue;
     gfx_fill_rect(fb, ox + t->spawn->x * cs, oy + t->spawn->y * cs, cs - 0.5f, cs - 0.5f, color_parse("#8c2020"));
+  }
+  // Explored ceiling blades show their swing direction.
+  for (int i = 0; i < lv->pendulum_count; i++) {
+    const PendulumSpawn *s = &lv->pendulums[i];
+    if (!g->visited[s->y * lv->w + s->x]) continue;
+    float x = ox + (s->x + 0.5f) * cs, y = oy + (s->y + 0.5f) * cs;
+    Color blade = color_parse("#d48751");
+    gfx_line(fb, x - s->dx * cs * .4f, y - s->dy * cs * .4f,
+             x + s->dx * cs * .4f, y + s->dy * cs * .4f, 1.5f, blade);
+    gfx_fill_rect(fb, x - 1.5f, y - 1.5f, 3, 3, blade);
   }
   // player arrow
   const Player *p = &g->player;

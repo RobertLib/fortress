@@ -147,6 +147,7 @@ Game *game_create(const Level *level, int level_index, Session *session, const P
   g->trap_count = level->trap_count;
   g->traps = calloc((size_t)level->trap_count + 1, sizeof(Trap));
   for (int i = 0; i < level->trap_count; i++) g->traps[i] = (Trap){&level->traps[i], TRAP_ARMED, 0, 0, false};
+  g->pendulums = calloc((size_t)level->pendulum_count + 1, sizeof(Pendulum));
 
   g->visited = calloc((size_t)cells, 1);
   g->total_enemies = level->enemy_count;
@@ -168,6 +169,7 @@ void game_destroy(Game *g) {
   free(g->barrels);
   free(g->doors);
   free(g->traps);
+  free(g->pendulums);
   free(g->lever_pulled);
   free(g->door_at);
   free(g->lever_at);
@@ -381,6 +383,42 @@ static void update_doors(Game *g, float dt) {
 
 // ------------------------------------------------------------------ player
 
+float game_pendulum_angle(const PendulumSpawn *spawn, float time) {
+  float phase = (spawn->x * 3 + spawn->y * 5) % 8 * ((float)M_PI / 4);
+  return PENDULUM_MAX_ANGLE * sinf(time * (2 * (float)M_PI / PENDULUM_PERIOD) + phase);
+}
+
+static void update_pendulums(Game *g, float dt, float time) {
+  const Player *p = &g->player;
+  for (int i = 0; i < g->level->pendulum_count; i++) {
+    const PendulumSpawn *s = &g->level->pendulums[i];
+    Pendulum *trap = &g->pendulums[i];
+    trap->hit_cooldown = maxf(0, trap->hit_cooldown - dt);
+    float angle = game_pendulum_angle(s, time);
+    float sn = sinf(angle), cs = cosf(angle);
+    float bx = s->x + 0.5f + s->dx * PENDULUM_LENGTH * sn;
+    float by = s->y + 0.5f + s->dy * PENDULUM_LENGTH * sn;
+    // A circular player footprint against the blade's thin horizontal box.
+    float half_width = PENDULUM_BLADE_WIDTH * cs + PENDULUM_BLADE_HEIGHT * fabsf(sn);
+    float along = fabsf((p->x - bx) * s->dx + (p->y - by) * s->dy);
+    float across = fabsf((p->x - bx) * s->dy - (p->y - by) * s->dx);
+    float dx = maxf(0, along - half_width), dy = maxf(0, across - 0.035f);
+    if (!trap->hit_cooldown && dx * dx + dy * dy < sq(p->radius) &&
+        game_line_of_sight(g, bx, by, p->x, p->y)) {
+      trap->hit_cooldown = PENDULUM_HIT_COOLDOWN;
+      game_hurt_player(g, PENDULUM_DAMAGE);
+      game_say(g, "STRUCK BY A SWINGING BLADE!", 1.5f);
+      if (g->player_dead) return;
+    }
+    // Each sweep through the bottom of the arc gives a positional warning.
+    float before = game_pendulum_angle(s, time - dt);
+    if ((before < 0 && angle >= 0) || (before > 0 && angle <= 0)) {
+      Listener l = game_listener(g);
+      audio_play_at(SND_PENDULUM, s->x + 0.5f, s->y + 0.5f, &l, 0.85f, 1);
+    }
+  }
+}
+
 static void rotate_player(Player *p, float angle) {
   float c = cosf(angle), s = sinf(angle);
   float dx = p->dir_x * c - p->dir_y * s;
@@ -512,9 +550,13 @@ static void update_player(Game *g, float dt, Input *in) {
   if (len > 0.001f) {
     mx /= len;
     my /= len;
-    // Check the whole path, so running or a long frame cannot skip a hole.
-    int steps = maxi(1, (int)ceilf(speed / 0.1f));
-    for (int i = 0; i < steps; i++) {
+  }
+  // Sample both movement and the moving blades: neither a sprint nor a long
+  // frame may jump across a trap. Idle players still meet the swinging blade.
+  int steps = maxi(1, (int)ceilf(speed / 0.1f));
+  if (g->level->pendulum_count) steps = maxi(steps, (int)ceilf(dt / 0.01f));
+  for (int i = 0; i < steps; i++) {
+    if (len > 0.001f) {
       float nx = p->x + mx * speed / steps;
       if (!game_is_blocked(g, nx, p->y, p->radius, NULL)) p->x = nx;
       if (fall_into_pit(g)) return;
@@ -522,6 +564,10 @@ static void update_player(Game *g, float dt, Input *in) {
       if (!game_is_blocked(g, p->x, ny, p->radius, NULL)) p->y = ny;
       if (fall_into_pit(g)) return;
     }
+    update_pendulums(g, dt / steps, g->time - dt + dt * (i + 1) / steps);
+    if (g->player_dead) return;
+  }
+  if (len > 0.001f) {
     p->speed_now = (int)(3.4f * run * len);
     p->bob_phase += dt * 9 * run;
     p->bob_amount = minf(1, p->bob_amount + dt * 6);

@@ -40,6 +40,18 @@ typedef struct TrapSpawn {
   float origin_x, origin_y; // just in front of the arrow slit
 } TrapSpawn;
 
+// The blade swings in a vertical plane along (dx, dy), about a ceiling pivot.
+typedef struct PendulumSpawn {
+  int x, y, dx, dy;
+} PendulumSpawn;
+
+#define PENDULUM_PERIOD 3.2f
+#define PENDULUM_MAX_ANGLE 1.1f
+#define PENDULUM_PIVOT 0.98f
+#define PENDULUM_LENGTH 0.55f
+#define PENDULUM_BLADE_WIDTH 0.18f // half-width, tangent to the arc
+#define PENDULUM_BLADE_HEIGHT 0.14f // half-height, along the shaft
+
 typedef struct Lever {
   int x, y;
   int doors[LEVER_MAX_DOORS]; // cell indices of the secret walls it opens
@@ -89,6 +101,8 @@ typedef struct Level {
   int door_count;
   TrapSpawn *traps;
   int trap_count;
+  PendulumSpawn *pendulums;
+  int pendulum_count;
   Lever *levers;
   int lever_count;
   Portal *portals;

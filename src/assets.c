@@ -4,6 +4,7 @@
 // models live in weapons.c.
 
 #include "assets.h"
+#include "level.h"
 
 #include <string.h>
 
@@ -1386,6 +1387,52 @@ static Image *trap_sprite(TrapSprite kind) {
   return c;
 }
 
+// An iron shaft and a broad crescent of sharpened steel. The texture sits
+// in the swing's world plane, so the ceiling pivot never slides around.
+static void pendulum_point(float angle, float tangent, float radius, float *x, float *y) {
+  float across = radius * sinf(angle) + tangent * cosf(angle);
+  float z = PENDULUM_PIVOT - radius * cosf(angle) + tangent * sinf(angle);
+  *x = TEX * (0.5f + across / PENDULUM_VIEW_WIDTH);
+  *y = TEX * (1 - z);
+}
+
+static void pendulum_poly(Image *c, float angle, const float *local, int count, Color color) {
+  float points[32];
+  for (int i = 0; i < count; i++)
+    pendulum_point(angle, local[i * 2], local[i * 2 + 1], &points[i * 2], &points[i * 2 + 1]);
+  gfx_fill_poly(c, points, count, color);
+}
+
+static Image *pendulum_sprite(int frame) {
+  Image *c = image_new(TEX, TEX);
+  float angle = PENDULUM_MAX_ANGLE * (2.0f * frame / (PENDULUM_FRAMES - 1) - 1);
+  // Ceiling mounting plate, bearing and bolts stay still as the shaft turns.
+  rect(c, 28, 0, 8, 3, "#292c30");
+  rect(c, 29, 0, 6, 1, "#777d80");
+  rect(c, 29, 1, 1, 1, "#c2b898");
+  rect(c, 34, 1, 1, 1, "#c2b898");
+  const float shaft[] = {-.024f, 0, .024f, 0, .024f, .56f, -.024f, .56f};
+  pendulum_poly(c, angle, shaft, 4, color_parse("#24272b"));
+  const float shine[] = {-.012f, .02f, .002f, .02f, .002f, .54f, -.012f, .54f};
+  pendulum_poly(c, angle, shine, 4, color_parse("#9b9482"));
+  for (int i = 1; i <= 5; i++) {
+    float r = i * .085f;
+    float band[] = {-.032f, r, .032f, r, .032f, r + .025f, -.032f, r + .025f};
+    pendulum_poly(c, angle, band, 4, color_parse("#584333"));
+  }
+  const float blade[] = {-.18f, .45f, -.09f, .49f, 0, .51f, .09f, .49f, .18f, .45f,
+                         .18f, .59f, .12f, .65f, 0, .69f, -.12f, .65f, -.18f, .59f};
+  pendulum_poly(c, angle, blade, 10, color_parse("#dce3e2"));
+  const float face[] = {-.165f, .47f, -.09f, .50f, 0, .52f, .09f, .50f, .165f, .47f,
+                        .155f, .575f, .10f, .62f, 0, .65f, -.10f, .62f, -.155f, .575f};
+  pendulum_poly(c, angle, face, 10, color_parse("#7d8990"));
+  const float dark[] = {0, .52f, .09f, .50f, .165f, .47f, .155f, .575f, .10f, .62f, 0, .65f};
+  pendulum_poly(c, angle, dark, 6, color_parse("#505b65"));
+  const float rivet[] = {-.025f, .525f, .025f, .525f, .025f, .56f, -.025f, .56f};
+  pendulum_poly(c, angle, rivet, 4, color_parse("#d2b783"));
+  return c;
+}
+
 // Flat pixel-art emblems for the HUD arms panel: the 3D POV renders make
 // poor icons, so these stay 2D like the rest of the HUD.
 static Image *weapon_icon(WeaponKind kind) {
@@ -2617,6 +2664,10 @@ void assets_build(Assets *a) {
   for (int f = 0; f < WALL_DUST_FRAMES; f++) a->wall_dust[f] = wall_dust_sprite(f);
 
   for (int k = 0; k < TRAP_SPRITE_COUNT; k++) a->trap[k] = trap_sprite((TrapSprite)k);
+  for (int k = 0; k < PENDULUM_FRAMES; k++) a->pendulum[k] = pendulum_sprite(k);
+  a->pendulum_edge = image_new(TEX, TEX);
+  image_fill(a->pendulum_edge, 0xff505b65u);
+  gfx_fill_rect(a->pendulum_edge, 0, 0, TEX / 3, TEX, color_parse("#b7c4c8"));
 
   for (int w = 0; w < WEAPON_COUNT; w++) {
     for (int f = 0; f < 3; f++) a->weapons[w][f] = weapon_view_build((WeaponKind)w, f);

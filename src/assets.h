@@ -73,6 +73,9 @@ typedef enum {
   TRAP_SPRITE_COUNT
 } TrapSprite;
 
+#define PENDULUM_FRAMES 49
+#define PENDULUM_VIEW_WIDTH 1.6f
+
 typedef struct BoxTextures {
   Image *front, *side, *front_dark, *side_dark;
   Image *lid; // only boxes lower than the eye have one
@@ -88,6 +91,8 @@ typedef struct Assets {
   Image *explosion[EXPLOSION_FRAMES];
   Image *wall_rubble, *wall_dust[WALL_DUST_FRAMES];
   Image *trap[TRAP_SPRITE_COUNT];
+  Image *pendulum[PENDULUM_FRAMES]; // angle samples from left to right
+  Image *pendulum_edge;
   Image *weapons[WEAPON_COUNT][3]; // idle, just fired, recovering
   Image *weapon_icons[WEAPON_COUNT];
   Image *crests[CREST_COUNT];

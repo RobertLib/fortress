@@ -51,6 +51,7 @@
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
 //     !      open pit: a lethal hole with a narrow stone rim
+//     &/%    swinging ceiling blade, east-west / north-south
 //     Z      secret wall: looks like the surrounding masonry, slides open
 //            when the nearest lever is pulled and then stays open
 //     L      lever on a wall: press use on it to open its secret wall(s).
@@ -323,6 +324,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   lv->levers = malloc(sizeof(Lever) * cells);
   lv->portals = malloc(sizeof(Portal) * cells);
   lv->traps = malloc(sizeof(TrapSpawn) * cells);
+  lv->pendulums = malloc(sizeof(PendulumSpawn) * cells);
   int *plates = malloc(sizeof(int) * cells * 2);
   int *secrets = malloc(sizeof(int) * cells * 2);
   int plate_count = 0, secret_cells = 0;
@@ -367,6 +369,8 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
         plates[plate_count * 2] = x;
         plates[plate_count * 2 + 1] = y;
         plate_count++;
+      } else if (ch == '&' || ch == '%') {
+        lv->pendulums[lv->pendulum_count++] = (PendulumSpawn){x, y, ch == '&', ch == '%'};
       } else if (ch == 'Q' || ch == 'q') {
         lv->barrels[lv->barrel_count++] = (BarrelSpawn){x + 0.5f, y + 0.5f, ch == 'Q'};
       } else if ((kind = item_kind_for(ch)) >= 0) {
@@ -598,6 +602,12 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   for (int i = 0; i < lv->barrel_count; i++)
     spawn[(int)floorf(lv->barrels[i].y) * w + (int)floorf(lv->barrels[i].x)] = 1;
   for (int t = 0; t < plate_count; t++) spawn[plates[t * 2 + 1] * w + plates[t * 2]] = 1;
+  // Leave the whole swing and its approaches clear of automatic furniture.
+  for (int i = 0; i < lv->pendulum_count; i++) {
+    const PendulumSpawn *p = &lv->pendulums[i];
+    for (int y = maxi(0, p->y - 1); y <= mini(h - 1, p->y + 1); y++)
+      for (int x = maxi(0, p->x - 1); x <= mini(w - 1, p->x + 1); x++) spawn[y * w + x] = 1;
+  }
   // keep the cell a portal delivers onto clear of furniture and chests
   for (int i = 0; i < lv->portal_count; i++) {
     const Portal *pt = &lv->portals[i];
@@ -985,6 +995,7 @@ void level_free(Level *lv) {
   free(lv->barrels);
   free(lv->doors);
   free(lv->traps);
+  free(lv->pendulums);
   free(lv->levers);
   free(lv->portals);
   free(lv->torches);

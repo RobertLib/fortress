@@ -18,6 +18,8 @@
 #define WALL_BOLT_DAMAGE 12
 #define WALL_DUST_TIME 0.8f
 #define PIT_FALL_TIME 0.75f
+#define PENDULUM_DAMAGE 30
+#define PENDULUM_HIT_COOLDOWN 0.8f
 
 typedef struct Barrel {
   float x, y;
@@ -93,6 +95,10 @@ typedef struct Trap {
   bool seen; // set off at least once: shows on the map
 } Trap;
 
+typedef struct Pendulum {
+  float hit_cooldown; // prevents repeated damage during one blade contact
+} Pendulum;
+
 // What an arrow in flight does. Trap arrows are real missiles that strike
 // whoever stands in their way. Crossbow bolts only show a shot the hitscan
 // roll has already settled: one bound for its target homes in on it and
@@ -124,6 +130,7 @@ typedef struct Game {
   int door_count;
   Trap *traps;
   int trap_count;
+  Pendulum *pendulums; // parallel to level->pendulums; phase follows game time
   bool *lever_pulled; // parallel to level->levers
   // per-cell lookups: index into doors / levers / portals, or -1
   int *door_at, *lever_at, *portal_at;
@@ -166,6 +173,7 @@ bool game_lever_pulled(const Game *g, int x, int y);
 bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self);
 bool game_line_of_sight(const Game *g, float x0, float y0, float x1, float y1);
 Listener game_listener(const Game *g);
+float game_pendulum_angle(const PendulumSpawn *spawn, float time);
 
 // events
 void game_open_door(Game *g, Door *door, bool by_player);
