@@ -83,6 +83,14 @@ static double sfx_arrow_hit(double t, SynthState *s) {
   return (noise() * 0.5 + sine(t, 190 * (1 - t * 3)) * 0.6) * env(t, 0.07, 3) * 0.7;
 }
 
+static double sfx_pit_fall(double t, SynthState *s) {
+  // A rush of air, then stones clattering deep below the opening.
+  s->z += (noise() - s->z) * 0.08;
+  double rush = s->z * 2.2 * sin(M_PI * fmin(1, t / 0.75));
+  double impact = t > 0.5 ? (noise() * 0.35 + sine(t, 72) * 0.5) * env(t - 0.5, 0.4, 2) : 0;
+  return rush + impact;
+}
+
 static double sfx_explosion(double t, SynthState *s) {
   double n = noise();
   s->z += (n - s->z) * 0.055;
@@ -480,6 +488,7 @@ static const SynthDef SYNTHS[SND_COUNT] = {
   [SND_EMPTY] = {0.06, sfx_empty},
   [SND_ENEMY_SHOT] = {0.26, sfx_enemy_shot},
   [SND_TRAP_CLICK] = {0.16, sfx_trap_click},
+  [SND_PIT_FALL] = {0.95, sfx_pit_fall},
   [SND_ARROW_HIT] = {0.09, sfx_arrow_hit},
   [SND_EXPLOSION] = {0.85, sfx_explosion},
   [SND_WALL_HIT] = {0.15, sfx_wall_hit},

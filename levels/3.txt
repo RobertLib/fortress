@@ -3,6 +3,7 @@
 ; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, Y/y rat, W/w spider, ^ arrow trap, L lever, Z secret wall, ~ mirror portal (paired in reading order)
 ; Q gunpowder barrel, q ordinary barrel
 ; 8 cracked masonry: break with weapons or a powder blast
+; ! open pit: falling in costs a life; walk around it
 @name BARRACKS
 @floor #45443c
 @ceil #191a16
@@ -18,7 +19,7 @@
 2D2222222...2.4222..2.2.2.2.2
 2........V.......w..2.2.D.2.4
 2..cG.22222.2.....222.42242.2
-2...Q.2.HT2.......D...2...2.2
+2...Q.2.HT2....!..D...2...2.2
 2...G.2Z22222.2.2.24222.4...2
 2.....L...G.2D4...2...2q2.W.2
 4.2.222.222.2.22222.2.2TT...4

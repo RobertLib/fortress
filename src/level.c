@@ -50,6 +50,7 @@
 //     ^      arrow trap: a pressure plate on the floor; the nearest wall in
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
+//     !      open pit: a lethal hole with a narrow stone rim
 //     Z      secret wall: looks like the surrounding masonry, slides open
 //            when the nearest lever is pulled and then stays open
 //     L      lever on a wall: press use on it to open its secret wall(s).
@@ -76,6 +77,7 @@ static const int CARDINAL[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 static bool in_set(const char *set, char c) { return c && strchr(set, c) != NULL; }
 
 bool level_is_wall(char c) { return in_set("12345678B#", c); }
+bool level_is_open(char c) { return c == '.' || c == '!'; }
 
 static int item_kind_for(char ch) {
   switch (ch) {
@@ -340,8 +342,9 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
       } else if (ch == 'D' || ch == 'R') {
         cell = ch;
         lv->doors[lv->door_count++] = (DoorSpawn){x, y, ch, 0};
-      } else if (ch == 'X') {
-        cell = 'X';
+      } else if (ch == 'X' || ch == '!') {
+        cell = ch;
+        if (ch == '!') lv->pit_count++;
       } else if (ch == 'Z') {
         cell = 'Z';
         secrets[secret_cells * 2] = x;
@@ -410,7 +413,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
         int cx = tx + dx * d, cy = ty + dy * d;
         if (cx < 0 || cy < 0 || cx >= w || cy >= h) break;
         char cell = grid[cy * w + cx];
-        if (cell == '.') continue;
+        if (level_is_open(cell)) continue;
         if (level_is_wall(cell) && cell != '8') {
           int rank = (d >= 2 ? 0 : 100) + d;
           if (!found || rank < best_rank) {

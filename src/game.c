@@ -72,7 +72,7 @@ static float sound_occlusion(void *ctx, float x0, float y0, float x1, float y1) 
     }
     if (cx == tx && cy == ty) break;
     char cell = game_cell(g, cx, cy);
-    if (cell == '.' || cell == 'B' || cell == 'R') continue;
+    if (level_is_open(cell) || cell == 'B' || cell == 'R') continue;
     if (cell == 'D' || cell == 'Z') {
       walls += 1 - game_door_open_amount(g, cx, cy);
       continue;
@@ -249,6 +249,9 @@ bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self
     for (int cx = min_x; cx <= max_x; cx++) {
       char cell = game_cell(g, cx, cy);
       if (cell == '.') continue;
+      // The player can step into a pit. Grounded enemies keep back from
+      // its edge; bats and spiders suspended on silk can pass above it.
+      if (cell == '!' && (!self || self->stats->swarm || self->flying)) continue;
       if ((cell == 'D' || cell == 'R' || cell == 'Z') && game_door_open_amount(g, cx, cy) > 0.85f) continue;
       // a paired mirror lets the player (self == NULL) walk into the glass
       if (cell == '~' && !self) {
@@ -313,7 +316,7 @@ bool game_line_of_sight(const Game *g, float x0, float y0, float x1, float y1) {
       cy += step_y;
     }
     char cell = game_cell(g, cx, cy);
-    if (cell == '.') continue;
+    if (level_is_open(cell)) continue;
     if (cell == 'B' || cell == 'R') continue;
     if ((cell == 'D' || cell == 'Z') && game_door_open_amount(g, cx, cy) > 0.6f) continue;
     if (cx == tx && cy == ty) return true;
@@ -429,7 +432,7 @@ static void use_action(Game *g) {
     int cx = (int)floorf(p->x + p->dir_x * reach[i]);
     int cy = (int)floorf(p->y + p->dir_y * reach[i]);
     char cell = game_cell(g, cx, cy);
-    if (cell == '.') continue;
+    if (level_is_open(cell)) continue;
     if (cell == 'D' || cell == 'R') {
       Door *door = game_door_at(g, cx, cy);
       if (door) game_open_door(g, door, true);
@@ -456,8 +459,27 @@ static void use_action(Game *g) {
   }
 }
 
+static bool fall_into_pit(Game *g) {
+  Player *p = &g->player;
+  int x = (int)floorf(p->x), y = (int)floorf(p->y);
+  if (game_cell(g, x, y) != '!' || p->x < x + PIT_RIM || p->x > x + 1 - PIT_RIM ||
+      p->y < y + PIT_RIM || p->y > y + 1 - PIT_RIM) return false;
+  p->health = 0;
+  p->venom = 0;
+  p->speed_now = 0;
+  p->bob_amount = 0;
+  g->player_dead = true;
+  g->show_map = false;
+  g->pit_fall = 0.001f;
+  game_say(g, "YOU FELL INTO A PIT!", 2);
+  audio_play(SND_PIT_FALL, 1, 1);
+  audio_play(SND_PLAYER_DEATH, 0.8f, 0.8f);
+  return true;
+}
+
 static void update_player(Game *g, float dt, Input *in) {
   Player *p = &g->player;
+  if (fall_into_pit(g)) return;
   float run = in->run ? 1.55f : 1;
   float speed = 3.4f * run * dt;
   float rot_speed = 2.7f * dt;
@@ -490,9 +512,16 @@ static void update_player(Game *g, float dt, Input *in) {
   if (len > 0.001f) {
     mx /= len;
     my /= len;
-    float nx = p->x + mx * speed, ny = p->y + my * speed;
-    if (!game_is_blocked(g, nx, p->y, p->radius, NULL)) p->x = nx;
-    if (!game_is_blocked(g, p->x, ny, p->radius, NULL)) p->y = ny;
+    // Check the whole path, so running or a long frame cannot skip a hole.
+    int steps = maxi(1, (int)ceilf(speed / 0.1f));
+    for (int i = 0; i < steps; i++) {
+      float nx = p->x + mx * speed / steps;
+      if (!game_is_blocked(g, nx, p->y, p->radius, NULL)) p->x = nx;
+      if (fall_into_pit(g)) return;
+      float ny = p->y + my * speed / steps;
+      if (!game_is_blocked(g, p->x, ny, p->radius, NULL)) p->y = ny;
+      if (fall_into_pit(g)) return;
+    }
     p->speed_now = (int)(3.4f * run * len);
     p->bob_phase += dt * 9 * run;
     p->bob_amount = minf(1, p->bob_amount + dt * 6);
@@ -575,7 +604,7 @@ static float weapon_wall(const Game *g, float x, float y, float dx, float dy, fl
     else { dist = ny; ny += ty; cy += sy; }
     if (dist > range) break;
     char cell = game_cell(g, cx, cy);
-    if (cell == '.' || cell == 'B' || cell == 'R') continue;
+    if (level_is_open(cell) || cell == 'B' || cell == 'R') continue;
     if ((cell == 'D' || cell == 'Z') && game_door_open_amount(g, cx, cy) > 0.85f) continue;
     *wx = cx;
     *wy = cy;
@@ -883,7 +912,7 @@ static void update_projectiles(Game *g, float dt) {
       int cx = (int)floorf(a->x), cy = (int)floorf(a->y);
       char cell = game_cell(g, cx, cy);
       if (cell == 'B' || cell == 'R') continue;
-      if (cell != '.' && !((cell == 'D' || cell == 'Z') && game_door_open_amount(g, cx, cy) > 0.85f)) {
+      if (!level_is_open(cell) && !((cell == 'D' || cell == 'Z') && game_door_open_amount(g, cx, cy) > 0.85f)) {
         if (cell == '8') game_hit_wall(g, cx, cy, a->dmg > 0 ? a->dmg : WALL_BOLT_DAMAGE);
         else {
           Listener l = game_listener(g);
@@ -1022,12 +1051,18 @@ static void mark_visited(Game *g) {
 
 void game_update(Game *g, float dt, Input *input) {
   if (g->player_dead || g->completed) {
+    if (g->pit_fall > 0) g->pit_fall = minf(PIT_FALL_TIME, g->pit_fall + dt);
     decay_fx(g, dt);
     return;
   }
   g->time += dt;
   update_doors(g, dt);
   update_player(g, dt, input);
+  if (g->player_dead || g->completed) {
+    mark_visited(g);
+    decay_fx(g, dt);
+    return;
+  }
   update_weapon(g, dt, input);
   update_pickups(g);
   update_venom(g, dt);

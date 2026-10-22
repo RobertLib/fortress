@@ -335,7 +335,7 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
     }
     if (map_x < 0 || map_y < 0 || map_x >= lv->w || map_y >= lv->h) break;
     char cell = game_cell(g, map_x, map_y);
-    if (cell == '.') continue;
+    if (level_is_open(cell)) continue;
 
     if (cell == 'D' || cell == 'R' || cell == 'N') {
       // sliding door (and niche): test the plane in the middle of the cell;
@@ -415,6 +415,63 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
     return (Hit){dist, side, tex, wall_x};
   }
   return (Hit){1e9f, 0, WT_STONE, 0};
+}
+
+// Cast the floor plane into the map. A pit replaces its patch of floor
+// with a stone lip and the inside of a shaft, shaded down into darkness.
+// It never writes the column z-buffer: sight and arrows pass over a hole.
+static void render_pits(Renderer *r, Image *fb, const Game *g) {
+  if (!g->level->pit_count) return;
+  const Player *p = &g->player;
+  const Image *stone = r->assets->walls[WT_STONE];
+  for (int x = 0; x < W; x++) {
+    float camera_x = 2.0f * x / W - 1;
+    float rx = p->dir_x + p->plane_x * camera_x;
+    float ry = p->dir_y + p->plane_y * camera_x;
+    int last_cell = -1;
+    Tint tint = {1, 0, 0, 0};
+    for (int y = VIEW_H / 2; y < VIEW_H; y++) {
+      float slope = ((float)y + 0.5f - VIEW_H / 2.0f) / VIEW_H;
+      float dist = 0.5f / slope;
+      if (dist >= r->zbuffer[x]) continue;
+      float wx = p->x + rx * dist, wy = p->y + ry * dist;
+      int cx = (int)floorf(wx), cy = (int)floorf(wy);
+      if (game_cell(g, cx, cy) != '!') continue;
+      int cell = cy * g->level->w + cx;
+      if (cell != last_cell) {
+        float depth = (cx + 0.5f - p->x) * p->dir_x + (cy + 0.5f - p->y) * p->dir_y;
+        tint = surface_tint(g, cx + 0.5f, cy + 0.5f, maxf(0, depth));
+        last_cell = cell;
+      }
+      float u = wx - cx, v = wy - cy;
+      float edge = minf(minf(u, 1 - u), minf(v, 1 - v));
+      uint32_t color;
+      if (edge < PIT_RIM) {
+        // The rim's lighter bevel makes the opening readable in the gloom.
+        color = stone->px[tex_column(v) * stone->w + tex_column(u)];
+        float k = edge > PIT_RIM - 0.016f ? 1.18f : edge < 0.012f ? 0.55f : 0.85f;
+        color = pack_argb(255, minf(255, ((color >> 16) & 255) * k),
+                          minf(255, ((color >> 8) & 255) * k), minf(255, (color & 255) * k));
+      } else {
+        // Continue the same ray until it meets the inner wall of the shaft.
+        float ex = rx != 0 ? ((rx > 0 ? cx + 1 - PIT_RIM : cx + PIT_RIM) - p->x) / rx : INFINITY;
+        float ey = ry != 0 ? ((ry > 0 ? cy + 1 - PIT_RIM : cy + PIT_RIM) - p->y) / ry : INFINITY;
+        float exit = minf(ex, ey);
+        float depth = maxf(0, exit * slope - 0.5f);
+        float along = ex < ey ? p->y + ry * exit : p->x + rx * exit;
+        along -= floorf(along);
+        float tz = depth - floorf(depth);
+        color = stone->px[tex_column(tz) * stone->w + tex_column(along)];
+        float shade = maxf(0.025f, 0.65f * expf(-depth * 3.2f));
+        if (ex < ey) shade *= 0.78f;
+        color = pack_argb(255, ((color >> 16) & 255) * shade,
+                          ((color >> 8) & 255) * shade, (color & 255) * shade);
+      }
+      fb->px[(size_t)y * fb->w + x] = pack_argb(255, ((color >> 16) & 255) * tint.k + tint.r,
+                                               ((color >> 8) & 255) * tint.k + tint.g,
+                                               (color & 255) * tint.k + tint.b);
+    }
+  }
 }
 
 // Transparent walls are drawn over the opaque scene first; sprites then
@@ -1010,6 +1067,8 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     draw_column(fb, tex, tex_column(hit.wall_x), x, VIEW_H / 2.0f - line_h / 2, line_h, &tint);
   }
 
+  render_pits(r, fb, g);
+
   // Wall boxes (wardrobes, chests) are opaque geometry: drawn right after
   // the walls, z-tested and written per column, so bars and sprites clip
   // against them too.
@@ -1019,7 +1078,7 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
   render_glows(r, fb, g);
   render_sprites(r, fb, g);
   gfx_blit(fb, r->vignette, 0, 0, W, VIEW_H, 0, 0, W, VIEW_H, 1);
-  render_weapon(r, fb, g);
+  if (g->pit_fall <= 0) render_weapon(r, fb, g);
 
   // camera shake: jitter the whole view, slightly overscanned so the
   // displaced frame never exposes the edges
@@ -1038,6 +1097,15 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
       const uint32_t *src = r->shake_buf + sy * W;
       for (int x = 0; x < W; x++) row[x] = src[src_x[x]];
     }
+  }
+  if (g->pit_fall > 0) {
+    float fall = minf(1, g->pit_fall / PIT_FALL_TIME);
+    int drop = (int)(fall * fall * VIEW_H * 0.65f);
+    // As the camera sinks, the world rises and the shaft swallows the view.
+    for (int y = 0; y < VIEW_H - drop; y++)
+      memmove(fb->px + (size_t)y * fb->w, fb->px + (size_t)(y + drop) * fb->w, sizeof(uint32_t) * W);
+    gfx_fill_rect(fb, 0, VIEW_H - drop, W, drop, rgb(3, 2, 1));
+    gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(0, 0, 0, fall * fall));
   }
   render_flashes(fb, g);
   image_reset_clip(fb);
@@ -1062,6 +1130,7 @@ void render_map(Renderer *r, Image *fb, const Game *g) {
       Color c;
       switch (cell) {
       case '.': c = color_parse("#241c12"); break;
+      case '!': c = color_parse("#8c4028"); break;
       case 'D': c = door; break;
       case 'B': c = color_parse("#59636a"); break;
       case 'R': c = color_parse("#76828a"); break;
@@ -1076,6 +1145,8 @@ void render_map(Renderer *r, Image *fb, const Game *g) {
       default: c = wall; break;
       }
       gfx_fill_rect(fb, ox + x * cs, oy + y * cs, cs - 0.5f, cs - 0.5f, c);
+      if (cell == '!')
+        gfx_fill_rect(fb, ox + x * cs + 1, oy + y * cs + 1, cs - 2.5f, cs - 2.5f, color_parse("#080604"));
     }
   }
   // traps the player has set off

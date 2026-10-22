@@ -173,6 +173,16 @@ keys remain reachable without breaking them. Their damage and destruction
 survive saving/loading; retrying a floor rebuilds them. A wall still absorbs
 the blast that destroys it, protecting anything behind it from that explosion.
 
+### Pits
+
+Open pits have a pale stone rim around a dark shaft. Stepping into the
+opening makes you fall and costs one life on every difficulty; the floor
+can then be retried as after any other death. Walk around them — each floor
+has one, and all three keys and the gate remain reachable without crossing
+a pit. Grounded enemies avoid the holes; bats and spiders on their silk
+threads can pass above them. Sight, sound and arrows pass over the opening.
+Explored pits appear as dark, rust-bordered squares on the map.
+
 ## Levels
 
 Levels are text files in [levels/](levels/) — one character = one tile,
@@ -191,7 +201,8 @@ M    repeating crossbow        G/S/O  guard / knight / captain
 V/v  bat swarm (flying/roosting)  C/c  war hound (roaming/staying put)
 Y/y  rat (scurrying/lurking)   W/w  spider (prowling/lurking under the ceiling)
 L    lever on a wall           Z  secret wall
-^    arrow trap                ~  mirror portal (paired in reading order)
+^    arrow trap                !  open pit (lethal)
+~    mirror portal (paired in reading order)
 ```
 
 Barred walls and barred doors block movement while closed, but allow both the
@@ -211,6 +222,7 @@ blend into the surrounding masonry.
 
 An arrow trap (`^`) is a pressure plate: the nearest wall in a straight line
 becomes an arrow slit that looses a volley when the plate is stepped on.
+Use `!` for an open pit; keep a safe route around it when designing a level.
 Mirror portals (`~`) pair up in reading order — step into the glass and its
 twin draws you out on the far side.
 

@@ -17,6 +17,7 @@
 #define BREAKABLE_WALL_HEALTH 36
 #define WALL_BOLT_DAMAGE 12
 #define WALL_DUST_TIME 0.8f
+#define PIT_FALL_TIME 0.75f
 
 typedef struct Barrel {
   float x, y;
@@ -138,6 +139,7 @@ typedef struct Game {
   int bonus;
 
   float damage_flash, shake, pickup_flash, portal_flash, venom_flash;
+  float pit_fall; // death animation only; live saves never need to store it
   char message[96];
   float message_timer;
   float fire_timer;

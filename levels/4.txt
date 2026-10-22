@@ -3,6 +3,7 @@
 ; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, Y/y rat, W/w spider, ^ arrow trap, L lever, Z secret wall
 ; Q gunpowder barrel, q ordinary barrel
 ; 8 cracked masonry: break with weapons or a powder blast
+; ! open pit: falling in costs a life; walk around it
 @name THE VAULT
 @floor #3c3f42
 @ceil #15171a
@@ -20,7 +21,7 @@
 4T5SL44444484.4.44444.4544.54.4
 4T4..w....SQ...V....4...4...4.5
 444.4444...S44544...444.4T4.4.4
-4.D...5..........C....4..K5.4.4
+4.D...5......!...C....4..K5.4.4
 4.4.4.4.4.T.5.4.54444.44444.4.4
 4.4...v.....4.4.....4...H...D.4
 4...444.4.444.4.44..544.4.4.4.4

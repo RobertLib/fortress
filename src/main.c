@@ -841,7 +841,9 @@ static void draw_pause_overlay(void) {
   text(buf, W / 2.0f, 304, 11, "#c9a24a");
 }
 
-static void draw_death_fade(void) { gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(120, 0, 0, minf(0.7f, death_delay * 0.6f))); }
+static void draw_death_fade(void) {
+  gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(game->pit_fall > 0 ? 0 : 120, 0, 0, minf(0.7f, death_delay * 0.6f)));
+}
 
 static void draw_died_overlay(void) {
   char buf[32];

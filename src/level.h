@@ -104,7 +104,7 @@ typedef struct Level {
   Hanging *hangings;
   int hanging_count;
   float start_x, start_y, start_dx, start_dy;
-  int secret_count, key_count, treasure_count;
+  int secret_count, key_count, treasure_count, pit_count;
 } Level;
 
 // Parses a level from text. On failure returns false with a message in err.
@@ -113,5 +113,10 @@ void level_free(Level *lv);
 
 // Solid masonry cells (including the see-through bars "B").
 bool level_is_wall(char c);
+// Empty space at eye/arrow height: ordinary floor or an open pit.
+bool level_is_open(char c);
+
+// The stone lip around each pit; the opening starts inside this border.
+#define PIT_RIM 0.06f
 
 #endif

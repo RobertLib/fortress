@@ -3,6 +3,7 @@
 ; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, Y/y rat, W/w spider, ^ arrow trap, L lever, Z secret wall
 ; Q gunpowder barrel, q ordinary barrel
 ; 8 cracked masonry: break with weapons or a powder blast
+; ! open pit: falling in costs a life; walk around it
 @name GUARDHOUSE
 @floor #4a4038
 @ceil #1e1914
@@ -21,7 +22,7 @@
 1D6TZ.v....T1.....1..K1.1
 1.111L1D61111.1...1.1D1.1
 1...T...1FGc....G.1.1...1
-1.1T..q.6.11111q..1.1.111
+1.1T.!q.6.11111q..1.1.111
 1.......1A1..D.....w....1
 111.1.1K111.1111..1.111.1
 1HZ...Y..y..1.H..H......1
