@@ -10,6 +10,7 @@
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 #define STONE_BASE "#6b6157" // default masonry tone
+#define DUNGEON_BASE "#565049" // the darker stone of the dungeon walls
 
 // ------------------------------------------------------------------ painting
 
@@ -134,7 +135,7 @@ static Image *timber_texture(uint32_t seed) {
 // Dungeon wall: dark stone with a barred window opening.
 static Image *dungeon_texture(uint32_t seed) {
   static const int bars[] = {21, 28, 35, 42};
-  Image *c = stone_texture(seed, "#565049", false);
+  Image *c = stone_texture(seed, DUNGEON_BASE, false);
   rect(c, 18, 12, 28, 26, "#0d0b08");
   rect(c, 16, 38, 32, 3, "#847a6c"); // sill
   rect(c, 16, 9, 32, 3, "#847a6c");
@@ -1979,6 +1980,8 @@ void assets_build(Assets *a) {
   a->walls[WT_LEVER] = lever_texture(false);
   a->walls[WT_LEVER_PULLED] = lever_texture(true);
   a->walls[WT_NICHE] = niche_texture(121);
+  // the same stones as the dungeon wall, minus the window, for its jambs
+  a->walls[WT_DUNGEON_BARE] = stone_texture(44, DUNGEON_BASE, false);
   // the mirror's vortex churns over four frames
   for (int f = 0; f < 4; f++) a->walls[WT_PORTAL + f] = portal_texture(f);
   for (int k = 0; k < WT_COUNT; k++) a->walls_dark[k] = image_darken(a->walls[k], 0.65f);

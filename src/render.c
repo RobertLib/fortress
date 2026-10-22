@@ -130,6 +130,18 @@ static int wall_tex_for(char c) {
   }
 }
 
+// The sides of a door or niche opening (and of a secret wall slid aside)
+// are its jambs. They keep their wall's masonry but none of its dressing:
+// a banner, window, slit or mirror belongs on the face, not in the reveal.
+static int jamb_tex(int tex) {
+  switch (tex) {
+  case WT_DUNGEON: return WT_DUNGEON_BARE;
+  case WT_BANNER:
+  case WT_SLIT: return WT_STONE;
+  default: return tex >= WT_PORTAL && tex <= WT_PORTAL_LAST ? WT_STONE : tex;
+  }
+}
+
 static const Image *shaded(const Image *img, int bucket) {
   if (bucket == 0) return img;
   Image *m = (Image *)img;
@@ -366,32 +378,37 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
       push_overlay(r, column, dist, side, WT_BARS, wall_x);
       continue;
     }
+    int tex;
     if (cell == '~') {
       // mirror portal: the vortex in the glass churns through four texture
       // frames keyed to the game clock
-      return (Hit){dist, side, WT_PORTAL + ((int)floorf(g->time * 7) & 3), wall_x};
-    }
-    if (cell == 'Z') {
+      tex = WT_PORTAL + ((int)floorf(g->time * 7) & 3);
+    } else if (cell == 'Z') {
       // secret wall: disguised in the neighbours' masonry, and unlike the
       // recessed doors it sits flush on the cell face; when its lever is
       // pulled it slides aside exactly like a door leaf
       const Door *door = game_door_at((Game *)g, map_x, map_y);
       float open = door ? door->open : 0;
-      if (wall_x >= open) return (Hit){dist, side, wall_tex_for(door ? door->tex : '1'), wall_x - open};
-      continue; // ray slips through the revealed gap
-    }
-    if (cell == 'L') {
+      if (wall_x < open) continue; // ray slips through the revealed gap
+      tex = wall_tex_for(door ? door->tex : '1');
+      wall_x -= open;
+    } else if (cell == 'L') {
       // the handle hangs on a single face; the ray sees it only when it
       // struck that face — every other side is plain masonry
       const Lever *lever = game_lever_at(g, map_x, map_y);
       int face_x = side == 0 ? -step_x : 0;
       int face_y = side == 1 ? -step_y : 0;
       bool on_face = lever && lever->dx == face_x && lever->dy == face_y;
-      int tex = on_face ? (game_lever_pulled(g, map_x, map_y) ? WT_LEVER_PULLED : WT_LEVER)
-                        : wall_tex_for(lever ? lever->tex : '1');
-      return (Hit){dist, side, tex, wall_x};
+      tex = on_face ? (game_lever_pulled(g, map_x, map_y) ? WT_LEVER_PULLED : WT_LEVER)
+                    : wall_tex_for(lever ? lever->tex : '1');
+    } else {
+      tex = wall_tex_for(cell);
     }
-    return (Hit){dist, side, wall_tex_for(cell), wall_x};
+    // a ray that comes out of a door, a niche or an opened secret wall has
+    // struck the side of that opening
+    char from = lv->grid[(side == 1 ? map_y - step_y : map_y) * lv->w + (side == 0 ? map_x - step_x : map_x)];
+    if (from == 'D' || from == 'R' || from == 'N' || from == 'Z') tex = jamb_tex(tex);
+    return (Hit){dist, side, tex, wall_x};
   }
   return (Hit){1e9f, 0, WT_STONE, 0};
 }

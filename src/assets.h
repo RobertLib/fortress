@@ -29,6 +29,7 @@ typedef enum {
   WT_LEVER, // "L" lever, armed
   WT_LEVER_PULLED, // "l" lever, pulled
   WT_NICHE, // "N" back wall of a niche
+  WT_DUNGEON_BARE, // "4" without its window, for door and niche jambs
   WT_PORTAL, // "~" mirror portal, four animation frames
   WT_PORTAL_LAST = WT_PORTAL + 3,
   WT_COUNT

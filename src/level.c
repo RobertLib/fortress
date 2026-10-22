@@ -130,6 +130,24 @@ static bool is_floor(const Level *lv, int x, int y) {
   return x >= 0 && y >= 0 && x < lv->w && y < lv->h && lv->grid[y * lv->w + x] == '.';
 }
 
+// Does the face (dx, dy) of wall cell (x, y) belong to a stretch of wall
+// with a door set in it? The stretch runs sideways along the face for as
+// long as there is masonry with open floor in front of it — a gap in the
+// wall or a corner ends it.
+static bool wall_has_door(const Level *lv, int x, int y, int dx, int dy) {
+  for (int s = -1; s <= 1; s += 2) {
+    int ax = -dy * s, ay = dx * s;
+    for (int t = 1;; t++) {
+      int nx = x + ax * t, ny = y + ay * t;
+      if (!is_floor(lv, nx + dx, ny + dy)) break;
+      char c = lv->grid[ny * lv->w + nx];
+      if (c == '.') break;
+      if (in_set("DRX", c)) return true;
+    }
+  }
+  return false;
+}
+
 // is any torch closer than sqrt(r2) to (x, y)?
 static bool near_torch(const Level *lv, double x, double y, double r2) {
   for (int i = 0; i < lv->torch_count; i++) {
@@ -644,7 +662,9 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   // it — so masonry tiling is never disturbed. A spot needs a plain wall
   // flanked by more plain wall (so the box sits flush, with no door/bars/slit
   // at its edges), open floor two cells deep in front (never plugs a
-  // corridor), and clearance from torches and furniture.
+  // corridor), and clearance from torches and furniture. A wall with a door
+  // in it stays bare: the hearth, armour, candelabra, hangings, chains and
+  // niches below all pick from these same candidates.
   BoxCandidate *cands = malloc(sizeof(BoxCandidate) * cells * 4);
   int cand_count = 0;
   for (int y = 1; y < h - 1; y++) {
@@ -658,6 +678,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
         char flank_a = grid[(y + dx) * w + (x - dy)];
         char flank_b = grid[(y - dx) * w + (x + dy)];
         if (!in_set("1234567", flank_a) || !in_set("1234567", flank_b)) continue;
+        if (wall_has_door(lv, x, y, dx, dy)) continue;
         uint32_t hash = imul((uint32_t)(x + 59), 374761393u) ^ imul((uint32_t)(y + 23), 668265263u) ^
                         imul((uint32_t)(d + 3), 40503u);
         cands[cand_count] = (BoxCandidate){x, y, dx, dy, grid[y * w + x], hash, false, cand_count};
