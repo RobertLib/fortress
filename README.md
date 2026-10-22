@@ -193,6 +193,17 @@ contact cannot deal damage every frame. Each floor has a pendulum; explored
 ones appear on the map with a copper mark showing the swing direction.
 Saving preserves the swing timing and the brief protection after a hit.
 
+### Water
+
+Shallow pools and flowing channels run through all five floors. Blue-green
+ripples shimmer in torchlight, and streams carry their ripples downstream.
+Stone edging follows the shoreline; adjoining water tiles form one continuous
+surface. You can safely wade across: water reduces movement speed to **62%**
+for you and grounded enemies. Flying creatures pass above it at full speed.
+Entering, leaving and walking through water makes splashes; nearby water
+burbles softly, muffled by walls. Sight and arrows pass freely over the surface.
+Explored water appears blue on the map, with a mark indicating the current.
+
 ## Levels
 
 Levels are text files in [levels/](levels/) — one character = one tile,
@@ -212,6 +223,8 @@ V/v  bat swarm (flying/roosting)  C/c  war hound (roaming/staying put)
 Y/y  rat (scurrying/lurking)   W/w  spider (prowling/lurking under the ceiling)
 L    lever on a wall           Z  secret wall
 ^    arrow trap                !  open pit (lethal)
+=    shallow pool              >/<  stream flowing east/west
+}/{  stream flowing south/north
 &    pendulum (east-west)      %  pendulum (north-south)
 ~    mirror portal (paired in reading order)
 ```
@@ -234,6 +247,10 @@ blend into the surrounding masonry.
 An arrow trap (`^`) is a pressure plate: the nearest wall in a straight line
 becomes an arrow slit that looses a volley when the plate is stepped on.
 Use `!` for an open pit; keep a safe route around it when designing a level.
+Use `=` for shallow pools, `>` / `<` for eastward / westward channels, and
+`}` / `{` for southward / northward channels. Join tiles to make larger pools
+or bend a stream; automatic furniture stays on dry floor. Water is safe to
+cross and does not push the player. Its animation follows the saved world clock.
 Use `&` or `%` for a continuously swinging ceiling blade. Its pivot is at
 the tile centre; the blade swings east-west or north-south respectively.
 Keep its swing and approaches clear. Automatic furniture leaves space around it.

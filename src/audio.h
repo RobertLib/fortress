@@ -77,6 +77,8 @@ typedef enum {
   SND_VICTORY,
   SND_BLIP,
   SND_START,
+  SND_SPLASH,
+  SND_WATER_FLOW,
   SND_COUNT
 } SoundId;
 

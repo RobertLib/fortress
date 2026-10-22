@@ -5,6 +5,7 @@
 ; 8 cracked masonry: break with weapons or a powder blast
 ; ! open pit: falling in costs a life; walk around it
 ; & east-west pendulum, % north-south pendulum: time your crossing
+; = shallow pool, >/< east/west stream, }/{ south/north stream
 @name THE VAULT
 @floor #3c3f42
 @ceil #15171a
@@ -27,9 +28,9 @@
 4.4...v.....4.4.....4...H...D.4
 4...444.4.444.4.44..544.4.4.4.4
 4.4.H.4..A..Y.Y.4...ZA4...4...4
-4.44545.444.......4L444...4.4.4
-4..D..^M4....q.....F4.D.4.4.4.4
-4..4444.444S....444F4.4.4.4.4A4
+4.44545.444>>>==..4L444...4.4.4
+4..D..^M4....q==...F4.D.4.4.4.4
+4..4444.444S..==444F4.4.4.4.4A4
 4.K.H...D.A..w..4...4.....4.4.4
 44445555444.54....444444444.4.5
 4...GT.A..SK....4..F.yY.cG....4

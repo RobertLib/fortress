@@ -102,6 +102,8 @@ void enemy_init(Enemy *e, const EnemySpawn *spawn) {
 }
 
 static bool try_move(Enemy *e, Game *g, float nx, float ny, float step) {
+  if (!e->stats->swarm && !e->flying &&
+      level_is_water(game_cell(g, (int)floorf(e->x), (int)floorf(e->y)))) step *= WATER_SPEED;
   float len = hypotf(nx, ny);
   if (len == 0) len = 1;
   float tx = e->x + (nx / len) * step;

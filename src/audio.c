@@ -62,6 +62,19 @@ static double sfx_dagger(double t, SynthState *s) {
 
 static double sfx_empty(double t, SynthState *s) { return square(t, 900) * env(t, 0.05, 6) * 0.25; }
 
+static double sfx_splash(double t, SynthState *s) {
+  s->z += (noise() - s->z) * .18;
+  double bubbles = sine(t, 420 + 180 * sin(t * 37)) * env(t, .32, 2) * .14;
+  return s->z * env(t, .3, 1.8) * 2 + bubbles;
+}
+
+static double sfx_water_flow(double t, SynthState *s) {
+  s->z += (noise() - s->z) * .065;
+  double fade = fmin(1, t / .15) * fmin(1, (.9 - t) / .2);
+  double bubble = sine(t, 580 + 150 * sin(t * 19)) * pow(fmax(0, sin(t * 31)), 8) * .035;
+  return (s->z * .8 + bubble) * fade;
+}
+
 static double sfx_enemy_shot(double t, SynthState *s) {
   // enemy crossbow: deeper twang from a distance
   double snap = noise() * env(t, 0.04, 2) * 0.55;
@@ -549,6 +562,8 @@ static const SynthDef SYNTHS[SND_COUNT] = {
   [SND_VICTORY] = {2.6, sfx_victory},
   [SND_BLIP] = {0.07, sfx_blip},
   [SND_START] = {0.5, sfx_start},
+  [SND_SPLASH] = {0.32, sfx_splash},
+  [SND_WATER_FLOW] = {0.9, sfx_water_flow},
 };
 
 static float *buffers[SND_COUNT];

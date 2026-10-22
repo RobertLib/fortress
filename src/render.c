@@ -417,18 +417,21 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
   return (Hit){1e9f, 0, WT_STONE, 0};
 }
 
-// Cast the floor plane into the map. A pit replaces its patch of floor
-// with a stone lip and the inside of a shaft, shaded down into darkness.
-// It never writes the column z-buffer: sight and arrows pass over a hole.
-static void render_pits(Renderer *r, Image *fb, const Game *g) {
-  if (!g->level->pit_count) return;
+// Cast pits and shallow water into the floor plane. These surfaces never
+// write the column z-buffer: sight and arrows pass above them.
+static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
+  if (!g->level->pit_count && !g->level->water_count) return;
   const Player *p = &g->player;
   const Image *stone = r->assets->walls[WT_STONE];
+  int frame = (int)fmodf(g->time * 8, WATER_FRAMES);
+  float drift = fmodf(g->time * .35f, 1);
   for (int x = 0; x < W; x++) {
     float camera_x = 2.0f * x / W - 1;
     float rx = p->dir_x + p->plane_x * camera_x;
     float ry = p->dir_y + p->plane_y * camera_x;
     int last_cell = -1;
+    int flow_x = 0, flow_y = 0, banks = 0;
+    float light = 0;
     Tint tint = {1, 0, 0, 0};
     for (int y = VIEW_H / 2; y < VIEW_H; y++) {
       float slope = ((float)y + 0.5f - VIEW_H / 2.0f) / VIEW_H;
@@ -436,17 +439,57 @@ static void render_pits(Renderer *r, Image *fb, const Game *g) {
       if (dist >= r->zbuffer[x]) continue;
       float wx = p->x + rx * dist, wy = p->y + ry * dist;
       int cx = (int)floorf(wx), cy = (int)floorf(wy);
-      if (game_cell(g, cx, cy) != '!') continue;
+      char kind = game_cell(g, cx, cy);
+      bool water = level_is_water(kind);
+      if (kind != '!' && !water) continue;
       int cell = cy * g->level->w + cx;
       if (cell != last_cell) {
         float depth = (cx + 0.5f - p->x) * p->dir_x + (cy + 0.5f - p->y) * p->dir_y;
         tint = surface_tint(g, cx + 0.5f, cy + 0.5f, maxf(0, depth));
+        if (water) {
+          level_water_flow(kind, &flow_x, &flow_y);
+          banks = (!level_is_water(game_cell(g, cx - 1, cy)) ? 1 : 0) |
+                  (!level_is_water(game_cell(g, cx + 1, cy)) ? 2 : 0) |
+                  (!level_is_water(game_cell(g, cx, cy - 1)) ? 4 : 0) |
+                  (!level_is_water(game_cell(g, cx, cy + 1)) ? 8 : 0);
+          light = torch_light(g->level, cx + .5f, cy + .5f, g->time);
+        }
         last_cell = cell;
       }
       float u = wx - cx, v = wy - cy;
       float edge = minf(minf(u, 1 - u), minf(v, 1 - v));
       uint32_t color;
-      if (edge < PIT_RIM) {
+      if (water) {
+        // Only the outside shoreline gets a lip: adjacent water cells
+        // merge into one basin, with uninterrupted world-space ripples.
+        float bank = 1;
+        if (banks & 1) bank = minf(bank, u);
+        if (banks & 2) bank = minf(bank, 1 - u);
+        if (banks & 4) bank = minf(bank, v);
+        if (banks & 8) bank = minf(bank, 1 - v);
+        if (bank < WATER_RIM) {
+          color = stone->px[tex_column(v) * stone->w + tex_column(u)];
+          float k = bank > WATER_RIM - .015f ? .52f : .9f;
+          color = pack_argb(255, ((color >> 16) & 255) * k, ((color >> 8) & 255) * k, (color & 255) * k);
+        } else {
+          bool flowing = flow_x || flow_y;
+          float tu = wx * .5f, tv = wy * .5f;
+          if (flowing) {
+            tu = (wx * flow_x + wy * flow_y) * .5f - drift;
+            tv = (-wx * flow_y + wy * flow_x) * .5f;
+          }
+          tu -= floorf(tu);
+          tv -= floorf(tv);
+          const Image *tex = r->assets->water[flowing][frame];
+          color = tex->px[tex_column(tv) * tex->w + tex_column(tu)];
+          float red = (color >> 16) & 255, green = (color >> 8) & 255, blue = color & 255;
+          // Pale shoals and broken warm glints under the wall torches.
+          float shoal = maxf(0, 1 - (bank - WATER_RIM) / .14f);
+          float glint = maxf(0, (green - 65) / 75) * light;
+          color = pack_argb(255, red + shoal * 16 + glint * 78,
+                                green + shoal * 12 + glint * 34, blue + shoal * 5);
+        }
+      } else if (edge < PIT_RIM) {
         // The rim's lighter bevel makes the opening readable in the gloom.
         color = stone->px[tex_column(v) * stone->w + tex_column(u)];
         float k = edge > PIT_RIM - 0.016f ? 1.18f : edge < 0.012f ? 0.55f : 0.85f;
@@ -1123,7 +1166,7 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     draw_column(fb, tex, tex_column(hit.wall_x), x, VIEW_H / 2.0f - line_h / 2, line_h, &tint);
   }
 
-  render_pits(r, fb, g);
+  render_floor_features(r, fb, g);
 
   // Wall boxes (wardrobes, chests) are opaque geometry: drawn right after
   // the walls, z-tested and written per column, so bars and sprites clip
@@ -1187,6 +1230,8 @@ void render_map(Renderer *r, Image *fb, const Game *g) {
       switch (cell) {
       case '.': c = color_parse("#241c12"); break;
       case '!': c = color_parse("#8c4028"); break;
+      case '=': c = color_parse("#28535b"); break;
+      case '>': case '<': case '}': case '{': c = color_parse("#367681"); break;
       case 'D': c = door; break;
       case 'B': c = color_parse("#59636a"); break;
       case 'R': c = color_parse("#76828a"); break;
@@ -1203,6 +1248,16 @@ void render_map(Renderer *r, Image *fb, const Game *g) {
       gfx_fill_rect(fb, ox + x * cs, oy + y * cs, cs - 0.5f, cs - 0.5f, c);
       if (cell == '!')
         gfx_fill_rect(fb, ox + x * cs + 1, oy + y * cs + 1, cs - 2.5f, cs - 2.5f, color_parse("#080604"));
+      if (level_is_water(cell) && cell != '=') {
+        int dx, dy;
+        level_water_flow(cell, &dx, &dy);
+        float cx = ox + (x + .5f) * cs, cy = oy + (y + .5f) * cs;
+        Color foam = color_parse("#8bb8b6");
+        gfx_line(fb, cx - dx * cs * .25f, cy - dy * cs * .25f,
+                 cx + dx * cs * .25f, cy + dy * cs * .25f, 1, foam);
+        gfx_line(fb, cx + (dx + dy) * cs * .05f, cy + (dy - dx) * cs * .05f,
+                 cx + dx * cs * .25f, cy + dy * cs * .25f, 1, foam);
+      }
     }
   }
   // traps the player has set off

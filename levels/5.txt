@@ -5,6 +5,7 @@
 ; 8 cracked masonry: break with weapons or a powder blast
 ; ! open pit: falling in costs a life; walk around it
 ; & east-west pendulum, % north-south pendulum: time your crossing
+; = shallow pool, >/< east/west stream, }/{ south/north stream
 @name WARLORD'S KEEP
 @floor #4a3a30
 @ceil #201410
@@ -24,9 +25,9 @@
 6.5555555...5555555.555.5555555O5
 6.....5.Y.5.FTDH....5...5.D.H.5.5
 5.555.5.555.55555.5.5.556.655...5
-5...D.6......CK.5.5D5.....5...5.5
-5S6.55555..Q..6.5...55!...5.555.5
-5.5...5.....A.5.5....v....5.5SD.5
+5...D.6..==<<CK.5.5D5.....5...5.5
+5S6.55555==Q..6.5...55!...5.555.5
+5.5...5..==.A.5.5....v....5.5SD.5
 5.555.5.5..865555.55555.A.~.5.555
 5.5...5.D..F.Yy.5.H...5.S...5.5.X
 5.5.5K555556.55D555.655.5D555.5.5

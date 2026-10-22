@@ -51,6 +51,7 @@
 //            a straight line becomes an arrow slit (texture 7) and looses a
 //            volley of arrows when the plate is stepped on
 //     !      open pit: a lethal hole with a narrow stone rim
+//     =      shallow pool; >/< flowing east/west, }/{ south/north
 //     &/%    swinging ceiling blade, east-west / north-south
 //     Z      secret wall: looks like the surrounding masonry, slides open
 //            when the nearest lever is pulled and then stays open
@@ -78,7 +79,13 @@ static const int CARDINAL[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 static bool in_set(const char *set, char c) { return c && strchr(set, c) != NULL; }
 
 bool level_is_wall(char c) { return in_set("12345678B#", c); }
-bool level_is_open(char c) { return c == '.' || c == '!'; }
+bool level_is_water(char c) { return in_set("=><}{", c); }
+bool level_is_open(char c) { return c == '.' || c == '!' || level_is_water(c); }
+
+void level_water_flow(char c, int *dx, int *dy) {
+  *dx = (c == '>') - (c == '<');
+  *dy = (c == '}') - (c == '{');
+}
 
 static int item_kind_for(char ch) {
   switch (ch) {
@@ -347,6 +354,9 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
       } else if (ch == 'X' || ch == '!') {
         cell = ch;
         if (ch == '!') lv->pit_count++;
+      } else if (level_is_water(ch)) {
+        cell = ch;
+        lv->water_count++;
       } else if (ch == 'Z') {
         cell = 'Z';
         secrets[secret_cells * 2] = x;
@@ -482,7 +492,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
         int n = ny * w + nx;
         if (reachable[n]) continue;
         char c = grid[n];
-        if (c != '.' && c != 'D' && c != 'R') continue;
+        if (c != '.' && !level_is_water(c) && c != 'D' && c != 'R') continue;
         reachable[n] = 1;
         stack[top++] = n;
       }
@@ -499,7 +509,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
     for (int d = 0; d < 4; d++) {
       int nx = l->x + CARDINAL[d][0], ny = l->y + CARDINAL[d][1];
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-      if (grid[ny * w + nx] != '.' || !reachable[ny * w + nx]) continue;
+      if ((grid[ny * w + nx] != '.' && !level_is_water(grid[ny * w + nx])) || !reachable[ny * w + nx]) continue;
       int dd = (nx - door_x) * (nx - door_x) + (ny - door_y) * (ny - door_y);
       if (!found || dd < best_d) {
         found = true;
@@ -528,8 +538,11 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
     for (int d = 0; d < 4; d++) {
       int dx = CARDINAL[d][0], dy = CARDINAL[d][1];
       int nx = pt->x + dx, ny = pt->y + dy;
-      if (nx < 0 || ny < 0 || nx >= w || ny >= h || grid[ny * w + nx] != '.') continue;
-      int runs_on = cell_at_index(lv, (long)(ny + dy) * w + nx + dx) == '.' ? 1 : 0;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      char c = grid[ny * w + nx];
+      if (c != '.' && !level_is_water(c)) continue;
+      char beyond = cell_at_index(lv, (long)(ny + dy) * w + nx + dx);
+      int runs_on = beyond == '.' || level_is_water(beyond);
       int score = (reachable[ny * w + nx] ? 2 : 0) + runs_on;
       if (score > best_score) {
         best_score = score;

@@ -250,7 +250,7 @@ bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self
   for (int cy = min_y; cy <= max_y; cy++) {
     for (int cx = min_x; cx <= max_x; cx++) {
       char cell = game_cell(g, cx, cy);
-      if (cell == '.') continue;
+      if (cell == '.' || level_is_water(cell)) continue;
       // The player can step into a pit. Grounded enemies keep back from
       // its edge; bats and spiders suspended on silk can pass above it.
       if (cell == '!' && (!self || self->stats->swarm || self->flying)) continue;
@@ -555,21 +555,32 @@ static void update_player(Game *g, float dt, Input *in) {
   // frame may jump across a trap. Idle players still meet the swinging blade.
   int steps = maxi(1, (int)ceilf(speed / 0.1f));
   if (g->level->pendulum_count) steps = maxi(steps, (int)ceilf(dt / 0.01f));
+  float start_x = p->x, start_y = p->y;
   for (int i = 0; i < steps; i++) {
     if (len > 0.001f) {
-      float nx = p->x + mx * speed / steps;
+      bool wet = level_is_water(game_cell(g, (int)floorf(p->x), (int)floorf(p->y)));
+      float step = speed / steps * (wet ? WATER_SPEED : 1);
+      float nx = p->x + mx * step;
       if (!game_is_blocked(g, nx, p->y, p->radius, NULL)) p->x = nx;
       if (fall_into_pit(g)) return;
-      float ny = p->y + my * speed / steps;
+      float ny = p->y + my * step;
       if (!game_is_blocked(g, p->x, ny, p->radius, NULL)) p->y = ny;
       if (fall_into_pit(g)) return;
+      if (wet != level_is_water(game_cell(g, (int)floorf(p->x), (int)floorf(p->y))))
+        audio_play(SND_SPLASH, .65f, 1);
     }
     update_pendulums(g, dt / steps, g->time - dt + dt * (i + 1) / steps);
     if (g->player_dead) return;
   }
   if (len > 0.001f) {
-    p->speed_now = (int)(3.4f * run * len);
-    p->bob_phase += dt * 9 * run;
+    bool wet = level_is_water(game_cell(g, (int)floorf(p->x), (int)floorf(p->y)));
+    float drag = wet ? WATER_SPEED : 1;
+    p->speed_now = (int)(3.4f * run * len * drag);
+    float before = p->bob_phase;
+    p->bob_phase += dt * 9 * run * drag;
+    if (wet && hypotf(p->x - start_x, p->y - start_y) > .001f &&
+        floorf(before / (float)M_PI) != floorf(p->bob_phase / (float)M_PI))
+      audio_play(SND_SPLASH, .4f, 1 + .08f * sinf(p->bob_phase));
     p->bob_amount = minf(1, p->bob_amount + dt * 6);
   } else {
     p->speed_now = 0;
@@ -1095,6 +1106,32 @@ static void mark_visited(Game *g) {
     for (int x = maxi(0, px - R); x <= mini(lv->w - 1, px + R); x++) g->visited[y * lv->w + x] = 1;
 }
 
+static void update_water_audio(Game *g, float dt) {
+  // Overlapping, softly faded burbles, from the closest water within earshot.
+  // Scheduling uses the saved world clock, so no extra save state is needed.
+  if (!g->level->water_count || floorf(g->time / .7f) == floorf((g->time - dt) / .7f)) return;
+  float best = 36, sx = 0, sy = 0;
+  bool flowing = false, found = false;
+  int px = (int)floorf(g->player.x), py = (int)floorf(g->player.y);
+  for (int y = maxi(0, py - 6); y <= mini(g->level->h - 1, py + 6); y++) {
+    for (int x = maxi(0, px - 6); x <= mini(g->level->w - 1, px + 6); x++) {
+      char cell = game_cell(g, x, y);
+      if (!level_is_water(cell)) continue;
+      float dist = sq(x + .5f - g->player.x) + sq(y + .5f - g->player.y);
+      if (dist >= best) continue;
+      best = dist;
+      sx = x + .5f;
+      sy = y + .5f;
+      flowing = cell != '=';
+      found = true;
+    }
+  }
+  if (found) {
+    Listener listener = game_listener(g);
+    audio_play_at(SND_WATER_FLOW, sx, sy, &listener, flowing ? .65f : .22f, 1);
+  }
+}
+
 void game_update(Game *g, float dt, Input *input) {
   if (g->player_dead || g->completed) {
     if (g->pit_fall > 0) g->pit_fall = minf(PIT_FALL_TIME, g->pit_fall + dt);
@@ -1110,6 +1147,7 @@ void game_update(Game *g, float dt, Input *input) {
     return;
   }
   update_weapon(g, dt, input);
+  update_water_audio(g, dt);
   update_pickups(g);
   update_venom(g, dt);
   update_traps(g, dt);

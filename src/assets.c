@@ -27,6 +27,27 @@ static Color shade(const char *hex, double f) {
 
 static Color faded(const char *color, double alpha) { return color_alpha(color_parse(color), (float)alpha); }
 
+// Seamless, looping ripples. Flowing water is stretched across its current
+// by the floor renderer; all expensive wave functions run only at startup.
+static Image *water_texture(int frame, bool flowing) {
+  Image *img = image_new(TEX, TEX);
+  double time = 2 * M_PI * frame / WATER_FRAMES;
+  for (int y = 0; y < TEX; y++) {
+    for (int x = 0; x < TEX; x++) {
+      double u = 2 * M_PI * x / TEX, v = 2 * M_PI * y / TEX;
+      double a = sin(u * 3 + sin(v * 2 + time) * .65 - time);
+      double b = sin(v * (flowing ? 7 : 4) + sin(u * 2 - time) * .8 + time);
+      double wave = (a + b) * .5;
+      double glint = pow(fmax(0, 1 - fabs(a - b) * 5), 3) * fmax(0, wave);
+      double bed = sin(u * 7 + v * 3) * sin(v * 5 - u) * 3;
+      img->px[y * TEX + x] = pack_argb(255, 22 + wave * 8 + glint * 63 + bed,
+                                            62 + wave * 14 + glint * 85 + bed,
+                                            68 + wave * 17 + glint * 83 + bed);
+    }
+  }
+  return img;
+}
+
 // floor(rand * n): a random integer in [0, n)
 static int rnd_int(Lcg *r, double n) { return (int)floor(lcg_next(r) * n); }
 
@@ -2679,6 +2700,10 @@ void assets_build(Assets *a) {
   for (int f = 0; f < 4; f++) {
     a->torches[f] = torch_sprite(f);
     a->fountains[f] = fountain_sprite(f);
+  }
+  for (int f = 0; f < WATER_FRAMES; f++) {
+    a->water[0][f] = water_texture(f, false);
+    a->water[1][f] = water_texture(f, true);
   }
 
   // armour is a free-standing billboard like the furniture; ceiling chains

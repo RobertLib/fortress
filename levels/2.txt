@@ -5,6 +5,7 @@
 ; 8 cracked masonry: break with weapons or a powder blast
 ; ! open pit: falling in costs a life; walk around it
 ; & east-west pendulum, % north-south pendulum: time your crossing
+; = shallow pool, >/< east/west stream, }/{ south/north stream
 @name THE CELLARS
 @floor #453a2c
 @ceil #1a140e
@@ -20,10 +21,10 @@
 3.1.33333..!311.333.33313.1
 3.3..SD.1.....3.3.G.3...3.3
 3.1.333.8TQ.1.3AcGF.3K3.3.3
-3D3.....Y.y.3T..3.3.3...3.3
-3.3.3333.33.3.q.1D3.333.3.3
-3.1..v....^.....Y.Y.A...3D3
-3.3333333.333...333.13333.3
+3D3.....Y.y.3T.}3.3.3...3.3
+3.3.3333.33.3.q}1D3.333.3.3
+3.1..v....^..===Y.Y.A...3D3
+3.3333333.333===333.13333.3
 3.3.D.......3.^K..YY..y.3A3
 3.3.333A..3D3.3333333.3.3.3
 3A3...3.w.3.3.3...3.D.3.3.3

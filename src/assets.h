@@ -15,6 +15,7 @@
 #define PORTRAIT_SITTERS 3
 #define EXPLOSION_FRAMES 8
 #define WALL_DUST_FRAMES 6
+#define WATER_FRAMES 16
 
 typedef enum {
   WT_STONE, // "1" rough masonry
@@ -98,6 +99,7 @@ typedef struct Assets {
   Image *crests[CREST_COUNT];
   Image *torches[4];
   Image *fountains[4];
+  Image *water[2][WATER_FRAMES]; // still ripples / flowing ripples
   // free-standing billboards: table, chair, armor, chains, statue, urn,
   // candelabra and candles (the other kinds have none)
   Image *decor[DECO_KIND_COUNT];
