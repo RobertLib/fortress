@@ -516,12 +516,13 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   // Scatter a modest number of torches along walls that border walkable
   // space. Sorting by a coordinate hash makes the layout stable while the
   // spacing pass keeps corridors from turning into rows of identical lights.
+  // The banner of "6" hangs where a torch would go, so it never takes one.
   TorchCandidate *torch_cands = malloc(sizeof(TorchCandidate) * cells * 4);
   int torch_cand_count = 0;
   for (int y = 1; y < h - 1; y++) {
     for (int x = 1; x < w - 1; x++) {
       char cell = grid[y * w + x];
-      if (!level_is_wall(cell) || cell == '7' || cell == 'B') continue;
+      if (!level_is_wall(cell) || cell == '6' || cell == '7' || cell == 'B') continue;
       for (int d = 0; d < 4; d++) {
         int dx = CARDINAL[d][0], dy = CARDINAL[d][1];
         if (grid[(y + dy) * w + x + dx] != '.') continue;
