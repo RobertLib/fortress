@@ -22,6 +22,9 @@
 //     Y/y    rat (scurrying about/lurking). Rats slip between the other
 //            actors' legs; one that spots the player rouses the rest of its
 //            pack, but they can't open doors.
+//     W/w    spider (prowling/lurking under the ceiling). A lurker drops on
+//            its silk thread when the player comes close and climbs back up
+//            once it loses him. Spiders are venomous and can't open doors.
 //     Wall torches are placed automatically on suitable stretches of masonry.
 //     Tables and chairs are likewise furnished automatically in larger rooms,
 //     and wardrobes and chests are set flush against flat wall stretches.
@@ -92,6 +95,7 @@ static int enemy_type_for(char ch) {
   case 'V': return ENEMY_BAT;
   case 'C': return ENEMY_DOG;
   case 'Y': return ENEMY_RAT;
+  case 'W': return ENEMY_SPIDER;
   default: return -1;
   }
 }
@@ -376,7 +380,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
     float best_d = 0;
     for (int i = 0; i < lv->enemy_count; i++) {
       const EnemySpawn *e = &lv->enemies[i];
-      if (e->type == ENEMY_DOG || e->type == ENEMY_BAT || e->type == ENEMY_RAT) continue;
+      if (e->type == ENEMY_DOG || e->type == ENEMY_BAT || e->type == ENEMY_RAT || e->type == ENEMY_SPIDER) continue;
       float d = sq(e->x - dog->x) + sq(e->y - dog->y);
       if (d <= 16 && (best < 0 || d < best_d)) {
         best = i;

@@ -78,6 +78,11 @@ Three ways to jump straight to a chosen level:
 - **Rat** — small, quick and frail; darts about in fits and starts, and
   one squeal sets the whole pack on you in a zigzag scurry. Rats slip
   between everyone's legs, but a closed door stops them
+- **Spider** — venomous: its bite keeps eating at your health for a few
+  seconds afterwards (a healing potion purges the poison). One prowls the
+  flagstones in long, still pauses; another lurks under the ceiling, drops
+  on you on its thread as you pass, and climbs back up when it loses you.
+  Hunting, it scuttles in bursts. Doors stop spiders too
 
 Enemies patrol, and once they spot you (or hear a crossbow shot) they
 raise the alarm and give chase — they stop to shoot, pull a knife or
@@ -97,7 +102,7 @@ H    healing potion (+25)      F  bread (+10)
 A    quiver of bolts           T  treasure (score)
 M    repeating crossbow        G/S/O  guard / knight / captain
 V/v  bat swarm (flying/roosting)  C/c  war hound (roaming/staying put)
-Y/y  rat (scurrying/lurking)
+Y/y  rat (scurrying/lurking)   W/w  spider (prowling/lurking under the ceiling)
 L    lever on a wall           Z  secret wall
 ^    arrow trap                ~  mirror portal (paired in reading order)
 ```

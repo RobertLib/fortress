@@ -969,6 +969,278 @@ static Image *rat_back_sprite(Pose pose) {
   return c;
 }
 
+// ------------------------------------------------------------------ spiders
+
+#define SPIDER_BODY "#2f2721"
+#define SPIDER_DARK "#1c1714"
+#define SPIDER_LEG "#3c3129"
+#define SPIDER_BAND "#6e5a40"
+#define SPIDER_MARK "#b0985e"
+#define SPIDER_EYE "#e04040"
+#define SPIDER_GLINT "#f4e6d0"
+#define SPIDER_FANG "#c9b98c"
+#define SPIDER_VENOM "#9ad04a"
+#define SPIDER_ICHOR "#33461f"
+#define SPIDER_SILK "#d8d3c6"
+
+// A jointed leg on the 16x16 grid: body -> knee -> foot.
+typedef struct {
+  double bx, by, kx, ky, fx, fy;
+} Leg;
+
+// Near-side legs are lit, with a pale band at the knee; the far side's
+// stay in shadow behind the body.
+static void spider_leg(Image *g, Leg l, bool near) {
+  Color c = color_parse(near ? SPIDER_LEG : SPIDER_DARK);
+  gfx_line(g, (float)(l.bx * 4), (float)(l.by * 4), (float)(l.kx * 4), (float)(l.ky * 4), 2.2f, c);
+  gfx_line(g, (float)(l.kx * 4), (float)(l.ky * 4), (float)(l.fx * 4), (float)(l.fy * 4), 1.6f, c);
+  px(g, l.kx - 0.3, l.ky - 0.3, 0.6, 0.6, near ? SPIDER_BAND : SPIDER_DARK);
+}
+
+// the same leg on the other side of the tile's middle
+static Leg mirror_leg(Leg l) { return (Leg){16 - l.bx, l.by, 16 - l.kx, l.ky, 16 - l.fx, l.fy}; }
+
+// the same leg moved over (a far-side leg peeking out behind a near one)
+static Leg shift_leg(Leg l, double dx, double dy) {
+  return (Leg){l.bx, l.by + dy, l.kx + dx, l.ky + dy, l.fx + dx, l.fy + dy};
+}
+
+// A leg mid-stride: swung forward (s > 0) or back and lifted (s < 0).
+static Leg stride_leg(Leg l, double s) {
+  l.kx += s * 0.6;
+  l.fx += s * 1.2;
+  if (s < 0) {
+    l.ky -= 0.3;
+    l.fy -= 0.8;
+  }
+  return l;
+}
+
+// Spider billboards, set up the way the hound's are: spider_sprite() draws
+// the right-facing profile plus the shared pain/death poses, fire doubles
+// as the bite (reared up at the viewer, fangs dripping) and aim as the
+// spider hanging head-down on its dropline; the front and back views come
+// from their own painters. Its legs reach the floor at the bottom of the
+// tile.
+static Image *spider_sprite(Pose pose) {
+  Image *c = image_new(TEX, TEX);
+
+  if (pose == POSE_DEAD || pose == POSE_DIE2) {
+    // on its back, a row of legs curled up tight over the belly
+    static const Leg curled[4] = {{6.4, 13.6, 5.4, 11.6, 6.2, 10.6},
+                                  {7.6, 13.6, 6.9, 11.2, 7.8, 10.4},
+                                  {8.8, 13.6, 8.6, 11.2, 9.6, 10.6},
+                                  {10, 13.8, 10.6, 11.6, 11.2, 12.4}};
+    if (pose == POSE_DEAD) px(c, 3.4, 15.5, 8.8, 0.5, SPIDER_ICHOR);
+    for (int i = 0; i < 4; i++) spider_leg(c, shift_leg(curled[i], 0.6, -0.3), false);
+    px(c, 3, 13.4, 5.4, 2.2, SPIDER_BODY); // abdomen
+    px(c, 3.5, 13, 4.4, 0.5, SPIDER_BODY);
+    px(c, 8.2, 13.6, 3, 1.9, SPIDER_BODY);
+    px(c, 3.6, 13.1, 4.2, 0.35, SPIDER_LEG); // the paler belly turned up
+    for (int i = 0; i < 4; i++) spider_leg(c, curled[i], true);
+    return c;
+  }
+  if (pose == POSE_DIE1) {
+    // rolling over, legs flailing
+    static const Leg flail[4] = {{9, 12.6, 10.6, 9.6, 12.8, 10.6},
+                                 {8.8, 12.6, 8.4, 9.2, 9.6, 8},
+                                 {8.4, 13, 6.4, 10.4, 5.2, 9.4},
+                                 {9.8, 13.2, 12.4, 12, 14.2, 13.8}};
+    for (int i = 0; i < 4; i++) spider_leg(c, mirror_leg(flail[3 - i]), false);
+    px(c, 3, 12.4, 5.2, 2.8, SPIDER_BODY);
+    px(c, 3.5, 12, 4.2, 0.5, SPIDER_BODY);
+    px(c, 8, 12.4, 3, 2.1, SPIDER_BODY);
+    px(c, 3.9, 12.6, 2, 0.45, SPIDER_MARK);
+    for (int i = 0; i < 4; i++) spider_leg(c, flail[i], true);
+    return c;
+  }
+
+  if (pose == POSE_FIRE) {
+    // the bite, head-on: reared up tall on the hind legs (so the fangs still
+    // show at the player's feet) with the forelegs raised high, fangs spread
+    // wide and dripping venom
+    static const Leg reared[4] = {{6.4, 7.8, 3.4, 4.6, 4.8, 0.8},
+                                  {6, 8.6, 2.6, 6.8, 0.8, 12.4},
+                                  {6, 9.4, 3, 9.6, 1.6, 15.6},
+                                  {6.4, 10, 4, 11.4, 3.6, 15.8}};
+    px(c, 5.2, 10.6, 5.6, 2.6, SPIDER_DARK); // abdomen glimpsed beneath
+    for (int i = 0; i < 4; i++) {
+      spider_leg(c, reared[i], true);
+      spider_leg(c, mirror_leg(reared[i]), true);
+    }
+    px(c, 5.6, 6.6, 4.8, 4, SPIDER_BODY);
+    px(c, 6, 6.2, 4, 0.5, SPIDER_BODY);
+    px(c, 6.8, 7.2, 0.9, 0.9, SPIDER_EYE); // eight eyes: two big, six beads
+    px(c, 8.3, 7.2, 0.9, 0.9, SPIDER_EYE);
+    px(c, 6, 7.8, 0.5, 0.5, SPIDER_EYE);
+    px(c, 9.5, 7.8, 0.5, 0.5, SPIDER_EYE);
+    px(c, 7.1, 6.5, 0.45, 0.45, SPIDER_EYE);
+    px(c, 8.45, 6.5, 0.45, 0.45, SPIDER_EYE);
+    px(c, 6.15, 7.3, 0.35, 0.35, SPIDER_EYE);
+    px(c, 9.5, 7.3, 0.35, 0.35, SPIDER_EYE);
+    px(c, 7, 7.3, 0.3, 0.3, SPIDER_GLINT);
+    px(c, 8.5, 7.3, 0.3, 0.3, SPIDER_GLINT);
+    px(c, 6.2, 8.8, 1.5, 1.8, SPIDER_DARK); // chelicerae
+    px(c, 8.3, 8.8, 1.5, 1.8, SPIDER_DARK);
+    px(c, 6.4, 10.5, 0.6, 1.2, SPIDER_FANG);
+    px(c, 9, 10.5, 0.6, 1.2, SPIDER_FANG);
+    px(c, 6.9, 11.5, 0.4, 0.4, SPIDER_FANG); // fang tips hooking inward
+    px(c, 8.7, 11.5, 0.4, 0.4, SPIDER_FANG);
+    px(c, 6.95, 12.2, 0.35, 0.6, SPIDER_VENOM);
+    px(c, 8.75, 12.5, 0.35, 0.5, SPIDER_VENOM);
+    px(c, 5.1, 8.2, 0.5, 1.6, SPIDER_LEG); // feelers raised to either side
+    px(c, 10.4, 8.2, 0.5, 1.6, SPIDER_LEG);
+    return c;
+  }
+
+  if (pose == POSE_AIM) {
+    // hanging head-down on its dropline, legs splayed; the renderer runs the
+    // thread on up to the ceiling from the top of the tile
+    static const Leg splayed[4] = {{7, 8.8, 4.4, 5.6, 3.6, 3.2}, // hind legs reach up
+                                   {6.8, 9.2, 3.6, 7.6, 2.2, 6.2},
+                                   {6.8, 9.8, 3.6, 10, 2, 11.6},
+                                   {7, 10.2, 4.6, 11.4, 4, 14}}; // forelegs reach down
+    px_c(c, 7.85, 0, 0.3, 4.4, faded(SPIDER_SILK, 0.55));
+    for (int i = 0; i < 4; i++) {
+      spider_leg(c, splayed[i], true);
+      spider_leg(c, mirror_leg(splayed[i]), true);
+    }
+    px(c, 7.7, 4, 0.6, 0.4, SPIDER_DARK); // spinnerets, where the thread pays out
+    px(c, 5.8, 4.6, 4.4, 4.2, SPIDER_BODY); // abdomen up top
+    px(c, 6.3, 4.2, 3.4, 0.5, SPIDER_BODY);
+    px(c, 6.3, 8.7, 3.4, 0.4, SPIDER_BODY);
+    px(c, 6.9, 6.2, 2.2, 0.45, SPIDER_MARK); // the pale cross
+    px(c, 7.78, 5.3, 0.45, 2.2, SPIDER_MARK);
+    px(c, 6.6, 9, 2.8, 2, SPIDER_BODY); // head below
+    px(c, 7, 10.5, 0.6, 0.5, SPIDER_EYE);
+    px(c, 8.4, 10.5, 0.6, 0.5, SPIDER_EYE);
+    px(c, 7, 11, 0.8, 0.9, SPIDER_DARK);
+    px(c, 8.2, 11, 0.8, 0.9, SPIDER_DARK);
+    px(c, 7.25, 11.9, 0.4, 0.6, SPIDER_FANG);
+    px(c, 8.35, 11.9, 0.4, 0.6, SPIDER_FANG);
+    return c;
+  }
+
+  // side profile: stand / walk1 / walk2 / pain. The legs step in two
+  // alternating sets; pain cowers low with the legs drawn in.
+  static const Leg profile[4] = {{10.2, 12, 12.6, 8.8, 15.2, 15.8}, // forelegs reach ahead
+                                 {9.4, 12.2, 11, 8.4, 12.6, 15.8},
+                                 {8.6, 12.2, 7.6, 8.6, 5.8, 15.8},
+                                 {8, 12, 5.4, 9, 1.6, 15.8}}; // hind legs trail behind
+  bool pain = pose == POSE_PAIN;
+  double stride = pose == POSE_WALK1 ? 1 : pose == POSE_WALK2 ? -1 : 0;
+  double dy = pain ? 0.6 : pose == POSE_WALK2 ? -0.25 : 0;
+  Leg legs[4];
+  for (int i = 0; i < 4; i++) {
+    Leg l = profile[i];
+    if (pain) {
+      l.by += dy;
+      l.ky += 1.2;
+      l.kx += (8.6 - l.kx) * 0.2;
+      l.fx += (8.6 - l.fx) * 0.25;
+    }
+    legs[i] = l;
+  }
+  // the far side's legs, a step out of phase and a little behind
+  for (int i = 0; i < 4; i++) {
+    Leg far = stride_leg(legs[i], i % 2 ? stride : -stride);
+    spider_leg(c, shift_leg(far, 0.6, -0.3), false);
+  }
+  px(c, 2.4, 10 + dy, 5.4, 3.4, SPIDER_BODY); // abdomen, a big sack slung behind
+  px(c, 3, 9.4 + dy, 4.2, 0.6, SPIDER_BODY);
+  px(c, 3, 13.4 + dy, 4.2, 0.5, SPIDER_BODY);
+  px(c, 1.9, 10.6 + dy, 0.5, 2.2, SPIDER_BODY);
+  px(c, 1.5, 12.2 + dy, 0.5, 0.5, SPIDER_DARK); // spinnerets
+  px(c, 3.9, 10.2 + dy, 2, 0.45, SPIDER_MARK); // the pale cross on its back
+  px(c, 4.7, 9.7 + dy, 0.45, 1.6, SPIDER_MARK);
+  px(c, 7.6, 10.8 + dy, 3.2, 2.2, SPIDER_BODY); // head and thorax
+  px(c, 8, 10.4 + dy, 2.4, 0.5, SPIDER_BODY);
+  px(c, 10.6, 11.6 + dy, 1, 1.4, SPIDER_DARK); // chelicerae
+  px(c, 11.2, 11.4 + dy, 1.6, 0.45, SPIDER_LEG); // feeler
+  px(c, 12.5, 11.6 + dy, 0.45, 1, SPIDER_LEG);
+  if (pain) {
+    // fangs flung wide
+    px(c, 11.4, 12.6 + dy, 0.45, 0.9, SPIDER_FANG);
+    px(c, 10.6, 13 + dy, 0.45, 0.8, SPIDER_FANG);
+  } else {
+    px(c, 11, 13 + dy, 0.45, 0.8, SPIDER_FANG);
+  }
+  for (int i = 0; i < 4; i++) spider_leg(c, stride_leg(legs[i], i % 2 ? -stride : stride), true);
+  // the eyes last, glinting on the brow between the near legs
+  px(c, 9.9, 10.6 + dy, 0.5, 0.5, SPIDER_EYE);
+  px(c, 10.5, 11 + dy, 0.4, 0.4, SPIDER_EYE);
+  px(c, 9.3, 10.5 + dy, 0.35, 0.35, SPIDER_EYE);
+  return c;
+}
+
+// The spider head-on: its eyes catching the light under the bulk of the
+// abdomen, legs fanned out to both sides. Scuttle frames lift alternate
+// legs and bob the body.
+static const Leg SPIDER_FAN[4] = {{6.6, 12.4, 4.8, 10.4, 4.6, 15.8},
+                                  {6.4, 12.2, 3.6, 9.4, 2.8, 15.6},
+                                  {6.4, 11.8, 2.6, 9, 1.2, 15.2},
+                                  {6.6, 11.4, 2.2, 9.2, 0.4, 14.4}};
+
+// One leg of the fan: a criss-cross set of four is lifted on walk1, the
+// other set on walk2.
+static Leg fan_leg(int i, bool right, Pose pose) {
+  Leg l = SPIDER_FAN[i];
+  bool first_set = (i % 2 == 1) == right;
+  bool up = pose == POSE_WALK1 ? first_set : pose == POSE_WALK2 && !first_set;
+  if (up) {
+    l.ky -= 0.4;
+    l.fy -= 0.8;
+  }
+  return right ? mirror_leg(l) : l;
+}
+
+static Image *spider_front_sprite(Pose pose) {
+  Image *c = image_new(TEX, TEX);
+  double bob = pose == POSE_WALK2 ? 0.3 : 0;
+
+  px(c, 5.6, 9 + bob, 4.8, 2.8, SPIDER_BODY); // abdomen looming behind
+  px(c, 6.1, 8.5 + bob, 3.8, 0.6, SPIDER_BODY);
+  px(c, 7, 8.9 + bob, 2, 0.4, SPIDER_MARK);
+  for (int i = 3; i >= 0; i--) {
+    spider_leg(c, fan_leg(i, false, pose), true);
+    spider_leg(c, fan_leg(i, true, pose), true);
+  }
+  px(c, 6.2, 11 + bob, 3.6, 2.6, SPIDER_BODY); // head
+  px(c, 7, 11.4 + bob, 0.75, 0.75, SPIDER_EYE);
+  px(c, 8.25, 11.4 + bob, 0.75, 0.75, SPIDER_EYE);
+  px(c, 6.5, 11.9 + bob, 0.4, 0.4, SPIDER_EYE);
+  px(c, 9.1, 11.9 + bob, 0.4, 0.4, SPIDER_EYE);
+  px(c, 7.15, 11.5 + bob, 0.25, 0.25, SPIDER_GLINT);
+  px(c, 8.4, 11.5 + bob, 0.25, 0.25, SPIDER_GLINT);
+  px(c, 6.9, 12.6 + bob, 1, 1.3, SPIDER_DARK); // chelicerae
+  px(c, 8.1, 12.6 + bob, 1, 1.3, SPIDER_DARK);
+  px(c, 7.1, 13.8 + bob, 0.4, 0.6, SPIDER_FANG);
+  px(c, 8.5, 13.8 + bob, 0.4, 0.6, SPIDER_FANG);
+  px(c, 6.2, 12.8 + bob, 0.5, 1.4, SPIDER_LEG); // feelers
+  px(c, 9.3, 12.8 + bob, 0.5, 1.4, SPIDER_LEG);
+  return c;
+}
+
+// The spider from behind: the swollen abdomen with its pale cross hides
+// the head, the legs fanned out past it.
+static Image *spider_back_sprite(Pose pose) {
+  Image *c = image_new(TEX, TEX);
+  double bob = pose == POSE_WALK2 ? 0.3 : 0;
+
+  px(c, 6.4, 10.6 + bob, 3.2, 1.6, SPIDER_BODY); // head beyond
+  for (int i = 3; i >= 0; i--) {
+    spider_leg(c, fan_leg(i, false, pose), true);
+    spider_leg(c, fan_leg(i, true, pose), true);
+  }
+  px(c, 5.2, 10.6 + bob, 5.6, 4.2, SPIDER_BODY); // abdomen
+  px(c, 5.7, 10.1 + bob, 4.6, 0.5, SPIDER_BODY);
+  px(c, 5.7, 14.8 + bob, 4.6, 0.4, SPIDER_BODY);
+  px(c, 6.9, 11.6 + bob, 2.2, 0.5, SPIDER_MARK);
+  px(c, 7.75, 10.8 + bob, 0.5, 2.6, SPIDER_MARK);
+  px(c, 7.6, 14.4 + bob, 0.8, 0.6, SPIDER_DARK); // spinnerets
+  return c;
+}
+
 // ------------------------------------------------------------------ items
 
 static Image *item_sprite(ItemKind kind) {
@@ -2176,12 +2448,15 @@ void assets_build(Assets *a) {
   EnemySprites *bat = &a->enemies[ENEMY_BAT];
   EnemySprites *dog = &a->enemies[ENEMY_DOG];
   EnemySprites *rat = &a->enemies[ENEMY_RAT];
+  EnemySprites *spider = &a->enemies[ENEMY_SPIDER];
   for (int p = 0; p < POSE_STRIKE1; p++) {
     bat->pose[p] = bat_swarm_sprite((Pose)p);
     dog->pose[p] = dog_sprite((Pose)p);
     rat->pose[p] = rat_sprite((Pose)p);
+    spider->pose[p] = spider_sprite((Pose)p);
   }
-  // the hound's and the rat's stand and run frames seen from all four sides
+  // the hound's, the rat's and the spider's stand and run frames seen from
+  // all four sides
   for (int p = POSE_STAND; p <= POSE_WALK2; p++) {
     dog->view[p][VIEW_RIGHT] = dog->pose[p];
     dog->view[p][VIEW_LEFT] = image_mirror(dog->pose[p]);
@@ -2191,6 +2466,10 @@ void assets_build(Assets *a) {
     rat->view[p][VIEW_LEFT] = image_mirror(rat->pose[p]);
     rat->view[p][VIEW_FRONT] = rat_front_sprite((Pose)p);
     rat->view[p][VIEW_BACK] = rat_back_sprite((Pose)p);
+    spider->view[p][VIEW_RIGHT] = spider->pose[p];
+    spider->view[p][VIEW_LEFT] = image_mirror(spider->pose[p]);
+    spider->view[p][VIEW_FRONT] = spider_front_sprite((Pose)p);
+    spider->view[p][VIEW_BACK] = spider_back_sprite((Pose)p);
   }
 
   for (int k = 0; k < ITEM_BOLTS_DROP; k++) a->items[k] = item_sprite((ItemKind)k);

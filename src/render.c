@@ -644,6 +644,7 @@ typedef struct {
   float z_center; // height of the sprite's centre; otherwise it stands on the floor
   bool fullbright;
   float alpha;
+  bool dropline; // a spider's silk thread runs from the sprite's top to the ceiling
   float dist;
   int order;
 } Sprite;
@@ -657,7 +658,7 @@ static Sprite *add_sprite(float x, float y, const Image *img, float scale) {
     sprites = realloc(sprites, sizeof(Sprite) * sprite_cap);
   }
   Sprite *s = &sprites[sprite_count];
-  *s = (Sprite){x, y, img, scale, false, 0, false, 1, 0, sprite_count};
+  *s = (Sprite){x, y, img, scale, false, 0, false, 1, false, 0, sprite_count};
   sprite_count++;
   return s;
 }
@@ -679,6 +680,7 @@ static void collect_sprites(Renderer *r, const Game *g) {
     // flying enemies carry a height; footmen stand on the floor
     s->has_z = e->flying;
     s->z_center = e->fly_height;
+    s->dropline = e->stats->climber && e->flying && !enemy_dead(e);
   }
   for (int i = 0; i < g->item_count; i++) {
     const Item *it = &g->items[i];
@@ -796,14 +798,24 @@ static void render_sprites(Renderer *r, Image *fb, const Game *g) {
     // draw in vertical stripes, clipped by the wall z-buffer, darkened with
     // distance to match the wall fog
     const Image *img = s->img;
+    int bucket = 0;
     if (!s->fullbright) {
-      int bucket = shade_bucket(transform_y);
+      bucket = shade_bucket(transform_y);
       float light = torch_light(g->level, s->x, s->y, g->time);
       if (light > 0.5f)
         bucket = maxi(0, bucket - 2);
       else if (light > 0.15f)
         bucket = maxi(0, bucket - 1);
       img = shaded(s->img, bucket);
+    }
+    // the dropline goes in first, so the spider hangs in front of its own
+    // thread; a wall in front of the middle column hides all of it
+    int mid = (int)floorf(screen_x);
+    float ceil_y = VIEW_H / 2.0f - full_h / 2;
+    if (s->dropline && mid >= 0 && mid < W && transform_y < r->zbuffer[mid] && top > ceil_y) {
+      float lw = maxf(1, full_h / 240);
+      float f = SPRITE_SHADES[bucket];
+      gfx_fill_rect(fb, screen_x - lw / 2, ceil_y, lw, top + 1 - ceil_y, rgba(216 * f, 211 * f, 198 * f, 0.5f));
     }
     int x0 = maxi(0, start_x), x1 = mini(W - 1, end_x);
     int run_start = -1;
@@ -918,6 +930,9 @@ static void render_weapon(Renderer *r, Image *fb, const Game *g) {
 
 static void render_flashes(Image *fb, const Game *g) {
   if (g->portal_flash > 0) gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(150, 90, 230, minf(0.55f, g->portal_flash)));
+  // venom in the blood: a sickly green haze that throbs with every pang
+  float sick = (g->player.venom > 0 ? 0.08f : 0) + g->venom_flash * 0.5f;
+  if (sick > 0) gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(80, 160, 40, minf(0.35f, sick)));
   if (g->damage_flash > 0) gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(190, 0, 0, minf(0.55f, g->damage_flash)));
   if (g->pickup_flash > 0) gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(230, 200, 60, minf(0.3f, g->pickup_flash)));
   if (g->message[0] && g->message_timer > 0) {
@@ -1099,7 +1114,9 @@ void render_hud(Renderer *r, Image *fb, const Game *g) {
   gfx_blit(fb, ci, 0, 0, (float)ci->w, (float)ci->h, 283, y0 + 12, 48, 48, 1);
 
   snprintf(buf, sizeof buf, "%d%%", maxi(0, hp));
-  hud_panel(fb, 346, 84, "HEALTH", buf, hp > 25 ? cream : color_parse("#e05050"));
+  // the figure turns venom green while the poison is at work
+  Color hp_color = p->venom > 0 ? color_parse("#9ad04a") : hp > 25 ? cream : color_parse("#e05050");
+  hud_panel(fb, 346, 84, "HEALTH", buf, hp_color);
   if (p->weapon == WEAPON_DAGGER)
     snprintf(buf, sizeof buf, "-");
   else

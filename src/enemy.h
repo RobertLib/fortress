@@ -16,13 +16,13 @@ typedef enum {
   ES_STAND,
   ES_PATROL,
   ES_FOLLOW, // hounds at heel
-  ES_RETURN, // hounds (and rats) trotting home after a lost chase
+  ES_RETURN, // hounds (rats, spiders) trotting home after a lost chase
   ES_CHASE,
   ES_AIM,
   ES_FIRE,
   ES_WINDUP, // footmen at arm's length: knife or fist drawn back
   ES_STRIKE,
-  ES_BITE, // hounds and rats: jaws shown for a beat
+  ES_BITE, // hounds, rats and spiders: jaws shown for a beat
   ES_SWOOP, // veering off after a bite
   ES_PAIN,
   ES_DYING,
@@ -40,11 +40,15 @@ typedef struct EnemyStats {
   int melee_dmg;
   MeleeWeapon melee_weapon;
   bool swarm; // bats: fly, pass through other actors
-  bool melee; // hounds and rats: bite instead of shooting
+  bool melee; // hounds, rats and spiders: bite instead of shooting
   bool underfoot; // rats: slip between the other actors' legs, can't open doors
+  bool climber; // spiders: lurk under the ceiling, drop on a silk thread, can't open doors
+  int venom; // spiders: health a bite keeps eating away afterwards
   float radius, scale;
   SoundId alert_sound, pain_sound, death_sound, bite_sound;
   SoundId growl_sound; // melee runners only: the noise they make on the hunt
+  SoundId idle_sound; // rats and spiders: the odd noise that gives them away...
+  float chatter; // ...every so many seconds, give or take (0 = silent)
 } EnemyStats;
 
 typedef struct Enemy {
@@ -63,15 +67,15 @@ typedef struct Enemy {
   bool has_last_seen;
   float last_seen_x, last_seen_y;
   float dir_x, dir_y;
-  float face_x, face_y; // heading a hound or rat was last moving in (drives its view)
+  float face_x, face_y; // heading a hound, rat or spider was last moving in (drives its view)
   float timer;
   float anim_time;
   bool moving;
   float attack_cooldown;
   float reaction;
-  float wobble; // flight-path phase (bats)
+  float wobble; // flight-path phase (bats), weave (rats), gait (spiders)
   float flutter_timer;
-  bool flying; // bats carry a height above the floor
+  bool flying; // bats, and spiders on their thread, carry a height above the floor
   float fly_height;
 } Enemy;
 

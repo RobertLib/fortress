@@ -26,6 +26,7 @@ typedef struct {
   double ph; // oscillator phase
   double lt; // time of the previous sample
   double f;  // drifting pulse rate
+  double z;  // one-sample filter memory
 } SynthState;
 
 typedef double (*SynthFn)(double t, SynthState *s);
@@ -92,6 +93,14 @@ static double sfx_player_death(double t, SynthState *s) {
 }
 
 static double sfx_step(double t, SynthState *s) { return noise() * env(t, 0.05, 4) * 0.12; }
+
+static double sfx_venom(double t, SynthState *s) {
+  // the poison throbbing in the blood: a dull, uneasy double heartbeat
+  double lub = (sine(t, 62 - 30 * t) + sine(t, 124 - 60 * t) * 0.4) * env(t, 0.12, 2);
+  double k = t - 0.17;
+  double dub = k > 0 ? (sine(k, 52) + sine(k, 104) * 0.35) * env(k, 0.14, 2) * 0.7 : 0;
+  return (lub + dub) * 0.85;
+}
 
 // --- enemies
 
@@ -266,6 +275,73 @@ static double sfx_rat_death(double t, SynthState *s) {
   return v * fmin(1, t / 0.01) * env(t, 0.55, 1.6) * 0.4;
 }
 
+// --- spiders
+// No voice at all: hisses are noise with the lows differenced away, the
+// rest is chitin clicking and scraping.
+
+static double hiss(SynthState *s) {
+  double n = noise();
+  double v = n - s->z;
+  s->z = n;
+  return v * 0.5;
+}
+
+static double sfx_spider_hiss(double t, SynthState *s) {
+  // rearing up: a long rasping hiss over clattering fangs
+  double rasp = hiss(s) * (0.75 + 0.25 * sine(t, 31));
+  double clack = t < 0.3 && fmod(t, 0.06) < 0.005 ? noise() * 0.6 : 0;
+  double a = fmin(1, t / 0.05) * env(t, 0.6, 1.3);
+  return (rasp * 0.7 + clack) * a * 0.75;
+}
+
+static double sfx_spider_chitter(double t, SynthState *s) {
+  // mandibles working: a dry run of clicks, quickening, then trailing off
+  static const double clicks[] = {0, 0.045, 0.08, 0.105, 0.125, 0.15, 0.2};
+  double v = 0;
+  for (int i = 0; i < 7; i++) {
+    double d = t - clicks[i];
+    if (d >= 0 && d < 0.007) v += (hiss(s) + sine(d, 2600 + i * 150) * 0.5) * env(d, 0.007, 2);
+  }
+  return v * 0.45;
+}
+
+static double sfx_spider_skitter(double t, SynthState *s) {
+  // eight legs rattling over the flagstones in two staggered sets
+  static const double feet[] = {0, 0.013, 0.029, 0.041, 0.06, 0.071, 0.088, 0.1};
+  double k = fmod(t, 0.11);
+  double tick = 0;
+  for (int i = 0; i < 8; i++) {
+    double d = k - feet[i];
+    if (d >= 0 && d < 0.005) tick += hiss(s) * env(d, 0.005, 2);
+  }
+  return tick * sin(M_PI * t / 0.45) * 0.55;
+}
+
+static double sfx_spider_bite(double t, SynthState *s) {
+  // fangs clacking shut, then a wet squelch as they sink in
+  double clack = t < 0.07 && fmod(t, 0.035) < 0.006 ? noise() * 0.6 : 0;
+  s->z += (noise() - s->z) * 0.08; // smoothed noise: a low, wet gurgle
+  double squelch = t > 0.04 ? s->z * 3 * env(t - 0.04, 0.14, 1.5) : 0;
+  return (clack + squelch) * 0.8;
+}
+
+static double sfx_spider_pain(double t, SynthState *s) {
+  double dt = t - s->lt;
+  s->lt = t;
+  // a shrill, grating screech: the hiss chopped by a wavering whistle
+  s->ph += 2 * M_PI * (1900 + 500 * sine(t, 17)) * dt;
+  double v = hiss(s) * (0.5 + 0.5 * sin(s->ph)) + sin(s->ph) * 0.25;
+  return v * fmin(1, t / 0.01) * env(t, 0.28, 1.4) * 0.6;
+}
+
+static double sfx_spider_death(double t, SynthState *s) {
+  // a long hiss sagging away, the legs crackling as they curl up
+  double k = t / 0.9;
+  double rasp = hiss(s) * env(t, 0.9, 1.6) * (1 - 0.5 * k);
+  double crack = t > 0.15 && fmod(t * (8 + 14 * k), 1) < 0.08 ? noise() * 0.5 * (1 - k) : 0;
+  return (rasp * 0.6 + crack) * fmin(1, t / 0.02) * 0.7;
+}
+
 // --- pickups
 
 static double sfx_pickup(double t, SynthState *s) { return sine(t, 620 + 1800 * t) * env(t, 0.14, 3) * 0.4; }
@@ -384,6 +460,7 @@ static const SynthDef SYNTHS[SND_COUNT] = {
   [SND_PLAYER_PAIN] = {0.22, sfx_player_pain},
   [SND_PLAYER_DEATH] = {0.9, sfx_player_death},
   [SND_STEP] = {0.07, sfx_step},
+  [SND_VENOM] = {0.32, sfx_venom},
   [SND_ALERT] = {0.3, sfx_alert},
   [SND_KNIFE_SLASH] = {0.18, sfx_knife_slash},
   [SND_PUNCH] = {0.14, sfx_punch},
@@ -404,6 +481,12 @@ static const SynthDef SYNTHS[SND_COUNT] = {
   [SND_RAT_SKITTER] = {0.5, sfx_rat_skitter},
   [SND_RAT_BITE] = {0.1, sfx_rat_bite},
   [SND_RAT_DEATH] = {0.55, sfx_rat_death},
+  [SND_SPIDER_HISS] = {0.6, sfx_spider_hiss},
+  [SND_SPIDER_CHITTER] = {0.21, sfx_spider_chitter},
+  [SND_SPIDER_SKITTER] = {0.45, sfx_spider_skitter},
+  [SND_SPIDER_BITE] = {0.2, sfx_spider_bite},
+  [SND_SPIDER_PAIN] = {0.28, sfx_spider_pain},
+  [SND_SPIDER_DEATH] = {0.9, sfx_spider_death},
   [SND_PICKUP] = {0.14, sfx_pickup},
   [SND_PICKUP_AMMO] = {0.12, sfx_pickup_ammo},
   [SND_PICKUP_HEALTH] = {0.3, sfx_pickup_health},

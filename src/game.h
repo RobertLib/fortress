@@ -43,6 +43,8 @@ typedef struct Player {
   float bob_phase, bob_amount;
   int speed_now;
   float radius;
+  int venom; // health a spider's bite is still to eat away
+  float venom_timer; // until the next pang
 } Player;
 
 typedef enum { DOOR_CLOSED, DOOR_OPENING, DOOR_OPEN, DOOR_CLOSING } DoorState;
@@ -106,7 +108,7 @@ typedef struct Game {
   int total_enemies, total_treasure, total_secrets;
   int bonus;
 
-  float damage_flash, shake, pickup_flash, portal_flash;
+  float damage_flash, shake, pickup_flash, portal_flash, venom_flash;
   char message[96];
   float message_timer;
   float fire_timer;
@@ -138,6 +140,8 @@ void game_open_door(Game *g, Door *door, bool by_player);
 // SHOT_AT_ENEMY (at target) carry dmg to deliver on arrival.
 void game_loose_bolt(Game *g, float x, float y, float aim_x, float aim_y, ShotKind kind, Enemy *target, int dmg);
 void game_hurt_player(Game *g, int dmg);
+// Venom that goes on eating amount of health over the next few seconds.
+void game_poison_player(Game *g, int amount);
 void game_on_enemy_killed(Game *g, const Enemy *e);
 
 #endif

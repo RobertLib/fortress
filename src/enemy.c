@@ -12,12 +12,19 @@
 // in fits and starts, one squeal sets the whole pack on the player, and
 // they come on in a zigzag scurry. They slip between everybody's legs, but
 // a closed door stops them cold.
+// Spiders bite as well, and their venom keeps eating at the player for a
+// while afterwards. A prowler creeps over the flagstones and freezes for
+// long spells; a lurker hangs under the ceiling until the player comes
+// close, drops on him on its silk thread, and climbs back up to lie in wait
+// once it loses him. Hunting, they scuttle in bursts. Doors stop them too.
 
 #include "enemy.h"
 
 #include <string.h>
 
 #include "game.h"
+
+#define PERCH_HEIGHT 0.7f // a lurking spider's centre, its back to the ceiling
 
 static const EnemyStats TYPES[ENEMY_TYPE_COUNT] = {
     [ENEMY_GUARD] = {.hp = 25, .speed = 1.7f, .range = 8, .aim_time = 0.42f, .cooldown_min = 0.7f, .cooldown_max = 1.5f,
@@ -43,7 +50,13 @@ static const EnemyStats TYPES[ENEMY_TYPE_COUNT] = {
     [ENEMY_RAT] = {.hp = 8, .speed = 3.8f, .range = 0.8f, .cooldown_min = 0.6f, .cooldown_max = 1.1f, .dmg = 4,
                    .score = 50, .drop = 0, .melee = true, .underfoot = true, .radius = 0.18f, .scale = 0.5f,
                    .alert_sound = SND_RAT_ALERT, .pain_sound = SND_RAT_SQUEAK, .death_sound = SND_RAT_DEATH,
-                   .bite_sound = SND_RAT_BITE, .growl_sound = SND_RAT_SKITTER},
+                   .bite_sound = SND_RAT_BITE, .growl_sound = SND_RAT_SKITTER, .idle_sound = SND_RAT_SQUEAK,
+                   .chatter = 4.75f},
+    [ENEMY_SPIDER] = {.hp = 20, .speed = 3.6f, .range = 0.9f, .cooldown_min = 0.8f, .cooldown_max = 1.4f, .dmg = 5,
+                      .score = 250, .drop = 0, .melee = true, .climber = true, .venom = 8, .radius = 0.26f,
+                      .scale = 0.6f, .alert_sound = SND_SPIDER_HISS, .pain_sound = SND_SPIDER_PAIN,
+                      .death_sound = SND_SPIDER_DEATH, .bite_sound = SND_SPIDER_BITE,
+                      .growl_sound = SND_SPIDER_SKITTER, .idle_sound = SND_SPIDER_CHITTER, .chatter = 8},
 };
 
 static const int CARDINALS[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
@@ -80,7 +93,12 @@ void enemy_init(Enemy *e, const EnemySpawn *spawn) {
   e->dir_y = e->face_y = (float)d[1];
   e->anim_time = frandf() * 10;
   e->wobble = frandf() * (float)M_PI * 2;
-  if (e->stats->underfoot) e->growl_timer = 1 + frandf() * 5; // a nest doesn't all squeak at once
+  if (e->stats->chatter) e->growl_timer = 1 + frandf() * 5; // a nest doesn't all pipe up at once
+  if (e->stats->climber) {
+    // lurkers start out up under the ceiling, prowlers on the flagstones
+    e->flying = !spawn->patrol;
+    e->fly_height = e->flying ? PERCH_HEIGHT : e->stats->scale / 2;
+  }
 }
 
 static bool try_move(Enemy *e, Game *g, float nx, float ny, float step) {
@@ -113,9 +131,9 @@ static bool move_toward(Enemy *e, Game *g, float tx, float ty, float step) {
   return false;
 }
 
-// chasing enemies push open the door just ahead of them (rats can't)
+// chasing enemies push open the door just ahead of them (rats and spiders can't)
 static void open_door_ahead(Enemy *e, Game *g, float nx, float ny) {
-  if (e->stats->underfoot) return;
+  if (e->stats->underfoot || e->stats->climber) return;
   Door *door = game_door_at(g, (int)floorf(e->x + nx * 0.8f), (int)floorf(e->y + ny * 0.8f));
   if (door) game_open_door(g, door, false);
 }
@@ -187,6 +205,7 @@ static void bite(Enemy *e, Game *g) {
   const Player *p = &g->player;
   play_at(e, g, e->stats->bite_sound, 1, 1);
   game_hurt_player(g, maxi(2, (int)round_half_up(2 + frand() * e->stats->dmg)));
+  if (e->stats->venom) game_poison_player(g, e->stats->venom);
   e->attack_cooldown = cooldown_roll(e->stats);
   // peel away past the player's shoulder
   float dx = e->x - p->x, dy = e->y - p->y;
@@ -268,6 +287,15 @@ void enemy_update(Enemy *e, Game *g, float dt) {
     e->fly_height = e->state == ES_STAND ? 0.8f : 0.54f + sinf(e->anim_time * 3.2f + e->wobble) * 0.05f;
     if (e->state == ES_CHASE || e->state == ES_SWOOP) flutter_wings(e, g, dt);
   }
+  if (st->climber && e->flying && e->state != ES_STAND) {
+    // roused off its perch, a spider rides its dropline down to the floor
+    // (a dead one simply falls)
+    e->fly_height -= dt * 2.2f;
+    if (e->fly_height <= st->scale / 2) {
+      e->fly_height = st->scale / 2;
+      e->flying = false;
+    }
+  }
 
   switch (e->state) {
   case ES_DEAD: return;
@@ -301,13 +329,15 @@ void enemy_update(Enemy *e, Game *g, float dt) {
           e->timer = 0.6f + frandf() * 0.9f;
         }
         e->moving = true;
-      } else if (st->underfoot) {
+      } else if (st->underfoot || st->climber) {
         // rats go in fits and starts: a quick dash along a free angle, then
-        // a pause to sniff the air (a zero heading marks the pause)
+        // a pause to sniff the air; a spider creeps a few steps and freezes
+        // for a long spell (a zero heading marks the pause)
+        bool rat = st->underfoot;
         e->timer -= dt;
         bool dashing = e->dir_x != 0 || e->dir_y != 0;
         if (dashing) {
-          if (try_move(e, g, e->dir_x, e->dir_y, st->speed * 0.6f * dt))
+          if (try_move(e, g, e->dir_x, e->dir_y, st->speed * (rat ? 0.6f : 0.3f) * dt))
             e->moving = true;
           else
             e->timer = 0; // nosed into a wall
@@ -315,12 +345,12 @@ void enemy_update(Enemy *e, Game *g, float dt) {
         if (e->timer <= 0) {
           if (dashing) {
             e->dir_x = e->dir_y = 0;
-            e->timer = 0.5f + frandf() * 1.3f;
+            e->timer = rat ? 0.5f + frandf() * 1.3f : 1.5f + frandf() * 2.5f;
           } else {
             float a = frandf() * (float)M_PI * 2;
             e->dir_x = cosf(a);
             e->dir_y = sinf(a);
-            e->timer = 0.3f + frandf() * 0.6f;
+            e->timer = rat ? 0.3f + frandf() * 0.6f : 0.8f + frandf() * 1.2f;
           }
         }
       } else if (!try_move(e, g, e->dir_x, e->dir_y, st->speed * 0.55f * dt)) {
@@ -330,16 +360,25 @@ void enemy_update(Enemy *e, Game *g, float dt) {
       } else {
         e->moving = true;
       }
+    } else if (st->climber) {
+      // spin a line and climb back up under the ceiling to lie in wait
+      e->flying = true;
+      e->fly_height = minf(PERCH_HEIGHT, e->fly_height + dt * 0.9f);
     }
-    if (st->underfoot) {
-      // the odd squeak gives a nest away before it is seen
+    if (st->chatter) {
+      // the odd squeak (or clicking of mandibles) gives a nest away before
+      // it is seen
       e->growl_timer -= dt;
       if (e->growl_timer <= 0) {
-        e->growl_timer = 2.5f + frandf() * 4.5f;
-        play_at(e, g, SND_RAT_SQUEAK, 0.45f, 0.9f + frandf() * 0.3f);
+        e->growl_timer = st->chatter * (0.5f + frandf());
+        play_at(e, g, st->idle_sound, 0.45f, 0.9f + frandf() * 0.3f);
       }
     }
-    if (st->melee) {
+    if (st->climber && e->flying) {
+      // a lurker lets the player come right up close, then drops on him
+      if (hypotf(p->x - e->x, p->y - e->y) < 2.6f && game_line_of_sight(g, e->x, e->y, p->x, p->y))
+        enemy_wake(e, g, false);
+    } else if (st->melee) {
       watch_for_player(e, g, dt);
     } else if (can_see_player(e, g)) {
       e->reaction += dt;
@@ -405,6 +444,7 @@ void enemy_update(Enemy *e, Game *g, float dt) {
       return;
     }
     if (st->melee) {
+      if (e->flying) return; // a spider still riding its dropline down
       // run down the player — or the spot he was last seen at; once the
       // trail stays cold too long, give up the hunt and head home
       bool seen = game_line_of_sight(g, e->x, e->y, p->x, p->y);
@@ -426,7 +466,9 @@ void enemy_update(Enemy *e, Game *g, float dt) {
       float d = hypotf(tx - e->x, ty - e->y);
       float k = d != 0 ? d : 1;
       float nx = (tx - e->x) / k, ny = (ty - e->y) / k;
-      if (d > 0.3f) {
+      // spiders scuttle in bursts, freezing dead still in between
+      bool frozen = st->climber && fmodf(e->anim_time * 1.3f + e->wobble, 1) > 0.7f;
+      if (d > 0.3f && !frozen) {
         // rats weave from side to side, straightening out for the bite
         float wob = st->underfoot ? sinf(e->anim_time * 7 + e->wobble) * 0.55f * minf(1, d / 2.5f) : 0;
         move_toward(e, g, tx - ny * wob * d, ty + nx * wob * d, st->speed * dt);
@@ -495,7 +537,7 @@ void enemy_update(Enemy *e, Game *g, float dt) {
     return;
 
   case ES_BITE:
-    // hounds only: jaws shown for a beat before darting off
+    // melee runners only: jaws shown for a beat before darting off
     e->timer -= dt;
     if (e->timer <= 0) {
       e->state = ES_SWOOP;
@@ -525,6 +567,8 @@ static ViewDir view_from(const Enemy *e, const Player *p) {
 
 const Image *enemy_sprite(const Enemy *e, const Assets *assets, const Player *viewer) {
   const EnemySprites *set = &assets->enemies[e->type];
+  // a spider on its dropline hangs head-down, whatever it is up to
+  if (e->stats->climber && e->flying && !enemy_dead(e)) return set->pose[POSE_AIM];
   switch (e->state) {
   case ES_DEAD: return set->pose[POSE_DEAD];
   case ES_DYING: return set->pose[e->timer > 0.2f ? POSE_DIE1 : POSE_DIE2];
@@ -536,7 +580,8 @@ const Image *enemy_sprite(const Enemy *e, const Assets *assets, const Player *vi
   case ES_STRIKE: return set->pose[POSE_STRIKE2];
   default: {
     const EnemyStats *st = e->stats;
-    int f = (int)floorf(e->anim_time * (st->swarm ? 11 : st->underfoot ? 14 : st->melee ? 9 : 5)) % 2;
+    float rate = st->swarm ? 11 : st->underfoot ? 14 : st->climber ? 12 : st->melee ? 9 : 5;
+    int f = (int)floorf(e->anim_time * rate) % 2;
     int frame = !e->moving ? 0 : f ? 1 : 2; // stand / walk1 / walk2
     if (st->melee && viewer) return set->view[frame][view_from(e, viewer)];
     static const Pose poses[3] = {POSE_STAND, POSE_WALK1, POSE_WALK2};

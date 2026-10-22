@@ -28,6 +28,9 @@ static const WeaponSpec WEAPONS[WEAPON_COUNT] = {
 #define BOLT_SPEED 20.0f
 #define BOLT_RANGE 30.0f // strays end in masonry long before this
 
+#define VENOM_TICK 0.8f // seconds between the pangs of a spider's venom
+#define VENOM_MAX 20 // however many bites, no more poison than this in the blood
+
 // How many sound-blocking cells sit on the straight line between the
 // listener and a sound source. Bars let sound through; doors muffle by how
 // closed they are. Capped — past a couple of walls it's all the same.
@@ -226,19 +229,22 @@ bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self
     if (!d->radius) continue;
     if ((d->x - x) * (d->x - x) + (d->y - y) * (d->y - y) < (r + d->radius) * (r + d->radius)) return true;
   }
-  // rats scurry underfoot: they slip between everybody's legs and nobody
-  // trips over them — only another rat jostles a rat
+  // Rats scurry underfoot: they slip between everybody's legs and nobody
+  // trips over them — only another rat jostles a rat. Whatever is up in
+  // the air (a swarm, a spider on its thread) is out of everybody's way.
+  // Two already caught overlapping (a rat the player has stepped onto, a
+  // spider dropped right on top of someone) may always move apart.
   bool underfoot = self && self->stats->underfoot;
+  float from_x = self ? self->x : g->player.x, from_y = self ? self->y : g->player.y;
   for (int i = 0; i < g->enemy_count; i++) {
     const Enemy *e = &g->enemies[i];
-    if (e == self || enemy_dead(e) || e->stats->swarm || e->stats->underfoot != underfoot) continue;
-    if (hypotf(e->x - x, e->y - y) < r + e->radius) return true;
+    if (e == self || enemy_dead(e) || e->stats->swarm || e->flying || e->stats->underfoot != underfoot) continue;
+    float d = hypotf(e->x - x, e->y - y);
+    if (d < r + e->radius && d <= hypotf(e->x - from_x, e->y - from_y)) return true;
   }
   if (self) {
-    // a rat the player has stepped onto may still scramble clear
     float d = hypotf(g->player.x - x, g->player.y - y);
-    bool clearing = underfoot && d > hypotf(g->player.x - self->x, g->player.y - self->y);
-    if (d < r + g->player.radius + 0.15f && !clearing) return true;
+    if (d < r + g->player.radius + 0.15f && d <= hypotf(g->player.x - from_x, g->player.y - from_y)) return true;
   }
   return false;
 }
@@ -569,6 +575,33 @@ void game_hurt_player(Game *g, int dmg) {
   }
 }
 
+// A spider's venom eats at the player a couple of points per pang; fresh
+// bites top it up, a healing potion purges it. It can bring him to the
+// brink, but it never finishes him off.
+void game_poison_player(Game *g, int amount) {
+  Player *p = &g->player;
+  if (g->player_dead || g->completed) return;
+  if (p->venom <= 0) p->venom_timer = VENOM_TICK;
+  p->venom = mini(VENOM_MAX, p->venom + amount);
+}
+
+static void update_venom(Game *g, float dt) {
+  Player *p = &g->player;
+  if (p->venom <= 0) return;
+  p->venom_timer -= dt;
+  if (p->venom_timer > 0) return;
+  p->venom_timer = VENOM_TICK;
+  int dmg = mini(mini(2, p->venom), p->health - 1);
+  if (dmg <= 0) {
+    p->venom = 0;
+    return;
+  }
+  p->venom -= dmg;
+  p->health -= dmg;
+  g->venom_flash = 0.35f;
+  audio_play(SND_VENOM, 0.9f, 1);
+}
+
 void game_on_enemy_killed(Game *g, const Enemy *e) {
   g->kills++;
   g->session->total_kills++;
@@ -738,6 +771,7 @@ static bool apply_pickup(Game *g, const Item *it) {
   case ITEM_POTION:
     if (p->health >= 100) return false;
     p->health = mini(100, p->health + 25);
+    p->venom = 0;
     audio_play(SND_PICKUP_HEALTH, 1, 1);
     return true;
   case ITEM_BREAD:
@@ -791,6 +825,7 @@ static void decay_fx(Game *g, float dt) {
   g->shake = maxf(0, g->shake - dt * 3.2f);
   g->pickup_flash = maxf(0, g->pickup_flash - dt * 2.5f);
   g->portal_flash = maxf(0, g->portal_flash - dt * 1.8f);
+  g->venom_flash = maxf(0, g->venom_flash - dt * 1.4f);
   g->message_timer = maxf(0, g->message_timer - dt);
 }
 
@@ -812,6 +847,7 @@ void game_update(Game *g, float dt, Input *input) {
   update_player(g, dt, input);
   update_weapon(g, dt, input);
   update_pickups(g);
+  update_venom(g, dt);
   update_traps(g, dt);
   for (int i = 0; i < g->enemy_count; i++) enemy_update(&g->enemies[i], g, dt);
   update_projectiles(g, dt);
