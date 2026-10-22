@@ -17,8 +17,17 @@ brew install cmake sdl3
 make run            # configure, build and start the game
 make run LEVEL=3    # start straight on floor 3
 make                # just build (into build/)
-make clean          # remove build/
+make release        # production build (into build/release/)
+make clean          # remove build directories
 ```
+
+`make release` builds an optimized CMake `Release` binary without debug
+tools or test executables. Run it with `./build/release/fortress`; its
+`levels/` folder is copied alongside it. The `--level` / `-l` arguments
+and title-screen number-key shortcuts are compiled out. Development builds
+from `make` and `make run` keep those shortcuts. The separate build folders
+let you switch between development and production without cleaning.
+Use `RELEASE_DIR=/path/to/output` to change the production build directory.
 
 The Makefile is a thin wrapper around CMake, which you can also drive
 directly:
@@ -27,6 +36,13 @@ directly:
 cmake -B build
 cmake --build build
 ./build/fortress
+```
+
+For a production build directly with CMake:
+
+```sh
+cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release -DFORTRESS_DEBUG_TOOLS=OFF -DBUILD_TESTING=OFF
+cmake --build build/release --config Release
 ```
 
 Run the regression checks with `ctest --test-dir build --output-on-failure`.
@@ -103,7 +119,9 @@ map-incompatible saves display a message and leave the current run intact.
 
 ### Debug
 
-Three ways to jump straight to a chosen level:
+Development builds (`FORTRESS_DEBUG_TOOLS=ON`, the default) offer three
+ways to jump straight to a chosen level. These are unavailable in
+`make release` builds:
 
 - `make run LEVEL=3`
 - start the game with `--level 3` (or `-l 3`)

@@ -37,7 +37,24 @@ int main(void) {
   strcpy(save_path, "test-savegame-ui.dat");
   SDL_RemovePath(save_path);
   CHECK(load_levels());
-  set_state(ST_MENU);
+
+  set_state(ST_INTRO);
+  on_key_down(SDL_SCANCODE_3);
+#if FORTRESS_DEBUG_TOOLS
+  CHECK(state == ST_LEVEL_START && game && game->level_index == 2);
+  char *warp_args[] = {"fortress", "--level", "3"};
+  char *short_warp_args[] = {"fortress", "-l", "2"};
+  CHECK(warp_arg(3, warp_args) == 3);
+  CHECK(warp_arg(3, short_warp_args) == 2);
+  game_destroy(game);
+  game = NULL;
+#else
+  CHECK(state == ST_INTRO && !game);
+#endif
+  set_state(ST_INTRO);
+  on_key_down(SDL_SCANCODE_RETURN);
+  CHECK(state == ST_MENU);
+
   check_layout(main_menu(), MAIN_MENU_SPAN);
   click_item(main_menu(), MAIN_MENU_SPAN, "LOAD GAME");
   CHECK(state == ST_MENU && !game && notice_timer > 0);

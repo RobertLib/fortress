@@ -396,7 +396,9 @@ static void handle_state_key(SDL_Scancode sc) {
       blip();
       main_menu_index = 0;
       set_state(ST_MENU);
-    } else if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_9) {
+    }
+#if FORTRESS_DEBUG_TOOLS
+    else if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_9) {
       // debug: a number key on the title screen warps to that level
       int n = sc - SDL_SCANCODE_1 + 1;
       if (n <= LEVEL_COUNT) {
@@ -404,6 +406,7 @@ static void handle_state_key(SDL_Scancode sc) {
         new_game(n - 1, selected_difficulty);
       }
     }
+#endif
     break;
   case ST_MENU: {
     Menu m = main_menu();
@@ -984,6 +987,7 @@ static bool load_levels(void) {
   return true;
 }
 
+#if FORTRESS_DEBUG_TOOLS
 // debug: --level N skips the title screen and starts on that level
 static int warp_arg(int argc, char **argv) {
   for (int i = 1; i + 1 < argc; i++) {
@@ -994,6 +998,7 @@ static int warp_arg(int argc, char **argv) {
   }
   return 0;
 }
+#endif
 
 int main(int argc, char **argv) {
   if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
@@ -1033,10 +1038,12 @@ int main(int argc, char **argv) {
   if (!load_levels()) {
     set_state(ST_ERROR);
   } else {
+#if FORTRESS_DEBUG_TOOLS
     int warp = warp_arg(argc, argv);
     if (warp)
       new_game(warp - 1, selected_difficulty);
     else
+#endif
       set_state(ST_INTRO);
   }
 

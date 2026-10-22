@@ -8,6 +8,8 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+option(FORTRESS_DEBUG_TOOLS "Enable development shortcuts such as level selection" ON)
+
 find_package(SDL3 REQUIRED CONFIG COMPONENTS SDL3)
 
 set(GAME_SOURCES
@@ -30,6 +32,7 @@ add_executable(fortress
 )
 
 target_link_libraries(fortress PRIVATE SDL3::SDL3)
+target_compile_definitions(fortress PRIVATE FORTRESS_DEBUG_TOOLS=$<BOOL:${FORTRESS_DEBUG_TOOLS}>)
 
 if(MSVC)
   target_compile_options(fortress PRIVATE /W3)
@@ -53,6 +56,7 @@ if(BUILD_TESTING)
   foreach(test_target barrel_tests difficulty_tests savegame_tests savegame_ui_tests wall_tests)
     target_include_directories(${test_target} PRIVATE src)
     target_link_libraries(${test_target} PRIVATE SDL3::SDL3)
+    target_compile_definitions(${test_target} PRIVATE FORTRESS_DEBUG_TOOLS=$<BOOL:${FORTRESS_DEBUG_TOOLS}>)
     if(MSVC)
       target_compile_options(${test_target} PRIVATE /W3)
     else()
