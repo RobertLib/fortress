@@ -23,6 +23,7 @@ typedef enum {
   ST_LOADING,
   ST_INTRO,
   ST_MENU,
+  ST_DIFFICULTY,
   ST_CONTROLS,
   ST_QUIT,
   ST_LEVEL_START,
@@ -54,6 +55,9 @@ static float state_timer, death_delay, clock_time;
 static bool running = true;
 static bool resumable; // a run was left via the menu and can be picked back up
 static int main_menu_index, pause_menu_index;
+static int difficulty_menu_index = 1, pending_start_index;
+static Difficulty selected_difficulty = DIFFICULTY_NORMAL;
+static const Difficulty DIFFICULTY_CHOICES[] = {DIFFICULTY_EASY, DIFFICULTY_NORMAL, DIFFICULTY_HARD};
 static Input input = {.weapon = -1};
 
 // ------------------------------------------------------------------ helpers
@@ -92,12 +96,21 @@ static void start_level(int index, const Persist *persist) {
   set_state(ST_LEVEL_START);
 }
 
-static void new_game(int start_index) {
+static void new_game(int start_index, Difficulty difficulty) {
   resumable = false;
+  selected_difficulty = difficulty;
   memset(&session, 0, sizeof session);
+  session.difficulty = difficulty;
   session.lives = 3;
   session.next_life = 40000;
   start_level(start_index, NULL);
+}
+
+static void choose_difficulty(int start_index) {
+  pending_start_index = start_index;
+  for (int i = 0; i < DIFFICULTY_COUNT; i++)
+    if (DIFFICULTY_CHOICES[i] == selected_difficulty) difficulty_menu_index = i;
+  set_state(ST_DIFFICULTY);
 }
 
 static void begin_level(void) {
@@ -146,6 +159,10 @@ static const char *label_fullscreen(void) { return fullscreen() ? "FULLSCREEN: O
 static const char *label_quit(void) { return "QUIT GAME"; }
 static const char *label_resume(void) { return "RESUME"; }
 static const char *label_quit_to_menu(void) { return "QUIT TO MENU"; }
+static const char *label_easy(void) { return "EASY"; }
+static const char *label_normal(void) { return "NORMAL"; }
+static const char *label_hard(void) { return "HARD"; }
+static const char *label_back(void) { return "BACK"; }
 
 static void act_continue(void) {
   blip();
@@ -153,8 +170,22 @@ static void act_continue(void) {
 }
 
 static void act_new_game(void) {
+  blip();
+  choose_difficulty(0);
+}
+
+static void start_difficulty(Difficulty difficulty) {
   audio_play(SND_START, 1, 1);
-  new_game(0);
+  new_game(pending_start_index, difficulty);
+}
+
+static void act_easy(void) { start_difficulty(DIFFICULTY_EASY); }
+static void act_normal(void) { start_difficulty(DIFFICULTY_NORMAL); }
+static void act_hard(void) { start_difficulty(DIFFICULTY_HARD); }
+
+static void act_back(void) {
+  blip();
+  set_state(ST_MENU);
 }
 
 static void act_controls(void) {
@@ -202,6 +233,14 @@ static const MenuItem PAUSE_MENU[] = {
 };
 #define PAUSE_MENU_COUNT 4
 
+static const MenuItem DIFFICULTY_MENU[] = {
+    {label_easy, act_easy},
+    {label_normal, act_normal},
+    {label_hard, act_hard},
+    {label_back, act_back},
+};
+#define DIFFICULTY_MENU_COUNT 4
+
 typedef struct {
   const MenuItem *items;
   int count;
@@ -218,6 +257,11 @@ static Menu pause_menu(void) {
   return m;
 }
 
+static Menu difficulty_menu(void) {
+  Menu m = {DIFFICULTY_MENU, DIFFICULTY_MENU_COUNT};
+  return m;
+}
+
 // vertical spans the fitted menus are drawn into: top, bottom, max line
 // height, max font size
 typedef struct {
@@ -226,6 +270,7 @@ typedef struct {
 
 static const MenuSpan MAIN_MENU_SPAN = {100, 360, 42, 24};
 static const MenuSpan PAUSE_MENU_SPAN = {125, VIEW_H - 10, 28, 17};
+static const MenuSpan DIFFICULTY_MENU_SPAN = {120, 285, 38, 24};
 
 typedef struct {
   float cy, line_h, size;
@@ -294,7 +339,7 @@ static void handle_state_key(SDL_Scancode sc) {
       int n = sc - SDL_SCANCODE_1 + 1;
       if (n <= LEVEL_COUNT) {
         audio_play(SND_START, 1, 1);
-        new_game(n - 1);
+        new_game(n - 1, selected_difficulty);
       }
     }
     break;
@@ -309,6 +354,13 @@ static void handle_state_key(SDL_Scancode sc) {
     }
     break;
   }
+  case ST_DIFFICULTY:
+    difficulty_menu_index = menu_nav(sc, DIFFICULTY_MENU_COUNT, difficulty_menu_index);
+    if (enter)
+      DIFFICULTY_MENU[difficulty_menu_index].action();
+    else if (esc)
+      act_back();
+    break;
   case ST_CONTROLS:
     if (enter || esc) {
       blip();
@@ -355,8 +407,8 @@ static void handle_state_key(SDL_Scancode sc) {
     break;
   case ST_GAME_OVER:
     if (enter) {
-      audio_play(SND_START, 1, 1);
-      new_game(0);
+      blip();
+      choose_difficulty(0);
     } else if (esc) {
       set_state(ST_INTRO);
     }
@@ -375,6 +427,12 @@ static void handle_state_click(float x, float y) {
     if (i >= 0) {
       main_menu_index = i;
       m.items[i].action();
+    }
+  } else if (state == ST_DIFFICULTY) {
+    int i = menu_hit_test(difficulty_menu(), DIFFICULTY_MENU_SPAN, x, y);
+    if (i >= 0) {
+      difficulty_menu_index = i;
+      DIFFICULTY_MENU[i].action();
     }
   } else if (state == ST_PAUSED) {
     int i = menu_hit_test(pause_menu(), PAUSE_MENU_SPAN, x, y);
@@ -395,6 +453,12 @@ static void handle_state_hover(float x, float y) {
     hit = menu_hit_test(main_menu(), MAIN_MENU_SPAN, x, y);
     if (hit >= 0 && hit != main_menu_index) {
       main_menu_index = hit;
+      blip();
+    }
+  } else if (state == ST_DIFFICULTY) {
+    hit = menu_hit_test(difficulty_menu(), DIFFICULTY_MENU_SPAN, x, y);
+    if (hit >= 0 && hit != difficulty_menu_index) {
+      difficulty_menu_index = hit;
       blip();
     }
   } else if (state == ST_PAUSED) {
@@ -623,6 +687,30 @@ static void draw_main_menu(void) {
   text("ARROWS / MOUSE — SELECT      ENTER / CLICK — CONFIRM      ESC — BACK", W / 2.0f, 370, 10, "#786850");
 }
 
+static void draw_difficulty(void) {
+  fill("#140e08");
+  torch_glow(80, 240);
+  title_text("CHOOSE DIFFICULTY", W / 2.0f, 80, 32, "#e9c93c");
+  rule(W / 2.0f, 98, 120);
+  draw_menu(difficulty_menu(), difficulty_menu_index, DIFFICULTY_MENU_SPAN);
+
+  if (difficulty_menu_index < DIFFICULTY_COUNT) {
+    static const char *descriptions[] = {
+        "WEAKER FOES. HALF DAMAGE. MORE BOLTS.",
+        "THE ORIGINAL FORTRESS CHALLENGE.",
+        "TOUGHER FOES. MORE DAMAGE. FEWER BOLTS.",
+    };
+    char buf[64];
+    Difficulty difficulty = DIFFICULTY_CHOICES[difficulty_menu_index];
+    const DifficultySettings *settings = game_difficulty_settings(difficulty);
+    text(descriptions[difficulty_menu_index], W / 2.0f, 310, 13, "#d8cbaa");
+    snprintf(buf, sizeof buf, "START WITH %d BOLTS. CHOSEN FOR THE WHOLE RUN.",
+             (int)round_half_up(16 * settings->ammo));
+    text(buf, W / 2.0f, 335, 11, "#a89878");
+  }
+  text("ARROWS / MOUSE — SELECT      ENTER / CLICK — START      ESC — BACK", W / 2.0f, 370, 10, "#786850");
+}
+
 static void draw_controls(void) {
   fill("#140e08");
   title_text("CONTROLS", W / 2.0f, 90, 36, "#e9c93c");
@@ -662,6 +750,8 @@ static void draw_level_start(void) {
   text("FIND 3 KEYS AND REACH THE GATE", W / 2.0f, 230, 14, "#d8cbaa");
   snprintf(buf, sizeof buf, "LIVES: %d    SCORE: %d", session.lives, session.score);
   text(buf, W / 2.0f, 262, 13, "#a89878");
+  snprintf(buf, sizeof buf, "DIFFICULTY: %s", game_difficulty_settings(session.difficulty)->name);
+  text(buf, W / 2.0f, 286, 12, "#c9a24a");
   if (blink()) text("PRESS ENTER", W / 2.0f, 320, 16, "#ead9b0");
 }
 
@@ -669,6 +759,9 @@ static void draw_pause_overlay(void) {
   gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(0, 0, 0, 0.6f));
   title_text("PAUSED", W / 2.0f, 110, 34, "#e9c93c");
   draw_menu(pause_menu(), pause_menu_index, PAUSE_MENU_SPAN);
+  char buf[32];
+  snprintf(buf, sizeof buf, "DIFFICULTY: %s", game_difficulty_settings(session.difficulty)->name);
+  text(buf, W / 2.0f, 304, 11, "#c9a24a");
 }
 
 static void draw_death_fade(void) { gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(120, 0, 0, minf(0.7f, death_delay * 0.6f))); }
@@ -754,6 +847,7 @@ static void render(void) {
   case ST_ERROR: draw_error(); break;
   case ST_INTRO: draw_intro(); break;
   case ST_MENU: draw_main_menu(); break;
+  case ST_DIFFICULTY: draw_difficulty(); break;
   case ST_CONTROLS: draw_controls(); break;
   case ST_QUIT: draw_quit(); break;
   case ST_LEVEL_START: draw_level_start(); break;
@@ -865,7 +959,7 @@ int main(int argc, char **argv) {
   } else {
     int warp = warp_arg(argc, argv);
     if (warp)
-      new_game(warp - 1);
+      new_game(warp - 1, selected_difficulty);
     else
       set_state(ST_INTRO);
   }

@@ -44,6 +44,24 @@ that unlock the **GATE** to the next floor. You have 3 lives; every
 40,000 points earns an extra life. After dying you retry the floor with
 a crossbow and a basic supply of bolts.
 
+Choose **EASY**, **NORMAL** or **HARD** after selecting **NEW GAME**. Use
+the arrow keys or mouse, then Enter or a click to start; Esc or **BACK**
+returns to the menu. Normal is selected by default and keeps the original
+balance. Later runs remember your last choice while the game stays open.
+
+| Difficulty | Enemy health | Damage taken | Starting bolts | Bolt pickups |
+|---|---:|---:|---:|---:|
+| Easy | 75% | 50% | 24 | 150% |
+| Normal | 100% | 100% | 16 | 100% |
+| Hard | 125% | 150% | 12 | 75% |
+
+Values round to the nearest whole point, with a minimum of one. Damage
+scaling includes enemy attacks, traps, explosions and spider venom.
+Bolt pickups include dropped quivers and the repeating crossbow's supply.
+The choice lasts for the whole run, including retries and later floors;
+it appears on the floor introduction and pause screen. Cancelling the
+selection leaves any run available through **CONTINUE** intact.
+
 ### Controls
 
 | Key | Action |

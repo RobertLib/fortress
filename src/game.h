@@ -21,8 +21,19 @@ typedef struct Barrel {
   float blast_timer;
 } Barrel;
 
+// Zero-initialised sessions keep the original game balance.
+typedef enum { DIFFICULTY_NORMAL, DIFFICULTY_EASY, DIFFICULTY_HARD, DIFFICULTY_COUNT } Difficulty;
+
+typedef struct DifficultySettings {
+  const char *name;
+  float enemy_health, incoming_damage, ammo;
+} DifficultySettings;
+
+const DifficultySettings *game_difficulty_settings(Difficulty difficulty);
+
 // Totals carried across the floors of one run.
 typedef struct Session {
+  Difficulty difficulty;
   int score, lives, next_life;
   int total_kills, total_treasure, total_enemies, max_treasure;
   int total_secrets_found, max_secrets;

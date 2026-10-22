@@ -21,6 +21,21 @@ static const WeaponSpec WEAPONS[WEAPON_COUNT] = {
     [WEAPON_ARBALEST] = {0.12f, 8, 16, 24, true, true, SND_ARBALEST},
 };
 
+static const DifficultySettings DIFFICULTIES[DIFFICULTY_COUNT] = {
+    [DIFFICULTY_NORMAL] = {"NORMAL", 1, 1, 1},
+    [DIFFICULTY_EASY] = {"EASY", 0.75f, 0.5f, 1.5f},
+    [DIFFICULTY_HARD] = {"HARD", 1.25f, 1.5f, 0.75f},
+};
+
+const DifficultySettings *game_difficulty_settings(Difficulty difficulty) {
+  if (difficulty < 0 || difficulty >= DIFFICULTY_COUNT) difficulty = DIFFICULTY_NORMAL;
+  return &DIFFICULTIES[difficulty];
+}
+
+static int scale_amount(int amount, float factor) {
+  return maxi(1, (int)round_half_up(amount * factor));
+}
+
 #define EXTRA_LIFE_EVERY 40000
 
 #define SHOT_Z 0.44f // chest height: where arrows and bolts fly
@@ -72,6 +87,7 @@ Game *game_create(const Level *level, int level_index, Session *session, const P
   g->level = level;
   g->level_index = level_index;
   g->session = session;
+  const DifficultySettings *difficulty = game_difficulty_settings(session->difficulty);
 
   Player *p = &g->player;
   p->x = level->start_x;
@@ -81,7 +97,7 @@ Game *game_create(const Level *level, int level_index, Session *session, const P
   p->plane_x = -level->start_dy * 0.66f;
   p->plane_y = level->start_dx * 0.66f;
   p->health = persist ? persist->health : 100;
-  p->ammo = persist ? persist->ammo : 16;
+  p->ammo = persist ? persist->ammo : scale_amount(16, difficulty->ammo);
   p->weapon = persist ? persist->weapon : WEAPON_CROSSBOW;
   p->has_arbalest = persist ? persist->has_arbalest : false;
   p->radius = 0.22f;
@@ -94,7 +110,11 @@ Game *game_create(const Level *level, int level_index, Session *session, const P
 
   g->enemy_count = level->enemy_count;
   g->enemies = malloc(sizeof(Enemy) * (level->enemy_count + 1));
-  for (int i = 0; i < level->enemy_count; i++) enemy_init(&g->enemies[i], &level->enemies[i]);
+  for (int i = 0; i < level->enemy_count; i++) {
+    Enemy *e = &g->enemies[i];
+    enemy_init(e, &level->enemies[i]);
+    e->hp = scale_amount(e->hp, difficulty->enemy_health);
+  }
 
   g->barrel_count = level->barrel_count;
   g->barrels = calloc((size_t)level->barrel_count + 1, sizeof(Barrel));
@@ -630,7 +650,8 @@ static void update_weapon(Game *g, float dt, const Input *in) {
 
 void game_hurt_player(Game *g, int dmg) {
   Player *p = &g->player;
-  if (g->player_dead || g->completed) return;
+  if (g->player_dead || g->completed || dmg <= 0) return;
+  dmg = scale_amount(dmg, game_difficulty_settings(g->session->difficulty)->incoming_damage);
   p->health -= dmg;
   g->damage_flash = minf(0.75f, 0.25f + dmg / 40.0f);
   g->shake = minf(1, 0.45f + dmg / 35.0f);
@@ -648,7 +669,8 @@ void game_hurt_player(Game *g, int dmg) {
 // brink, but it never finishes him off.
 void game_poison_player(Game *g, int amount) {
   Player *p = &g->player;
-  if (g->player_dead || g->completed) return;
+  if (g->player_dead || g->completed || amount <= 0) return;
+  amount = scale_amount(amount, game_difficulty_settings(g->session->difficulty)->incoming_damage);
   if (p->venom <= 0) p->venom_timer = VENOM_TICK;
   p->venom = mini(VENOM_MAX, p->venom + amount);
 }
@@ -833,6 +855,7 @@ static void update_projectiles(Game *g, float dt) {
 
 static bool apply_pickup(Game *g, const Item *it) {
   Player *p = &g->player;
+  float ammo = game_difficulty_settings(g->session->difficulty)->ammo;
   switch (it->kind) {
   case ITEM_KEY:
     p->keys++;
@@ -860,12 +883,12 @@ static bool apply_pickup(Game *g, const Item *it) {
     return true;
   case ITEM_BOLTS:
     if (p->ammo >= 99) return false;
-    p->ammo = mini(99, p->ammo + 8);
+    p->ammo = mini(99, p->ammo + scale_amount(8, ammo));
     audio_play(SND_PICKUP_AMMO, 1, 1);
     return true;
   case ITEM_BOLTS_DROP:
     if (p->ammo >= 99) return false;
-    p->ammo = mini(99, p->ammo + 4);
+    p->ammo = mini(99, p->ammo + scale_amount(4, ammo));
     audio_play(SND_PICKUP_AMMO, 1, 1);
     return true;
   case ITEM_TREASURE:
@@ -876,7 +899,7 @@ static bool apply_pickup(Game *g, const Item *it) {
     return true;
   case ITEM_ARBALEST:
     p->has_arbalest = true;
-    p->ammo = mini(99, p->ammo + 20);
+    p->ammo = mini(99, p->ammo + scale_amount(20, ammo));
     p->weapon = WEAPON_ARBALEST;
     audio_play(SND_PICKUP_WEAPON, 1, 1);
     game_say(g, "REPEATING CROSSBOW!", 2.2f);
