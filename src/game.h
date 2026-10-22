@@ -143,6 +143,8 @@ typedef struct Game {
 
 Game *game_create(const Level *level, int level_index, Session *session, const Persist *persist);
 void game_destroy(Game *g);
+// Rebind positional audio after replacing a game or discarding a staged load.
+void game_activate(Game *g);
 void game_update(Game *g, float dt, Input *input);
 void game_say(Game *g, const char *text, float secs);
 void game_add_score(Game *g, int n);

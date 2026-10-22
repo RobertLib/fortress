@@ -17,6 +17,7 @@ set(GAME_SOURCES
   src/gfx.c
   src/audio.c
   src/common.c
+  src/savegame.c
 )
 
 add_executable(fortress
@@ -46,7 +47,9 @@ include(CTest)
 if(BUILD_TESTING)
   add_executable(barrel_tests tests/barrels.c ${GAME_SOURCES})
   add_executable(difficulty_tests tests/difficulty.c ${GAME_SOURCES})
-  foreach(test_target barrel_tests difficulty_tests)
+  add_executable(savegame_tests tests/savegame.c ${GAME_SOURCES})
+  add_executable(savegame_ui_tests tests/savegame_ui.c src/render.c src/assets.c src/weapons.c src/font.c ${GAME_SOURCES})
+  foreach(test_target barrel_tests difficulty_tests savegame_tests savegame_ui_tests)
     target_include_directories(${test_target} PRIVATE src)
     target_link_libraries(${test_target} PRIVATE SDL3::SDL3)
     if(MSVC)
@@ -58,5 +61,7 @@ if(BUILD_TESTING)
   endforeach()
   add_test(NAME barrel_combat COMMAND barrel_tests)
   add_test(NAME difficulty COMMAND difficulty_tests)
+  add_test(NAME savegame COMMAND savegame_tests)
+  add_test(NAME savegame_ui COMMAND savegame_ui_tests)
   set_tests_properties(barrel_combat PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endif()

@@ -150,9 +150,11 @@ Game *game_create(const Level *level, int level_index, Session *session, const P
   g->total_secrets = level->secret_count;
 
   // let positional audio muffle sounds that come from behind walls
-  audio_set_occlusion(sound_occlusion, g);
+  game_activate(g);
   return g;
 }
+
+void game_activate(Game *g) { audio_set_occlusion(g ? sound_occlusion : NULL, g); }
 
 void game_destroy(Game *g) {
   if (!g) return;

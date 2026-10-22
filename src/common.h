@@ -101,6 +101,7 @@ static inline double lcg_next(Lcg *r) {
 
 // General-purpose gameplay randomness, [0, 1).
 void random_seed(uint64_t seed);
+uint64_t random_state(void);
 double frand(void);
 
 #endif

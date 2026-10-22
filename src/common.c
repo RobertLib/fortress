@@ -6,6 +6,8 @@ static uint64_t rng_state = 0x9E3779B97F4A7C15ull;
 
 void random_seed(uint64_t seed) { rng_state = seed ? seed : 0x9E3779B97F4A7C15ull; }
 
+uint64_t random_state(void) { return rng_state; }
+
 double frand(void) {
   rng_state ^= rng_state >> 12;
   rng_state ^= rng_state << 25;

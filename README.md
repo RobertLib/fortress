@@ -29,7 +29,7 @@ cmake --build build
 ./build/fortress
 ```
 
-Run the combat regression checks with `ctest --test-dir build --output-on-failure`.
+Run the regression checks with `ctest --test-dir build --output-on-failure`.
 
 On other platforms install SDL 3 through your package manager (or build it
 from source) and point CMake at it, e.g. `-DCMAKE_PREFIX_PATH=/path/to/SDL3`.
@@ -62,6 +62,28 @@ The choice lasts for the whole run, including retries and later floors;
 it appears on the floor introduction and pause screen. Cancelling the
 selection leaves any run available through **CONTINUE** intact.
 
+### Save / Load
+
+Press **F5** during play to save, and **F9** to load the saved position.
+The pause menu also offers **SAVE GAME** and **LOAD GAME**; **LOAD GAME**
+is available from the main menu, including after restarting the game.
+F9 also works after death or game over.
+
+There is **one save slot**, replaced each time you save. It preserves the
+current floor, position, health, weapons, ammunition, keys, difficulty,
+score and lives, along with enemies, pickups, doors, levers, traps, barrels,
+arrows in flight and the explored map. Saving is available while alive on
+an unfinished floor. Starting a new game leaves the saved slot intact.
+**CONTINUE** resumes the run currently in memory; **LOAD GAME** restores
+the last position written to disk.
+
+Saves are written as `savegame.dat` in the per-user application data folder
+returned by `SDL_GetPrefPath("Fortress", "Fortress")`, independently of the
+working directory.
+
+Failed saves keep the previous slot. Missing, damaged, unsupported or
+map-incompatible saves display a message and leave the current run intact.
+
 ### Controls
 
 | Key | Action |
@@ -76,6 +98,7 @@ selection leaves any run available through **CONTINUE** intact.
 | `Tab` | map |
 | `M` | sound on/off |
 | `F` | fullscreen |
+| `F5` / `F9` | save / load game |
 | `Esc` | pause |
 
 ### Debug

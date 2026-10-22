@@ -15,6 +15,7 @@
 #include "gfx.h"
 #include "level.h"
 #include "render.h"
+#include "savegame.h"
 
 #define W SCREEN_W
 #define H SCREEN_H
@@ -59,6 +60,9 @@ static int difficulty_menu_index = 1, pending_start_index;
 static Difficulty selected_difficulty = DIFFICULTY_NORMAL;
 static const Difficulty DIFFICULTY_CHOICES[] = {DIFFICULTY_EASY, DIFFICULTY_NORMAL, DIFFICULTY_HARD};
 static Input input = {.weapon = -1};
+static char *save_path;
+static char notice[96];
+static float notice_timer;
 
 // ------------------------------------------------------------------ helpers
 
@@ -76,6 +80,8 @@ static void clear_input(void) {
   input.forward = input.back = input.strafe_left = input.strafe_right = false;
   input.turn_left = input.turn_right = input.run = input.strafe_mod = false;
   input.fire = input.use = false;
+  input.weapon = -1;
+  input.mouse_dx = 0;
 }
 
 // ------------------------------------------------------------------ flow
@@ -83,6 +89,8 @@ static void clear_input(void) {
 static void set_state(State s) {
   state = s;
   state_timer = 0;
+  clear_input();
+  notice_timer = 0;
   // once the run has ended there is nothing left to continue
   if (s == ST_GAME_OVER || s == ST_VICTORY) resumable = false;
 }
@@ -144,6 +152,54 @@ static int level_bonus(void) {
   return (int)round_half_up(kill_pct * 1000 + treasure_pct * 1000 + time_bonus);
 }
 
+// ------------------------------------------------------------------ save / load
+
+static const char *get_save_path(void) {
+  if (save_path) return save_path;
+  char *directory = SDL_GetPrefPath("Fortress", "Fortress");
+  if (!directory) return NULL;
+  size_t size = strlen(directory) + sizeof "savegame.dat";
+  save_path = malloc(size);
+  if (save_path) snprintf(save_path, size, "%ssavegame.dat", directory);
+  SDL_free(directory);
+  return save_path;
+}
+
+static void notify_save(const char *message) {
+  snprintf(notice, sizeof notice, "%s", message);
+  notice_timer = 4;
+  if (game && state == ST_PLAYING) game_say(game, message, 3);
+}
+
+static void act_save_game(void) {
+  const char *path = get_save_path();
+  char err[96];
+  if (!path)
+    notify_save("SAVE FOLDER UNAVAILABLE");
+  else if (savegame_write(path, game, err, sizeof err)) {
+    blip();
+    notify_save("GAME SAVED");
+  } else
+    notify_save(err);
+}
+
+static void act_load_game(void) {
+  const char *path = get_save_path();
+  char err[96];
+  if (!path) {
+    notify_save("SAVE FOLDER UNAVAILABLE");
+  } else if (savegame_load(path, levels, levels_loaded, &game, &session, err, sizeof err)) {
+    selected_difficulty = session.difficulty;
+    resumable = false;
+    death_delay = 0;
+    set_state(ST_PLAYING);
+    notify_save("GAME LOADED");
+    blip();
+  } else {
+    notify_save(err);
+  }
+}
+
 // ------------------------------------------------------------------ menus
 
 typedef struct MenuItem {
@@ -153,6 +209,8 @@ typedef struct MenuItem {
 
 static const char *label_continue(void) { return "CONTINUE"; }
 static const char *label_new_game(void) { return "NEW GAME"; }
+static const char *label_save_game(void) { return "SAVE GAME"; }
+static const char *label_load_game(void) { return "LOAD GAME"; }
 static const char *label_controls(void) { return "CONTROLS"; }
 static const char *label_sound(void) { return audio_enabled() ? "SOUND: ON" : "SOUND: OFF"; }
 static const char *label_fullscreen(void) { return fullscreen() ? "FULLSCREEN: ON" : "FULLSCREEN: OFF"; }
@@ -221,17 +279,20 @@ static void act_quit_to_menu(void) {
 }
 
 static const MenuItem MAIN_MENU_FULL[] = {
-    {label_continue, act_continue}, {label_new_game, act_new_game},     {label_controls, act_controls},
-    {label_sound, act_sound},       {label_fullscreen, act_fullscreen}, {label_quit, act_quit},
+    {label_continue, act_continue}, {label_new_game, act_new_game}, {label_load_game, act_load_game},
+    {label_controls, act_controls}, {label_sound, act_sound},       {label_fullscreen, act_fullscreen},
+    {label_quit, act_quit},
 };
 
 static const MenuItem PAUSE_MENU[] = {
     {label_resume, act_resume},
+    {label_save_game, act_save_game},
+    {label_load_game, act_load_game},
     {label_sound, act_sound},
     {label_fullscreen, act_fullscreen},
     {label_quit_to_menu, act_quit_to_menu},
 };
-#define PAUSE_MENU_COUNT 4
+#define PAUSE_MENU_COUNT ((int)(sizeof PAUSE_MENU / sizeof PAUSE_MENU[0]))
 
 static const MenuItem DIFFICULTY_MENU[] = {
     {label_easy, act_easy},
@@ -248,7 +309,8 @@ typedef struct {
 
 // CONTINUE only shows while there is a run to go back to
 static Menu main_menu(void) {
-  Menu m = {resumable ? MAIN_MENU_FULL : MAIN_MENU_FULL + 1, resumable ? 6 : 5};
+  int count = (int)(sizeof MAIN_MENU_FULL / sizeof MAIN_MENU_FULL[0]);
+  Menu m = {resumable ? MAIN_MENU_FULL : MAIN_MENU_FULL + 1, resumable ? count : count - 1};
   return m;
 }
 
@@ -268,8 +330,8 @@ typedef struct {
   float top, bottom, max_line_h, max_size;
 } MenuSpan;
 
-static const MenuSpan MAIN_MENU_SPAN = {100, 360, 42, 24};
-static const MenuSpan PAUSE_MENU_SPAN = {125, VIEW_H - 10, 28, 17};
+static const MenuSpan MAIN_MENU_SPAN = {100, 335, 42, 24};
+static const MenuSpan PAUSE_MENU_SPAN = {120, 275, 28, 17};
 static const MenuSpan DIFFICULTY_MENU_SPAN = {120, 285, 38, 24};
 
 typedef struct {
@@ -495,6 +557,14 @@ static bool *key_binding(SDL_Scancode sc) {
 }
 
 static void on_key_down(SDL_Scancode sc) {
+  if (sc == SDL_SCANCODE_F5 && (state == ST_PLAYING || state == ST_PAUSED)) {
+    act_save_game();
+    return;
+  }
+  if (sc == SDL_SCANCODE_F9 && state != ST_LOADING && state != ST_ERROR && state != ST_QUIT) {
+    act_load_game();
+    return;
+  }
   bool *b = key_binding(sc);
   if (b) *b = true;
   if (sc == SDL_SCANCODE_E || sc == SDL_SCANCODE_SPACE) input.use = true;
@@ -565,6 +635,7 @@ static void handle_event(const SDL_Event *e) {
 // ------------------------------------------------------------------ update
 
 static void update(float dt) {
+  notice_timer = maxf(0, notice_timer - dt);
   if (state == ST_LEVEL_START && state_timer > 3) begin_level();
   if (state != ST_PLAYING) return;
   game_update(game, dt, &input);
@@ -684,6 +755,7 @@ static void draw_main_menu(void) {
   rule(W / 2.0f, 98, 120);
   // the block lives between the heading rule (~y100) and the hint line (~y360)
   draw_menu(main_menu(), main_menu_index, MAIN_MENU_SPAN);
+  if (notice_timer > 0) text(notice, W / 2.0f, 350, 12, "#ead9b0");
   text("ARROWS / MOUSE — SELECT      ENTER / CLICK — CONFIRM      ESC — BACK", W / 2.0f, 370, 10, "#786850");
 }
 
@@ -713,8 +785,8 @@ static void draw_difficulty(void) {
 
 static void draw_controls(void) {
   fill("#140e08");
-  title_text("CONTROLS", W / 2.0f, 90, 36, "#e9c93c");
-  rule(W / 2.0f, 108, 120);
+  title_text("CONTROLS", W / 2.0f, 70, 36, "#e9c93c");
+  rule(W / 2.0f, 88, 120);
   static const char *controls[][2] = {
       {"W A S D / ARROWS", "move & turn"},
       {"MOUSE (CLICK VIEW)", "turn & shoot"},
@@ -723,10 +795,11 @@ static void draw_controls(void) {
       {"1 / 2 / 3", "dagger, crossbow, repeater"},
       {"SHIFT / TAB / M", "run / map / sound"},
       {"F", "fullscreen"},
+      {"F5 / F9", "save / load game"},
       {"ESC", "pause menu"},
   };
-  for (int i = 0; i < 8; i++) {
-    float y = 150.0f + i * 24;
+  for (int i = 0; i < (int)(sizeof controls / sizeof controls[0]); i++) {
+    float y = 130.0f + i * 24;
     text_align(controls[i][0], W / 2.0f - 12, y, 13, "#c9a24a", ALIGN_RIGHT);
     text_align(controls[i][1], W / 2.0f + 2, y, 13, "#d8cbaa", ALIGN_LEFT);
   }
@@ -759,6 +832,7 @@ static void draw_pause_overlay(void) {
   gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(0, 0, 0, 0.6f));
   title_text("PAUSED", W / 2.0f, 110, 34, "#e9c93c");
   draw_menu(pause_menu(), pause_menu_index, PAUSE_MENU_SPAN);
+  if (notice_timer > 0) text(notice, W / 2.0f, 284, 11, "#ead9b0");
   char buf[32];
   snprintf(buf, sizeof buf, "DIFFICULTY: %s", game_difficulty_settings(session.difficulty)->name);
   text(buf, W / 2.0f, 304, 11, "#c9a24a");
@@ -865,6 +939,8 @@ static void render(void) {
   case ST_GAME_OVER: draw_game_over(); break;
   case ST_VICTORY: draw_victory(); break;
   }
+  if (notice_timer > 0 && state != ST_PLAYING && state != ST_PAUSED && state != ST_MENU)
+    text(notice, W / 2.0f, H - 10, 11, "#ead9b0");
 }
 
 static void present(void) {
@@ -979,6 +1055,7 @@ int main(int argc, char **argv) {
   }
 
   game_destroy(game);
+  free(save_path);
   for (int i = 0; i < levels_loaded; i++) level_free(&levels[i]);
   renderer_free(&renderer);
   font_shutdown();
