@@ -1,6 +1,6 @@
 ; FORTRESS — floor 3: BARRACKS
 ; 1-6 walls, B bars, D door, R barred door, X gate, P player, K key, H potion, F bread,
-; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, ^ arrow trap, L lever, Z secret wall, ~ mirror portal (paired in reading order)
+; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, Y/y rat, ^ arrow trap, L lever, Z secret wall, ~ mirror portal (paired in reading order)
 @name BARRACKS
 @floor #45443c
 @ceil #191a16
@@ -22,9 +22,9 @@
 4.2.222.222.2.22222.2.2TT...4
 2...2..H..2H4K2H...T2...4.2.2
 2D442T....2F2.22222.2222222.2
-2...2....M^.2.......2..D..2.2
+2...2....M^.2.Y.y...2..D..2.2
 222.2Gc...4.2.22222.2.222.2.2
 2.2.......v...2.......2.2.2.2
 2.22242D2222222.2...222.2.4.2
-2...K^.......A..2.AK~.....DS2
+2...K^..Y.Y..A..2.AK~.....DS2
 222222222242222222222X2242222

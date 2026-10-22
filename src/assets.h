@@ -54,7 +54,7 @@ typedef enum { VIEW_FRONT, VIEW_BACK, VIEW_LEFT, VIEW_RIGHT, VIEW_COUNT } ViewDi
 
 typedef struct EnemySprites {
   Image *pose[POSE_COUNT];
-  // hounds only: stand / walk1 / walk2 seen from four sides
+  // hounds and rats only: stand / walk1 / walk2 seen from four sides
   Image *view[3][VIEW_COUNT];
 } EnemySprites;
 

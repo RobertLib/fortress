@@ -8,6 +8,10 @@
 // barks him awake when it spots the player (and springs up when HE joins
 // a fight), charges in to bite, and trots back to the master's side when
 // the trail goes cold. A masterless hound guards its ground the same way.
+// Rats are melee runners too, only small, quick and frail: they dart about
+// in fits and starts, one squeal sets the whole pack on the player, and
+// they come on in a zigzag scurry. They slip between everybody's legs, but
+// a closed door stops them cold.
 
 #include "enemy.h"
 
@@ -35,7 +39,11 @@ static const EnemyStats TYPES[ENEMY_TYPE_COUNT] = {
     [ENEMY_DOG] = {.hp = 18, .speed = 4.1f, .range = 0.95f, .cooldown_min = 0.7f, .cooldown_max = 1.3f, .dmg = 10,
                    .score = 200, .drop = 0, .melee = true, .radius = 0.24f, .scale = 0.62f,
                    .alert_sound = SND_DOG_BARK, .pain_sound = SND_DOG_PAIN, .death_sound = SND_DOG_DEATH,
-                   .bite_sound = SND_DOG_BITE},
+                   .bite_sound = SND_DOG_BITE, .growl_sound = SND_DOG_GROWL},
+    [ENEMY_RAT] = {.hp = 8, .speed = 3.8f, .range = 0.8f, .cooldown_min = 0.6f, .cooldown_max = 1.1f, .dmg = 4,
+                   .score = 50, .drop = 0, .melee = true, .underfoot = true, .radius = 0.18f, .scale = 0.5f,
+                   .alert_sound = SND_RAT_ALERT, .pain_sound = SND_RAT_SQUEAK, .death_sound = SND_RAT_DEATH,
+                   .bite_sound = SND_RAT_BITE, .growl_sound = SND_RAT_SKITTER},
 };
 
 static const int CARDINALS[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
@@ -72,6 +80,7 @@ void enemy_init(Enemy *e, const EnemySpawn *spawn) {
   e->dir_y = e->face_y = (float)d[1];
   e->anim_time = frandf() * 10;
   e->wobble = frandf() * (float)M_PI * 2;
+  if (e->stats->underfoot) e->growl_timer = 1 + frandf() * 5; // a nest doesn't all squeak at once
 }
 
 static bool try_move(Enemy *e, Game *g, float nx, float ny, float step) {
@@ -104,8 +113,9 @@ static bool move_toward(Enemy *e, Game *g, float tx, float ty, float step) {
   return false;
 }
 
-// chasing enemies push open the door just ahead of them
+// chasing enemies push open the door just ahead of them (rats can't)
 static void open_door_ahead(Enemy *e, Game *g, float nx, float ny) {
+  if (e->stats->underfoot) return;
   Door *door = game_door_at(g, (int)floorf(e->x + nx * 0.8f), (int)floorf(e->y + ny * 0.8f));
   if (door) game_open_door(g, door, false);
 }
@@ -139,6 +149,15 @@ void enemy_wake(Enemy *e, Game *g, bool silent) {
   // a barking hound brings its handler running
   Enemy *m = master_of(e, g);
   if (m && !enemy_dead(m)) enemy_wake(m, g, true);
+  // one squealing rat sets the rest of its pack scurrying
+  if (e->stats->underfoot) {
+    for (int i = 0; i < g->enemy_count; i++) {
+      Enemy *o = &g->enemies[i];
+      if (o->stats->underfoot && hypotf(o->x - e->x, o->y - e->y) < 4 &&
+          game_line_of_sight(g, e->x, e->y, o->x, o->y))
+        enemy_wake(o, g, true);
+    }
+  }
 }
 
 // Dog perception: quicker on the uptake than the soldiery, and a hound
@@ -282,12 +301,42 @@ void enemy_update(Enemy *e, Game *g, float dt) {
           e->timer = 0.6f + frandf() * 0.9f;
         }
         e->moving = true;
+      } else if (st->underfoot) {
+        // rats go in fits and starts: a quick dash along a free angle, then
+        // a pause to sniff the air (a zero heading marks the pause)
+        e->timer -= dt;
+        bool dashing = e->dir_x != 0 || e->dir_y != 0;
+        if (dashing) {
+          if (try_move(e, g, e->dir_x, e->dir_y, st->speed * 0.6f * dt))
+            e->moving = true;
+          else
+            e->timer = 0; // nosed into a wall
+        }
+        if (e->timer <= 0) {
+          if (dashing) {
+            e->dir_x = e->dir_y = 0;
+            e->timer = 0.5f + frandf() * 1.3f;
+          } else {
+            float a = frandf() * (float)M_PI * 2;
+            e->dir_x = cosf(a);
+            e->dir_y = sinf(a);
+            e->timer = 0.3f + frandf() * 0.6f;
+          }
+        }
       } else if (!try_move(e, g, e->dir_x, e->dir_y, st->speed * 0.55f * dt)) {
         const int *d = CARDINALS[(int)floor(frand() * 4)];
         e->dir_x = (float)d[0];
         e->dir_y = (float)d[1];
       } else {
         e->moving = true;
+      }
+    }
+    if (st->underfoot) {
+      // the odd squeak gives a nest away before it is seen
+      e->growl_timer -= dt;
+      if (e->growl_timer <= 0) {
+        e->growl_timer = 2.5f + frandf() * 4.5f;
+        play_at(e, g, SND_RAT_SQUEAK, 0.45f, 0.9f + frandf() * 0.3f);
       }
     }
     if (st->melee) {
@@ -377,7 +426,11 @@ void enemy_update(Enemy *e, Game *g, float dt) {
       float d = hypotf(tx - e->x, ty - e->y);
       float k = d != 0 ? d : 1;
       float nx = (tx - e->x) / k, ny = (ty - e->y) / k;
-      if (d > 0.3f) move_toward(e, g, tx, ty, st->speed * dt);
+      if (d > 0.3f) {
+        // rats weave from side to side, straightening out for the bite
+        float wob = st->underfoot ? sinf(e->anim_time * 7 + e->wobble) * 0.55f * minf(1, d / 2.5f) : 0;
+        move_toward(e, g, tx - ny * wob * d, ty + nx * wob * d, st->speed * dt);
+      }
       open_door_ahead(e, g, nx, ny);
       if (seen && dist < st->range && e->attack_cooldown <= 0) {
         bite(e, g);
@@ -386,7 +439,7 @@ void enemy_update(Enemy *e, Game *g, float dt) {
       e->growl_timer -= dt;
       if (e->growl_timer <= 0) {
         e->growl_timer = 1.1f + frandf() * 1.2f;
-        play_at(e, g, SND_DOG_GROWL, 0.7f, 0.9f + frandf() * 0.3f);
+        play_at(e, g, st->growl_sound, 0.7f, 0.9f + frandf() * 0.3f);
       }
       return;
     }
@@ -482,9 +535,10 @@ const Image *enemy_sprite(const Enemy *e, const Assets *assets, const Player *vi
   case ES_WINDUP: return set->pose[POSE_STRIKE1];
   case ES_STRIKE: return set->pose[POSE_STRIKE2];
   default: {
-    int f = (int)floorf(e->anim_time * (e->stats->swarm ? 11 : e->stats->melee ? 9 : 5)) % 2;
+    const EnemyStats *st = e->stats;
+    int f = (int)floorf(e->anim_time * (st->swarm ? 11 : st->underfoot ? 14 : st->melee ? 9 : 5)) % 2;
     int frame = !e->moving ? 0 : f ? 1 : 2; // stand / walk1 / walk2
-    if (e->stats->melee && viewer) return set->view[frame][view_from(e, viewer)];
+    if (st->melee && viewer) return set->view[frame][view_from(e, viewer)];
     static const Pose poses[3] = {POSE_STAND, POSE_WALK1, POSE_WALK2};
     return set->pose[poses[frame]];
   }

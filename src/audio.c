@@ -211,6 +211,61 @@ static double sfx_dog_death(double t, SynthState *s) {
   return v * fmin(1, t / 0.03) * env(t, 0.9, 1.3) * 0.5;
 }
 
+// --- rats
+// Squeaks are phase-accumulated too: they bend a long way in a short time.
+
+static double sfx_rat_alert(double t, SynthState *s) {
+  double dt = t - s->lt;
+  s->lt = t;
+  // a volley of three shrill squeals, each a little lower, over scrabbling claws
+  int n = (int)(t / 0.1);
+  double k = t - n * 0.1;
+  double claws = fmod(t, 0.031) < 0.004 ? noise() * 0.12 : 0;
+  if (n > 2 || k > 0.075) return claws;
+  s->ph += 2 * M_PI * (3600 - n * 350 + 900 * sin(M_PI * k / 0.075)) * dt;
+  return sin(s->ph) * sin(M_PI * k / 0.075) * 0.32 + claws;
+}
+
+static double sfx_rat_squeak(double t, SynthState *s) {
+  double dt = t - s->lt;
+  s->lt = t;
+  // a single "eek": rises, wavers, drops away
+  double f = 3000 + 1300 * sin(M_PI * fmin(1, t / 0.11)) + sine(t, 38) * 120;
+  s->ph += 2 * M_PI * f * dt;
+  double v = sin(s->ph) * 0.7 + sin(2 * s->ph) * 0.15;
+  return v * fmin(1, t / 0.006) * env(t, 0.12, 1.2) * 0.32;
+}
+
+static double sfx_rat_skitter(double t, SynthState *s) {
+  // claws pattering over the flagstones: four footfalls to every bound
+  static const double feet[] = {0, 0.021, 0.052, 0.07};
+  double k = fmod(t, 0.12);
+  double tick = 0;
+  for (int i = 0; i < 4; i++) {
+    double d = k - feet[i];
+    if (d >= 0 && d < 0.008) tick += noise() * env(d, 0.008, 2);
+  }
+  return tick * sin(M_PI * t / 0.5) * 0.4;
+}
+
+static double sfx_rat_bite(double t, SynthState *s) {
+  // a quick nip: incisors clicking shut, a chirp behind it
+  double click = noise() * env(t, 0.015, 2) * 0.6;
+  double chirp = sine(t, 2800 - 4000 * t) * env(t, 0.1, 2) * 0.3;
+  return (click + chirp) * 0.85;
+}
+
+static double sfx_rat_death(double t, SynthState *s) {
+  double dt = t - s->lt;
+  s->lt = t;
+  double k = t / 0.55;
+  // a last thin shriek, sagging and wavering as it fades
+  double f = 3800 * (1 - 0.55 * k) + sin(2 * M_PI * 22 * t) * 260 * k;
+  s->ph += 2 * M_PI * f * dt;
+  double v = sin(s->ph) * 0.6 + sin(2 * s->ph) * 0.12;
+  return v * fmin(1, t / 0.01) * env(t, 0.55, 1.6) * 0.4;
+}
+
 // --- pickups
 
 static double sfx_pickup(double t, SynthState *s) { return sine(t, 620 + 1800 * t) * env(t, 0.14, 3) * 0.4; }
@@ -344,6 +399,11 @@ static const SynthDef SYNTHS[SND_COUNT] = {
   [SND_DOG_BITE] = {0.13, sfx_dog_bite},
   [SND_DOG_PAIN] = {0.3, sfx_dog_pain},
   [SND_DOG_DEATH] = {0.9, sfx_dog_death},
+  [SND_RAT_ALERT] = {0.3, sfx_rat_alert},
+  [SND_RAT_SQUEAK] = {0.12, sfx_rat_squeak},
+  [SND_RAT_SKITTER] = {0.5, sfx_rat_skitter},
+  [SND_RAT_BITE] = {0.1, sfx_rat_bite},
+  [SND_RAT_DEATH] = {0.55, sfx_rat_death},
   [SND_PICKUP] = {0.14, sfx_pickup},
   [SND_PICKUP_AMMO] = {0.12, sfx_pickup_ammo},
   [SND_PICKUP_HEALTH] = {0.3, sfx_pickup_health},

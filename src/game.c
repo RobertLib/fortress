@@ -226,12 +226,20 @@ bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self
     if (!d->radius) continue;
     if ((d->x - x) * (d->x - x) + (d->y - y) * (d->y - y) < (r + d->radius) * (r + d->radius)) return true;
   }
+  // rats scurry underfoot: they slip between everybody's legs and nobody
+  // trips over them — only another rat jostles a rat
+  bool underfoot = self && self->stats->underfoot;
   for (int i = 0; i < g->enemy_count; i++) {
     const Enemy *e = &g->enemies[i];
-    if (e == self || enemy_dead(e) || e->stats->swarm) continue;
+    if (e == self || enemy_dead(e) || e->stats->swarm || e->stats->underfoot != underfoot) continue;
     if (hypotf(e->x - x, e->y - y) < r + e->radius) return true;
   }
-  if (self && hypotf(g->player.x - x, g->player.y - y) < r + g->player.radius + 0.15f) return true;
+  if (self) {
+    // a rat the player has stepped onto may still scramble clear
+    float d = hypotf(g->player.x - x, g->player.y - y);
+    bool clearing = underfoot && d > hypotf(g->player.x - self->x, g->player.y - self->y);
+    if (d < r + g->player.radius + 0.15f && !clearing) return true;
+  }
   return false;
 }
 

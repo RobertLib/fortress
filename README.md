@@ -75,6 +75,9 @@ Three ways to jump straight to a chosen level:
 - **War hound** — fast melee runner; one placed near a soldier heels to
   him as its handler, barks him awake when it spots you, and trots back
   to his side when it loses your trail
+- **Rat** — small, quick and frail; darts about in fits and starts, and
+  one squeal sets the whole pack on you in a zigzag scurry. Rats slip
+  between everyone's legs, but a closed door stops them
 
 Enemies patrol, and once they spot you (or hear a crossbow shot) they
 raise the alarm and give chase — they stop to shoot, pull a knife or
@@ -94,6 +97,7 @@ H    healing potion (+25)      F  bread (+10)
 A    quiver of bolts           T  treasure (score)
 M    repeating crossbow        G/S/O  guard / knight / captain
 V/v  bat swarm (flying/roosting)  C/c  war hound (roaming/staying put)
+Y/y  rat (scurrying/lurking)
 L    lever on a wall           Z  secret wall
 ^    arrow trap                ~  mirror portal (paired in reading order)
 ```

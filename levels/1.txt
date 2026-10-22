@@ -1,6 +1,6 @@
 ; FORTRESS — floor 1: GUARDHOUSE
 ; 1-6 walls, B bars, D door, R barred door, X gate, P player, K key, H potion, F bread,
-; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, ^ arrow trap, L lever, Z secret wall
+; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, Y/y rat, ^ arrow trap, L lever, Z secret wall
 @name GUARDHOUSE
 @floor #4a4038
 @ceil #1e1914
@@ -22,5 +22,5 @@
 1.1T....6.11111...1.1.111
 1.......1A1..D..........1
 111.1.1K111.1111..1.111.1
-1HZ.........1.H..H......1
+1HZ...Y..y..1.H..H......1
 111L111111111111161611111

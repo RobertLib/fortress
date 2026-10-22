@@ -19,6 +19,9 @@
 //            4 cells is leashed to him instead: it heels to its handler,
 //            barks him awake when it spots the player, and returns to his
 //            side when it loses the chase.
+//     Y/y    rat (scurrying about/lurking). Rats slip between the other
+//            actors' legs; one that spots the player rouses the rest of its
+//            pack, but they can't open doors.
 //     Wall torches are placed automatically on suitable stretches of masonry.
 //     Tables and chairs are likewise furnished automatically in larger rooms,
 //     and wardrobes and chests are set flush against flat wall stretches.
@@ -88,6 +91,7 @@ static int enemy_type_for(char ch) {
   case 'O': return ENEMY_CAPTAIN;
   case 'V': return ENEMY_BAT;
   case 'C': return ENEMY_DOG;
+  case 'Y': return ENEMY_RAT;
   default: return -1;
   }
 }
@@ -372,7 +376,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
     float best_d = 0;
     for (int i = 0; i < lv->enemy_count; i++) {
       const EnemySpawn *e = &lv->enemies[i];
-      if (e->type == ENEMY_DOG || e->type == ENEMY_BAT) continue;
+      if (e->type == ENEMY_DOG || e->type == ENEMY_BAT || e->type == ENEMY_RAT) continue;
       float d = sq(e->x - dog->x) + sq(e->y - dog->y);
       if (d <= 16 && (best < 0 || d < best_d)) {
         best = i;

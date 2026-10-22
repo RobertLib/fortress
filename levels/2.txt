@@ -1,6 +1,6 @@
 ; FORTRESS — floor 2: THE CELLARS
 ; 1-6 walls, B bars, D door, R barred door, X gate, P player, K key, H potion, F bread,
-; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, ^ arrow trap, L lever, Z secret wall
+; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, Y/y rat, ^ arrow trap, L lever, Z secret wall
 @name THE CELLARS
 @floor #453a2c
 @ceil #1a140e
@@ -16,13 +16,13 @@
 3.1.33333...311.333.33313.1
 3.3..SD.1.....3.3.G.3...3.3
 3.1.333.3T..1.3AcGF.3K3.3.3
-3D3.........3T..3.3.3...3.3
+3D3.....Y.y.3T..3.3.3...3.3
 3.3.3333.33.3...1D3.333.3.3
-3.1..v....^.........A...3D3
+3.1..v....^.....Y.Y.A...3D3
 3.3333333.333...333.13333.3
-3.3.D.......3.^K........3A3
+3.3.D.......3.^K..YY..y.3A3
 3.3.333A..3D3.3333333.3.3.3
 3A3...3...3.3.3...3.D.3.3.3
 3.133.331.3.3G3.....333H3MX
-3.....3.G...3...3..H..3...1
+3.y.Y.3.G...3...3..H..3...1
 331333311333333333133333333

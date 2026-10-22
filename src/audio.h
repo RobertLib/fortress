@@ -38,6 +38,12 @@ typedef enum {
   SND_DOG_BITE,
   SND_DOG_PAIN,
   SND_DOG_DEATH,
+  // rats
+  SND_RAT_ALERT,
+  SND_RAT_SQUEAK,
+  SND_RAT_SKITTER,
+  SND_RAT_BITE,
+  SND_RAT_DEATH,
   // pickups
   SND_PICKUP,
   SND_PICKUP_AMMO,

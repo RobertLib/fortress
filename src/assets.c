@@ -787,6 +787,188 @@ static Image *dog_back_sprite(Pose pose) {
   return c;
 }
 
+// ------------------------------------------------------------------ rats
+
+#define RAT_FUR "#5b5048"
+#define RAT_DARK "#3a3430"
+#define RAT_BELLY "#867a6c"
+#define RAT_PINK "#b98078"
+#define RAT_TAIL "#9a7470"
+#define RAT_EYE "#e04040"
+#define RAT_TOOTH "#e0c86a"
+#define RAT_WHISKER "#c8beb0"
+
+static void whisker(Image *g, double x, double y, double w) { px_c(g, x, y, w, 0.12, faded(RAT_WHISKER, 0.7)); }
+
+// Rat billboards, set up the way the hound's are: rat_sprite() draws the
+// right-facing profile plus the shared pain/death poses, fire doubles as
+// the bite (reared up at the viewer, incisors bared), and the front and
+// back views come from their own painters. The rat hugs the floor, so it
+// is painted into the bottom rows of the tile.
+static Image *rat_sprite(Pose pose) {
+  Image *c = image_new(TEX, TEX);
+
+  if (pose == POSE_DEAD || pose == POSE_DIE2) {
+    // on its back, paws curled up, the tail limp along the flagstones
+    if (pose == POSE_DEAD) px(c, 5, 15.6, 6, 0.4, "#5c0f0f");
+    px(c, 0.6, 15.3, 3.8, 0.5, RAT_TAIL);
+    px(c, 4, 14, 8, 1.8, RAT_FUR);
+    px(c, 4.6, 13.6, 6.6, 0.8, RAT_BELLY);
+    px(c, 11.8, 14.3, 2.6, 1.5, RAT_FUR); // head lolling
+    px(c, 14.2, 14.9, 0.6, 0.5, RAT_PINK);
+    for (int i = 0; i < 4; i++) px(c, 5.4 + i * 1.5, 12.7 + (i % 2) * 0.3, 0.5, 1, RAT_PINK);
+    return c;
+  }
+  if (pose == POSE_DIE1) {
+    // rolling over, legs kicking
+    px(c, 1.2, 14.6, 2.8, 0.5, RAT_TAIL);
+    px(c, 4, 12.8, 8, 2.8, RAT_FUR);
+    px(c, 4.6, 12.4, 6.4, 0.8, RAT_BELLY);
+    px(c, 11.8, 13.2, 2.6, 2.1, RAT_FUR);
+    px(c, 14.2, 13.8, 0.6, 0.6, RAT_PINK);
+    px(c, 5.4, 11.2, 0.6, 1.4, RAT_PINK);
+    px(c, 9.6, 11, 0.6, 1.6, RAT_PINK);
+    return c;
+  }
+
+  if (pose == POSE_FIRE) {
+    // the bite, head-on: reared up, forepaws spread, incisors bared
+    px(c, 4.6, 12.2, 6.8, 3.2, RAT_FUR); // body behind the head
+    px(c, 4, 8.2, 1.9, 1.9, RAT_DARK); // round ears
+    px(c, 10.1, 8.2, 1.9, 1.9, RAT_DARK);
+    px(c, 4.4, 8.6, 1.1, 1.1, RAT_PINK);
+    px(c, 10.5, 8.6, 1.1, 1.1, RAT_PINK);
+    px(c, 5.4, 9, 5.2, 3.6, RAT_FUR); // head
+    px(c, 6.2, 9.9, 0.8, 0.8, RAT_EYE);
+    px(c, 9, 9.9, 0.8, 0.8, RAT_EYE);
+    px(c, 7.4, 10.8, 1.2, 0.7, RAT_PINK); // nose
+    px(c, 6.6, 11.6, 2.8, 2.6, "#3a1414"); // gaping mouth
+    px(c, 7.3, 11.5, 0.6, 1.3, RAT_TOOTH); // long yellow incisors
+    px(c, 8.1, 11.5, 0.6, 1.3, RAT_TOOTH);
+    px(c, 7.4, 13.3, 0.5, 0.9, RAT_TOOTH);
+    px(c, 8.1, 13.3, 0.5, 0.9, RAT_TOOTH);
+    whisker(c, 3, 11.1, 3.2);
+    whisker(c, 3.3, 11.7, 2.9);
+    whisker(c, 9.8, 11.1, 3.2);
+    whisker(c, 9.8, 11.7, 2.9);
+    px(c, 3.8, 13.4, 1.8, 1, RAT_PINK); // forepaws thrown out
+    px(c, 10.4, 13.4, 1.8, 1, RAT_PINK);
+    px(c, 5.2, 15.3, 1.6, 0.7, RAT_PINK); // hind feet
+    px(c, 9.2, 15.3, 1.6, 0.7, RAT_PINK);
+    return c;
+  }
+
+  // side profile: stand / walk1 / walk2 / pain / aim
+  double y0 = pose == POSE_PAIN ? 11.7 : pose == POSE_WALK2 ? 10.7 : 11.2; // back line; walk2 arches it
+  if (pose == POSE_WALK1) {
+    // stretched out at full scurry, the tail streaming level behind
+    px(c, 0.3, y0 + 2.4, 1.8, 0.45, RAT_TAIL);
+    px(c, 2, y0 + 2.2, 2.2, 0.5, RAT_TAIL);
+  } else {
+    // trailing along the floor
+    px(c, 0.4, 15.2, 1.4, 0.4, RAT_TAIL);
+    px(c, 1.4, 14.8, 1.6, 0.45, RAT_TAIL);
+    px(c, 2.8, y0 + 3.1, 1.6, 0.5, RAT_TAIL);
+  }
+  px(c, 4, y0 + 0.9, 7, 3.3, RAT_FUR); // body
+  px(c, 5, y0, 5, 1, RAT_FUR); // hunched back
+  px(c, 4.6, y0 + 3.5, 5.8, 0.8, RAT_BELLY);
+  px(c, 10.4, y0 + 1, 2.6, 2.6, RAT_FUR); // head tapering into the snout
+  px(c, 12.8, y0 + 1.7, 1.6, 1.6, RAT_FUR);
+  px(c, 14.3, y0 + 2.2, 0.9, 1, RAT_FUR);
+  px(c, 15, y0 + 2.3, 0.6, 0.6, RAT_PINK); // nose
+  px(c, 10.6, y0 - 0.2, 1.4, 1.5, RAT_DARK); // round ear
+  px(c, 10.9, y0 + 0.1, 0.8, 0.9, RAT_PINK);
+  px(c, 12.3, y0 + 1.7, 0.6, 0.6, RAT_EYE);
+  whisker(c, 13.6, y0 + 3, 2.2);
+  whisker(c, 13.8, y0 + 3.4, 2);
+  if (pose == POSE_PAIN) {
+    // squealing, teeth showing
+    px(c, 13.9, y0 + 3, 1.2, 0.6, "#3a1414");
+    px(c, 14.3, y0 + 2.9, 0.4, 0.5, RAT_TOOTH);
+  }
+
+  double feet_y = fmin(y0 + 4.2, 15.4);
+  if (pose == POSE_WALK1) {
+    // forepaws reaching, hind feet kicked back
+    px(c, 12.2, feet_y, 1.5, 0.6, RAT_PINK);
+    px(c, 2.8, feet_y, 1.6, 0.6, RAT_PINK);
+  } else if (pose == POSE_WALK2) {
+    // all four gathered under the arched back
+    px(c, 7, y0 + 4.3, 1.4, 1, RAT_DARK);
+    px(c, 6.8, 15.4, 1.6, 0.6, RAT_PINK);
+    px(c, 9, y0 + 4.3, 1, 1, RAT_DARK);
+    px(c, 8.9, 15.4, 1.3, 0.6, RAT_PINK);
+  } else {
+    px(c, 4.4, feet_y, 1.8, 0.6, RAT_PINK); // hind foot
+    px(c, 10.8, y0 + 3.6, 0.8, 0.8, RAT_DARK); // foreleg
+    px(c, 10.7, feet_y, 1.2, 0.6, RAT_PINK);
+  }
+  return c;
+}
+
+// The rat head-on: round ears, beady eyes, whiskers fanning from the snout.
+// Scurry frames alternate the forepaws and bob the whole body.
+static Image *rat_front_sprite(Pose pose) {
+  Image *c = image_new(TEX, TEX);
+  double bob = pose == POSE_WALK2 ? 0.4 : 0;
+
+  px(c, 4.9, 11.6 + bob, 6.2, 3.6, RAT_FUR); // shoulders and flanks
+  px(c, 4.9, 10.2 + bob, 1.7, 1.7, RAT_DARK); // ears
+  px(c, 9.4, 10.2 + bob, 1.7, 1.7, RAT_DARK);
+  px(c, 5.3, 10.6 + bob, 0.9, 0.9, RAT_PINK);
+  px(c, 9.8, 10.6 + bob, 0.9, 0.9, RAT_PINK);
+  px(c, 6, 11 + bob, 4, 2.8, RAT_FUR); // head
+  px(c, 6.6, 12.8 + bob, 2.8, 1.6, RAT_BELLY); // pale snout
+  px(c, 6.6, 11.8 + bob, 0.7, 0.7, RAT_EYE);
+  px(c, 8.7, 11.8 + bob, 0.7, 0.7, RAT_EYE);
+  px(c, 7.5, 13.5 + bob, 1, 0.7, RAT_PINK); // nose
+  whisker(c, 4.2, 13.4 + bob, 2.6);
+  whisker(c, 9.2, 13.4 + bob, 2.6);
+
+  if (pose == POSE_WALK1) {
+    px(c, 5.6, 15.2, 1.3, 0.8, RAT_PINK); // near paw planted
+    px(c, 9.1, 14.6, 1.3, 0.7, RAT_PINK); // off paw lifted
+  } else if (pose == POSE_WALK2) {
+    px(c, 9.1, 15.2, 1.3, 0.8, RAT_PINK);
+    px(c, 5.6, 14.6, 1.3, 0.7, RAT_PINK);
+  } else {
+    px(c, 5.6, 15.3, 1.3, 0.7, RAT_PINK);
+    px(c, 9.1, 15.3, 1.3, 0.7, RAT_PINK);
+  }
+  return c;
+}
+
+// The rat from behind: ears over a hunched rump, pink soles, and the long
+// tail snaking out toward the viewer in front of everything.
+static Image *rat_back_sprite(Pose pose) {
+  Image *c = image_new(TEX, TEX);
+  double bob = pose == POSE_WALK2 ? 0.4 : 0;
+  double sway = pose == POSE_WALK1 ? -0.6 : pose == POSE_WALK2 ? 0.6 : 0;
+
+  px(c, 5.4, 10.6 + bob, 1.6, 1.6, RAT_DARK); // ears from behind
+  px(c, 9, 10.6 + bob, 1.6, 1.6, RAT_DARK);
+  px(c, 6.2, 11 + bob, 3.6, 2, RAT_FUR); // back of the head
+  px(c, 4.8, 12 + bob, 6.4, 3.4, RAT_FUR); // rump
+  px(c, 5.2, 14.6 + bob, 5.6, 0.8, RAT_DARK); // shadow under the haunches
+
+  if (pose == POSE_WALK1) {
+    px(c, 5.4, 15.3, 1.4, 0.7, RAT_PINK);
+    px(c, 9.2, 14.8, 1.4, 0.6, RAT_PINK); // off foot kicked up
+  } else if (pose == POSE_WALK2) {
+    px(c, 9.2, 15.3, 1.4, 0.7, RAT_PINK);
+    px(c, 5.4, 14.8, 1.4, 0.6, RAT_PINK);
+  } else {
+    px(c, 5.4, 15.3, 1.4, 0.7, RAT_PINK);
+    px(c, 9.2, 15.3, 1.4, 0.7, RAT_PINK);
+  }
+  // tail last: nearest the viewer
+  px(c, 7.6, 14 + bob, 0.8, 1.1, RAT_TAIL);
+  px(c, 7.6 + sway * 0.5, 15, 0.7, 0.5, RAT_TAIL);
+  px(c, 7.6 + sway, 15.5, 0.7, 0.5, RAT_TAIL);
+  return c;
+}
+
 // ------------------------------------------------------------------ items
 
 static Image *item_sprite(ItemKind kind) {
@@ -1993,16 +2175,22 @@ void assets_build(Assets *a) {
   }
   EnemySprites *bat = &a->enemies[ENEMY_BAT];
   EnemySprites *dog = &a->enemies[ENEMY_DOG];
+  EnemySprites *rat = &a->enemies[ENEMY_RAT];
   for (int p = 0; p < POSE_STRIKE1; p++) {
     bat->pose[p] = bat_swarm_sprite((Pose)p);
     dog->pose[p] = dog_sprite((Pose)p);
+    rat->pose[p] = rat_sprite((Pose)p);
   }
-  // the hound's stand and gallop frames seen from all four sides
+  // the hound's and the rat's stand and run frames seen from all four sides
   for (int p = POSE_STAND; p <= POSE_WALK2; p++) {
     dog->view[p][VIEW_RIGHT] = dog->pose[p];
     dog->view[p][VIEW_LEFT] = image_mirror(dog->pose[p]);
     dog->view[p][VIEW_FRONT] = dog_front_sprite((Pose)p);
     dog->view[p][VIEW_BACK] = dog_back_sprite((Pose)p);
+    rat->view[p][VIEW_RIGHT] = rat->pose[p];
+    rat->view[p][VIEW_LEFT] = image_mirror(rat->pose[p]);
+    rat->view[p][VIEW_FRONT] = rat_front_sprite((Pose)p);
+    rat->view[p][VIEW_BACK] = rat_back_sprite((Pose)p);
   }
 
   for (int k = 0; k < ITEM_BOLTS_DROP; k++) a->items[k] = item_sprite((ItemKind)k);
