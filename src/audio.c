@@ -83,6 +83,15 @@ static double sfx_arrow_hit(double t, SynthState *s) {
   return (noise() * 0.5 + sine(t, 190 * (1 - t * 3)) * 0.6) * env(t, 0.07, 3) * 0.7;
 }
 
+static double sfx_explosion(double t, SynthState *s) {
+  double n = noise();
+  s->z += (n - s->z) * 0.055;
+  double crack = n * env(t, 0.06, 2) * 0.85;
+  double rumble = (s->z * 3 + sine(t, 65 - t * 40) * 0.55) * env(t, 0.8, 2);
+  double splinters = n * env(t, 0.35, 3) * 0.22;
+  return (crack + rumble + splinters) * 0.9;
+}
+
 // --- player
 
 static double sfx_player_pain(double t, SynthState *s) { return saw(t, 280 - 500 * t) * env(t, 0.22, 3) * 0.5; }
@@ -457,6 +466,7 @@ static const SynthDef SYNTHS[SND_COUNT] = {
   [SND_ENEMY_SHOT] = {0.26, sfx_enemy_shot},
   [SND_TRAP_CLICK] = {0.16, sfx_trap_click},
   [SND_ARROW_HIT] = {0.09, sfx_arrow_hit},
+  [SND_EXPLOSION] = {0.85, sfx_explosion},
   [SND_PLAYER_PAIN] = {0.22, sfx_player_pain},
   [SND_PLAYER_DEATH] = {0.9, sfx_player_death},
   [SND_STEP] = {0.07, sfx_step},

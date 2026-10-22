@@ -1496,6 +1496,77 @@ static Image *fountain_sprite(int frame) {
 
 // ------------------------------------------------------------------ furniture
 
+static Image *barrel_sprite(int kind) {
+  Image *c = image_new(TEX, TEX);
+  if (kind == 2) {
+    // Scorched staves and a bent hoop, low enough to walk over.
+    px(c, 2, 14.8, 12, 1.2, "#211a15");
+    px(c, 3, 14, 4, 0.7, "#493222");
+    px(c, 8, 14.5, 4.5, 0.8, "#38271c");
+    px(c, 5, 13.3, 1, 2.2, "#5a3b22");
+    px(c, 10.5, 13.8, 0.7, 2, "#241c17");
+    px(c, 3.5, 15, 8, 0.4, "#56504a");
+    return c;
+  }
+  // Bulging oak staves; the edges turn away into shadow.
+  px(c, 4, 3, 8, 13, "#352310");
+  px(c, 3, 4.5, 10, 10, "#57371c");
+  px(c, 2.8, 7, 10.4, 5, "#674320");
+  for (int i = 0; i < 5; i++) {
+    double x = 3.5 + i * 1.8;
+    px(c, x, 4, 1.3, 11.4, i < 2 ? "#936334" : i < 4 ? "#79502a" : "#51331c");
+    px(c, x + 0.3, 6 + i % 3, 0.2, 5, "#ae7941");
+  }
+  px(c, 4, 2.8, 8, 1.5, "#b0844c");
+  px(c, 4.5, 3.2, 7, 0.7, "#79532e");
+  px(c, 7.6, 3, 0.3, 1.1, "#4b301a");
+  for (int i = 0; i < 2; i++) {
+    double y = 5 + i * 7.4;
+    px(c, 3, y, 10, 1.4, "#34383b");
+    px(c, 3.3, y, 9.1, 0.35, "#858681");
+    px(c, 4.2, y + 0.5, 0.4, 0.4, "#b0aaa0");
+    px(c, 10.8, y + 0.5, 0.4, 0.4, "#777b79");
+  }
+  if (kind == 1) {
+    // A faded vermilion label with a pale powder-flame warning.
+    px(c, 5.3, 7.2, 5.2, 4.2, "#862f21");
+    px(c, 5.6, 7.4, 4.5, 0.3, "#b64c2c");
+    px(c, 7.5, 8, 0.9, 2.5, "#edc57c");
+    px(c, 6.7, 9.4, 2.5, 1.2, "#edc57c");
+    px(c, 8.4, 8.7, 0.6, 1.3, "#edc57c");
+    px(c, 7.5, 10, 0.9, 0.8, "#ae4828");
+  }
+  return c;
+}
+
+static Image *explosion_sprite(int frame) {
+  Image *c = image_new(TEX, TEX);
+  Lcg r = lcg(1781);
+  double t = (double)frame / (EXPLOSION_FRAMES - 1);
+  // Chunky puffs grow out of a white-hot core and cool to drifting smoke.
+  for (int i = 0; i < 22; i++) {
+    double angle = lcg_next(&r) * M_PI * 2;
+    double speed = 1.2 + lcg_next(&r) * 3.2;
+    double size = 1.2 + lcg_next(&r) * 2;
+    double x = 8 + cos(angle) * speed * (0.3 + t);
+    double y = 9 + sin(angle) * speed * (0.3 + t) - t * 3;
+    const char *color = t > 0.55 ? (i % 2 ? "#524b43" : "#746555")
+                        : i % 3 == 0 ? "#d64b1d" : i % 3 == 1 ? "#ff9e27" : "#ffe28b";
+    px_c(c, x - size / 2, y - size / 2, size, size, faded(color, 1 - t * 0.65));
+  }
+  if (frame < 3) {
+    double size = 3 - frame * 0.6;
+    px(c, 8 - size / 2, 9 - size / 2, size, size, "#fff5ce");
+  }
+  for (int i = 0; i < 12; i++) {
+    double angle = lcg_next(&r) * M_PI * 2;
+    double dist = 2 + t * (3 + lcg_next(&r) * 3);
+    double x = 8 + cos(angle) * dist, y = 9 + sin(angle) * dist + t * t * 2;
+    px_c(c, x, y, 0.35, 0.65, faded(i % 2 ? "#d99a48" : "#4d2e1a", 1 - t * 0.6));
+  }
+  return c;
+}
+
 // Furniture for the larger halls: a trestle table set with a candle and a
 // pewter mug, and a plain oak chair. Both stand on the floor line so the
 // renderer can drop them in like any other ground sprite.
@@ -2475,6 +2546,8 @@ void assets_build(Assets *a) {
   for (int k = 0; k < ITEM_BOLTS_DROP; k++) a->items[k] = item_sprite((ItemKind)k);
   a->items[ITEM_BOLTS_DROP] = a->items[ITEM_BOLTS];
   a->sparkle = sparkle_sprite();
+  for (int k = 0; k < 3; k++) a->barrels[k] = barrel_sprite(k);
+  for (int f = 0; f < EXPLOSION_FRAMES; f++) a->explosion[f] = explosion_sprite(f);
 
   for (int k = 0; k < TRAP_SPRITE_COUNT; k++) a->trap[k] = trap_sprite((TrapSprite)k);
 

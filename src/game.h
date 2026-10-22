@@ -10,6 +10,16 @@
 #include "level.h"
 
 #define MAX_PROJECTILES 256
+#define BARREL_RADIUS 0.25f
+#define BARREL_HEIGHT 0.65f
+#define BARREL_BLAST_RADIUS 3.2f
+#define BARREL_EXPLOSION_TIME 0.7f
+
+typedef struct Barrel {
+  float x, y;
+  bool powder, destroyed;
+  float blast_timer;
+} Barrel;
 
 // Totals carried across the floors of one run.
 typedef struct Session {
@@ -72,6 +82,7 @@ typedef struct Trap {
 // whoever stands in their way. Crossbow bolts only show a shot the hitscan
 // roll has already settled: one bound for its target homes in on it and
 // delivers the damage on arrival, a miss flies on into the masonry.
+// Any arrow can be intercepted by a barrel along its path.
 typedef enum { SHOT_TRAP, SHOT_MISS, SHOT_AT_PLAYER, SHOT_AT_ENEMY } ShotKind;
 
 typedef struct Projectile {
@@ -92,6 +103,8 @@ typedef struct Game {
   int item_count;
   Enemy *enemies;
   int enemy_count;
+  Barrel *barrels;
+  int barrel_count;
   Door *doors;
   int door_count;
   Trap *traps;
@@ -140,6 +153,8 @@ void game_open_door(Game *g, Door *door, bool by_player);
 // SHOT_AT_ENEMY (at target) carry dmg to deliver on arrival.
 void game_loose_bolt(Game *g, float x, float y, float aim_x, float aim_y, ShotKind kind, Enemy *target, int dmg);
 void game_hurt_player(Game *g, int dmg);
+// A shot ignites powder; ordinary barrels just stop the projectile.
+void game_hit_barrel(Game *g, int index);
 // Venom that goes on eating amount of health over the next few seconds.
 void game_poison_player(Game *g, int amount);
 void game_on_enemy_killed(Game *g, const Enemy *e);

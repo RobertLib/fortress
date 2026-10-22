@@ -13,6 +13,7 @@
 #define PORTRAIT_COLS 5
 #define PORTRAIT_ROWS 2 // row 0: level gaze, row 1: glancing down
 #define PORTRAIT_SITTERS 3
+#define EXPLOSION_FRAMES 8
 
 typedef enum {
   WT_STONE, // "1" rough masonry
@@ -79,6 +80,8 @@ typedef struct Assets {
   EnemySprites enemies[ENEMY_TYPE_COUNT];
   Image *items[ITEM_KIND_COUNT]; // ITEM_BOLTS_DROP shares the quiver sprite
   Image *sparkle;
+  Image *barrels[3]; // ordinary, gunpowder, charred debris
+  Image *explosion[EXPLOSION_FRAMES];
   Image *trap[TRAP_SPRITE_COUNT];
   Image *weapons[WEAPON_COUNT][3]; // idle, just fired, recovering
   Image *weapon_icons[WEAPON_COUNT];

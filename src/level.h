@@ -23,6 +23,11 @@ typedef struct EnemySpawn {
   int master; // hounds: index of the handler in the spawn list, or -1
 } EnemySpawn;
 
+typedef struct BarrelSpawn {
+  float x, y;
+  bool powder; // Q = gunpowder, q = an ordinary wooden barrel
+} BarrelSpawn;
+
 typedef struct DoorSpawn {
   int x, y;
   char kind; // 'D' door, 'R' barred door, 'Z' secret wall
@@ -78,6 +83,8 @@ typedef struct Level {
   int item_count;
   EnemySpawn *enemies;
   int enemy_count;
+  BarrelSpawn *barrels;
+  int barrel_count;
   DoorSpawn *doors;
   int door_count;
   TrapSpawn *traps;

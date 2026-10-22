@@ -10,18 +10,22 @@ endif()
 
 find_package(SDL3 REQUIRED CONFIG COMPONENTS SDL3)
 
-add_executable(fortress
-  src/main.c
+set(GAME_SOURCES
   src/game.c
   src/enemy.c
   src/level.c
+  src/gfx.c
+  src/audio.c
+  src/common.c
+)
+
+add_executable(fortress
+  src/main.c
   src/render.c
   src/assets.c
   src/weapons.c
-  src/gfx.c
   src/font.c
-  src/audio.c
-  src/common.c
+  ${GAME_SOURCES}
 )
 
 target_link_libraries(fortress PRIVATE SDL3::SDL3)
@@ -37,3 +41,18 @@ endif()
 add_custom_command(TARGET fortress POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           ${CMAKE_CURRENT_SOURCE_DIR}/levels $<TARGET_FILE_DIR:fortress>/levels)
+
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(barrel_tests tests/barrels.c ${GAME_SOURCES})
+  target_include_directories(barrel_tests PRIVATE src)
+  target_link_libraries(barrel_tests PRIVATE SDL3::SDL3)
+  if(MSVC)
+    target_compile_options(barrel_tests PRIVATE /W3)
+  else()
+    target_compile_options(barrel_tests PRIVATE -Wall -Wextra -Wno-unused-parameter)
+    target_link_libraries(barrel_tests PRIVATE m)
+  endif()
+  add_test(NAME barrel_combat COMMAND barrel_tests)
+  set_tests_properties(barrel_combat PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+endif()

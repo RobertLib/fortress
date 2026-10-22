@@ -674,6 +674,18 @@ static void collect_sprites(Renderer *r, const Game *g) {
   const Player *p = &g->player;
   const Level *lv = g->level;
   sprite_count = 0;
+  for (int i = 0; i < g->barrel_count; i++) {
+    const Barrel *b = &g->barrels[i];
+    add_sprite(b->x, b->y, as->barrels[b->destroyed ? 2 : b->powder ? 1 : 0], 0.78f);
+    if (b->blast_timer > 0) {
+      float age = 1 - b->blast_timer / BARREL_EXPLOSION_TIME;
+      int frame = clampi((int)(age * EXPLOSION_FRAMES), 0, EXPLOSION_FRAMES - 1);
+      Sprite *s = add_sprite(b->x, b->y, as->explosion[frame], 1.8f + age * 0.8f);
+      s->has_z = true;
+      s->z_center = 0.5f + age * 0.2f;
+      s->fullbright = frame < 5;
+    }
+  }
   for (int i = 0; i < g->enemy_count; i++) {
     const Enemy *e = &g->enemies[i];
     Sprite *s = add_sprite(e->x, e->y, enemy_sprite(e, as, p), e->stats->scale);
@@ -869,6 +881,15 @@ static GradientStop stop(float pos, float r, float g, float b, float a) {
 static void render_glows(Renderer *r, Image *fb, const Game *g) {
   const Player *p = &g->player;
   const Level *lv = g->level;
+  for (int i = 0; i < g->barrel_count; i++) {
+    const Barrel *b = &g->barrels[i];
+    float heat = maxf(0, b->blast_timer / BARREL_EXPLOSION_TIME * 2 - 1);
+    if (heat <= 0) continue;
+    GlowSpec gs = {b->x, b->y, 0.5f, 220, 12, 180, 1.2f,
+                   {stop(0, 255, 190, 80, 0.5f * heat), stop(0.3f, 255, 100, 20, 0.2f * heat),
+                    stop(1, 255, 70, 0, 0)}};
+    draw_glow(r, fb, p, &gs);
+  }
   for (int i = 0; i < lv->torch_count; i++) {
     const Torch *t = &lv->torches[i];
     float flicker = torch_flicker(g->time, (float)t->phase);

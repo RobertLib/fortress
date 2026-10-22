@@ -16,6 +16,7 @@ typedef enum {
   // traps
   SND_TRAP_CLICK,
   SND_ARROW_HIT,
+  SND_EXPLOSION,
   // player
   SND_PLAYER_PAIN,
   SND_PLAYER_DEATH,

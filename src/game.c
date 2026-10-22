@@ -96,6 +96,13 @@ Game *game_create(const Level *level, int level_index, Session *session, const P
   g->enemies = malloc(sizeof(Enemy) * (level->enemy_count + 1));
   for (int i = 0; i < level->enemy_count; i++) enemy_init(&g->enemies[i], &level->enemies[i]);
 
+  g->barrel_count = level->barrel_count;
+  g->barrels = calloc((size_t)level->barrel_count + 1, sizeof(Barrel));
+  for (int i = 0; i < level->barrel_count; i++) {
+    const BarrelSpawn *b = &level->barrels[i];
+    g->barrels[i] = (Barrel){b->x, b->y, b->powder, false, 0};
+  }
+
   g->door_at = malloc(sizeof(int) * cells);
   g->lever_at = malloc(sizeof(int) * cells);
   g->portal_at = malloc(sizeof(int) * cells);
@@ -132,6 +139,7 @@ void game_destroy(Game *g) {
   audio_set_occlusion(NULL, NULL);
   free(g->items);
   free(g->enemies);
+  free(g->barrels);
   free(g->doors);
   free(g->traps);
   free(g->lever_pulled);
@@ -223,6 +231,10 @@ bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self
   // entities block each other — except bat swarms, which fly right through
   // (and clear over the furniture too)
   if (self && self->stats->swarm) return false;
+  for (int i = 0; i < g->barrel_count; i++) {
+    const Barrel *b = &g->barrels[i];
+    if (!b->destroyed && sq(b->x - x) + sq(b->y - y) < sq(r + BARREL_RADIUS)) return true;
+  }
   const Level *lv = g->level;
   for (int i = 0; i < lv->decoration_count; i++) {
     const Decoration *d = &lv->decorations[i];
@@ -492,13 +504,50 @@ static void update_player(Game *g, float dt, Input *in) {
 
 // ------------------------------------------------------------------ combat
 
-static void alert_nearby(Game *g, float radius) {
+static void alert_nearby(Game *g, float x, float y, float radius) {
   for (int i = 0; i < g->enemy_count; i++) {
     Enemy *e = &g->enemies[i];
     if (enemy_dead(e)) continue;
-    float dist = hypotf(e->x - g->player.x, e->y - g->player.y);
-    if (dist < radius && (dist < 4 || game_line_of_sight(g, e->x, e->y, g->player.x, g->player.y)))
+    float dist = hypotf(e->x - x, e->y - y);
+    if (dist < radius && (dist < 4 || game_line_of_sight(g, e->x, e->y, x, y)))
       enemy_wake(e, g, true);
+  }
+}
+
+static int blast_damage(const Game *g, const Barrel *b, float x, float y) {
+  float dist = hypotf(x - b->x, y - b->y);
+  if (dist >= BARREL_BLAST_RADIUS || !game_line_of_sight(g, b->x, b->y, x, y)) return 0;
+  return maxi(1, (int)round_half_up(90 * (1 - dist / BARREL_BLAST_RADIUS)));
+}
+
+void game_hit_barrel(Game *g, int index) {
+  if (index < 0 || index >= g->barrel_count) return;
+  Barrel *b = &g->barrels[index];
+  if (b->destroyed) return;
+  Listener l = game_listener(g);
+  if (!b->powder) {
+    audio_play_at(SND_ARROW_HIT, b->x, b->y, &l, 0.7f, 0.8f);
+    return;
+  }
+  // Mark it first: chain reactions can never detonate the same barrel twice.
+  b->destroyed = true;
+  b->blast_timer = BARREL_EXPLOSION_TIME;
+  audio_play_at(SND_EXPLOSION, b->x, b->y, &l, 1.6f, 0.9f + (float)frand() * 0.2f);
+  alert_nearby(g, b->x, b->y, 12);
+  for (int i = 0; i < g->enemy_count; i++) {
+    Enemy *e = &g->enemies[i];
+    if (enemy_dead(e)) continue;
+    int dmg = blast_damage(g, b, e->x, e->y);
+    if (dmg) enemy_hit(e, g, dmg);
+  }
+  int dmg = blast_damage(g, b, g->player.x, g->player.y);
+  if (dmg) game_hurt_player(g, dmg);
+  float dist = hypotf(b->x - g->player.x, b->y - g->player.y);
+  if (dist < 6 && game_line_of_sight(g, b->x, b->y, g->player.x, g->player.y))
+    g->shake = maxf(g->shake, 0.8f * (1 - dist / 6));
+  for (int i = 0; i < g->barrel_count; i++) {
+    const Barrel *next = &g->barrels[i];
+    if (next->powder && !next->destroyed && blast_damage(g, b, next->x, next->y)) game_hit_barrel(g, i);
   }
 }
 
@@ -524,9 +573,9 @@ static void update_weapon(Game *g, float dt, const Input *in) {
   g->weapon_anim_timer = 0.16f;
   if (spec->uses_ammo) p->ammo--;
   audio_play(spec->sound, 0.9f, 1);
-  alert_nearby(g, 9);
+  alert_nearby(g, p->x, p->y, 9);
 
-  // hitscan: nearest live enemy close enough to the view axis
+  // hitscan: nearest live enemy or barrel close enough to the view axis
   Enemy *best = NULL;
   float best_dist = spec->range;
   for (int i = 0; i < g->enemy_count; i++) {
@@ -543,6 +592,19 @@ static void update_weapon(Game *g, float dt, const Input *in) {
     best = e;
     best_dist = dist;
   }
+  int barrel = -1;
+  for (int i = 0; i < g->barrel_count; i++) {
+    const Barrel *b = &g->barrels[i];
+    if (b->destroyed) continue;
+    float dx = b->x - p->x, dy = b->y - p->y;
+    float dist = hypotf(dx, dy);
+    if (dist >= best_dist || dx * p->dir_x + dy * p->dir_y <= 0) continue;
+    float side = fabsf(dx * -p->dir_y + dy * p->dir_x);
+    if (side > BARREL_RADIUS + dist * 0.06f || !game_line_of_sight(g, p->x, p->y, b->x, b->y)) continue;
+    barrel = i;
+    best = NULL;
+    best_dist = dist;
+  }
   int dmg = 0;
   if (best) {
     float falloff = best_dist < 4 ? 1 : best_dist < 10 ? 0.75f : 0.55f;
@@ -553,6 +615,12 @@ static void update_weapon(Game *g, float dt, const Input *in) {
   // the hit to its mark, or flies on along the view into the wall
   if (p->weapon == WEAPON_DAGGER) {
     if (best) enemy_hit(best, g, dmg);
+  } else if (barrel >= 0) {
+    const Barrel *b = &g->barrels[barrel];
+    if (g->projectile_count == MAX_PROJECTILES)
+      game_hit_barrel(g, barrel);
+    else
+      game_loose_bolt(g, p->x, p->y, b->x - p->x, b->y - p->y, SHOT_MISS, NULL, 0);
   } else if (best) {
     game_loose_bolt(g, p->x, p->y, best->x - p->x, best->y - p->y, SHOT_AT_ENEMY, best, dmg);
   } else {
@@ -725,6 +793,17 @@ static void update_projectiles(Game *g, float dt) {
         dead = true;
         break;
       }
+      // Any real arrow can strike a barrel, including enemy and trap shots.
+      for (int k = 0; k < g->barrel_count; k++) {
+        const Barrel *b = &g->barrels[k];
+        if (!b->destroyed && a->z <= BARREL_HEIGHT &&
+            sq(b->x - a->x) + sq(b->y - a->y) <= sq(BARREL_RADIUS)) {
+          game_hit_barrel(g, k);
+          dead = true;
+          break;
+        }
+      }
+      if (dead) break;
       if (a->kind != SHOT_TRAP) {
         if (a->dist > BOLT_RANGE) dead = true;
         continue; // bolts strike nothing but their mark
@@ -821,6 +900,8 @@ static void update_pickups(Game *g) {
 // ------------------------------------------------------------------ update
 
 static void decay_fx(Game *g, float dt) {
+  for (int i = 0; i < g->barrel_count; i++)
+    g->barrels[i].blast_timer = maxf(0, g->barrels[i].blast_timer - dt);
   g->damage_flash = maxf(0, g->damage_flash - dt * 1.6f);
   g->shake = maxf(0, g->shake - dt * 3.2f);
   g->pickup_flash = maxf(0, g->pickup_flash - dt * 2.5f);

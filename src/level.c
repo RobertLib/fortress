@@ -12,6 +12,7 @@
 //     P      player start
 //     K      key            H healing potion (+25)   F bread (+10)
 //     A      quiver of bolts   T treasure (score)    M repeating crossbow
+//     Q/q    gunpowder barrel / ordinary barrel
 //     G/g    guard (patrol/standing)
 //     S/s    knight         O/o captain
 //     V/v    bat swarm (flying about / roosting until disturbed)
@@ -314,6 +315,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
 
   lv->items = malloc(sizeof(Item) * cells);
   lv->enemies = malloc(sizeof(EnemySpawn) * cells);
+  lv->barrels = malloc(sizeof(BarrelSpawn) * cells);
   lv->doors = malloc(sizeof(DoorSpawn) * cells);
   lv->levers = malloc(sizeof(Lever) * cells);
   lv->portals = malloc(sizeof(Portal) * cells);
@@ -359,6 +361,8 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
         plates[plate_count * 2] = x;
         plates[plate_count * 2 + 1] = y;
         plate_count++;
+      } else if (ch == 'Q' || ch == 'q') {
+        lv->barrels[lv->barrel_count++] = (BarrelSpawn){x + 0.5f, y + 0.5f, ch == 'Q'};
       } else if ((kind = item_kind_for(ch)) >= 0) {
         lv->items[lv->item_count++] = (Item){x + 0.5f, y + 0.5f, (ItemKind)kind};
       } else if ((kind = enemy_type_for((char)toupper((unsigned char)ch))) >= 0) {
@@ -585,6 +589,8 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
     spawn[(int)floorf(lv->items[i].y) * w + (int)floorf(lv->items[i].x)] = 1;
   for (int i = 0; i < lv->enemy_count; i++)
     spawn[(int)floorf(lv->enemies[i].y) * w + (int)floorf(lv->enemies[i].x)] = 1;
+  for (int i = 0; i < lv->barrel_count; i++)
+    spawn[(int)floorf(lv->barrels[i].y) * w + (int)floorf(lv->barrels[i].x)] = 1;
   for (int t = 0; t < plate_count; t++) spawn[plates[t * 2 + 1] * w + plates[t * 2]] = 1;
   // keep the cell a portal delivers onto clear of furniture and chests
   for (int i = 0; i < lv->portal_count; i++) {
@@ -970,6 +976,7 @@ void level_free(Level *lv) {
   free(lv->grid);
   free(lv->items);
   free(lv->enemies);
+  free(lv->barrels);
   free(lv->doors);
   free(lv->traps);
   free(lv->levers);

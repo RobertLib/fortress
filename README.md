@@ -29,6 +29,8 @@ cmake --build build
 ./build/fortress
 ```
 
+Run the combat regression checks with `ctest --test-dir build --output-on-failure`.
+
 On other platforms install SDL 3 through your package manager (or build it
 from source) and point CMake at it, e.g. `-DCMAKE_PREFIX_PATH=/path/to/SDL3`.
 
@@ -88,6 +90,16 @@ Enemies patrol, and once they spot you (or hear a crossbow shot) they
 raise the alarm and give chase — they stop to shoot, pull a knife or
 swing a fist at close quarters, and can open doors.
 
+### Barrels
+
+Gunpowder barrels carry a red label with a pale flame. One bolt sets them
+off: the blast hurts nearby enemies **and you**, loses strength with distance,
+and can ignite other powder barrels. Solid walls and closed wooden doors
+stop the blast; bars let it through. Ordinary, unmarked wooden barrels absorb
+arrows without exploding. A dagger does not ignite gunpowder.
+
+Both kinds block movement; an exploded barrel leaves walkable debris.
+
 ## Levels
 
 Levels are text files in [levels/](levels/) — one character = one tile,
@@ -100,6 +112,7 @@ R    barred door               X  gate (needs 3 keys)
 P    player start              K  key
 H    healing potion (+25)      F  bread (+10)
 A    quiver of bolts           T  treasure (score)
+Q    gunpowder barrel          q  ordinary barrel (does not explode)
 M    repeating crossbow        G/S/O  guard / knight / captain
 V/v  bat swarm (flying/roosting)  C/c  war hound (roaming/staying put)
 Y/y  rat (scurrying/lurking)   W/w  spider (prowling/lurking under the ceiling)
