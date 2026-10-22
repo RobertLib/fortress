@@ -121,6 +121,7 @@ static int wall_tex_for(char c) {
   case '5': return WT_BRICK;
   case '6': return WT_BANNER;
   case '7': return WT_SLIT;
+  case '8': return WT_BREAKABLE;
   case 'B': return WT_BARS;
   case 'D': return WT_DOOR;
   case 'R': return WT_BAR_DOOR;
@@ -333,7 +334,7 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
       side = 1;
     }
     if (map_x < 0 || map_y < 0 || map_x >= lv->w || map_y >= lv->h) break;
-    char cell = lv->grid[map_y * lv->w + map_x];
+    char cell = game_cell(g, map_x, map_y);
     if (cell == '.') continue;
 
     if (cell == 'D' || cell == 'R' || cell == 'N') {
@@ -379,7 +380,10 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
       continue;
     }
     int tex;
-    if (cell == '~') {
+    if (cell == '8') {
+      int hp = g->wall_health[map_y * lv->w + map_x];
+      tex = WT_BREAKABLE + (hp <= BREAKABLE_WALL_HEALTH / 3 ? 2 : hp <= BREAKABLE_WALL_HEALTH * 2 / 3 ? 1 : 0);
+    } else if (cell == '~') {
       // mirror portal: the vortex in the glass churns through four texture
       // frames keyed to the game clock
       tex = WT_PORTAL + ((int)floorf(g->time * 7) & 3);
@@ -406,7 +410,7 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
     }
     // a ray that comes out of a door, a niche or an opened secret wall has
     // struck the side of that opening
-    char from = lv->grid[(side == 1 ? map_y - step_y : map_y) * lv->w + (side == 0 ? map_x - step_x : map_x)];
+    char from = game_cell(g, side == 0 ? map_x - step_x : map_x, side == 1 ? map_y - step_y : map_y);
     if (from == 'D' || from == 'R' || from == 'N' || from == 'Z') tex = jamb_tex(tex);
     return (Hit){dist, side, tex, wall_x};
   }
@@ -674,6 +678,18 @@ static void collect_sprites(Renderer *r, const Game *g) {
   const Player *p = &g->player;
   const Level *lv = g->level;
   sprite_count = 0;
+  for (int i = 0; i < lv->w * lv->h; i++) {
+    if (lv->grid[i] != '8' || g->wall_health[i]) continue;
+    float x = i % lv->w + 0.5f, y = i / lv->w + 0.5f;
+    add_sprite(x, y, as->wall_rubble, 1.05f);
+    if (g->wall_dust[i] > 0) {
+      float age = 1 - g->wall_dust[i] / WALL_DUST_TIME;
+      int frame = clampi((int)(age * WALL_DUST_FRAMES), 0, WALL_DUST_FRAMES - 1);
+      Sprite *s = add_sprite(x, y, as->wall_dust[frame], 1.3f + age * 0.5f);
+      s->has_z = true;
+      s->z_center = 0.45f + age * 0.15f;
+    }
+  }
   for (int i = 0; i < g->barrel_count; i++) {
     const Barrel *b = &g->barrels[i];
     add_sprite(b->x, b->y, as->barrels[b->destroyed ? 2 : b->powder ? 1 : 0], 0.78f);
@@ -1042,7 +1058,7 @@ void render_map(Renderer *r, Image *fb, const Game *g) {
   for (int y = 0; y < lv->h; y++) {
     for (int x = 0; x < lv->w; x++) {
       if (!g->visited[y * lv->w + x]) continue;
-      char cell = lv->grid[y * lv->w + x];
+      char cell = game_cell(g, x, y);
       Color c;
       switch (cell) {
       case '.': c = color_parse("#241c12"); break;
@@ -1056,6 +1072,7 @@ void render_map(Renderer *r, Image *fb, const Game *g) {
       case 'L': c = game_lever_pulled(g, x, y) ? gold : wall; break;
       case '~': c = color_parse("#8a4fc0"); break;
       case 'N': c = color_parse("#57493a"); break;
+      case '8': c = color_parse("#a58a66"); break;
       default: c = wall; break;
       }
       gfx_fill_rect(fb, ox + x * cs, oy + y * cs, cs - 0.5f, cs - 0.5f, c);

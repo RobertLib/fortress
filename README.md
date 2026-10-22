@@ -72,7 +72,7 @@ F9 also works after death or game over.
 There is **one save slot**, replaced each time you save. It preserves the
 current floor, position, health, weapons, ammunition, keys, difficulty,
 score and lives, along with enemies, pickups, doors, levers, traps, barrels,
-arrows in flight and the explored map. Saving is available while alive on
+damaged and broken walls, arrows in flight and the explored map. Saving is available while alive on
 an unfinished floor. Starting a new game leaves the saved slot intact.
 **CONTINUE** resumes the run currently in memory; **LOAD GAME** restores
 the last position written to disk.
@@ -141,6 +141,20 @@ arrows without exploding. A dagger does not ignite gunpowder.
 
 Both kinds block movement; an exploded barrel leaves walkable debris.
 
+### Breakable walls
+
+Pale masonry with deep, branching cracks can be broken with **three bolts**
+from either crossbow, repeated dagger strikes at close range, or a nearby
+gunpowder explosion. The cracks widen with each hit; collapsing stone makes
+noise, throws up dust and leaves rubble you can walk over. The opening lets
+enemies, arrows, sound and sight through too. The bolt that breaks a wall
+stops there; fire again to shoot through the breach.
+
+Each floor has two of these walls, opening optional shortcuts. All three
+keys remain reachable without breaking them. Their damage and destruction
+survive saving/loading; retrying a floor rebuilds them. A wall still absorbs
+the blast that destroys it, protecting anything behind it from that explosion.
+
 ## Levels
 
 Levels are text files in [levels/](levels/) — one character = one tile,
@@ -148,6 +162,7 @@ so they are easy to edit or extend with your own:
 
 ```
 1-6  walls (texture variants)  B  barred wall (see/shoot through)
+8    cracked, breakable wall
 .    floor                     D  wooden door
 R    barred door               X  gate (needs 3 keys)
 P    player start              K  key
@@ -163,6 +178,10 @@ L    lever on a wall           Z  secret wall
 
 Barred walls and barred doors block movement while closed, but allow both the
 player and enemies to see and shoot through them. `R` opens like a normal door.
+
+Use `8` for breakable interior masonry. It stays bare so cracks remain visible;
+automatic furniture, torches and trap slits never replace it. An `8` on the
+outer edge becomes ordinary stone to keep the map enclosed.
 
 A secret wall (`Z`) disguises itself with the texture of the surrounding
 masonry and hides a stash of valuables. Pulling the nearest lever (`L`) with

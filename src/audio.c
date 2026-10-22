@@ -92,6 +92,21 @@ static double sfx_explosion(double t, SynthState *s) {
   return (crack + rumble + splinters) * 0.9;
 }
 
+static double sfx_wall_hit(double t, SynthState *s) {
+  double chip = noise() * env(t, 0.045, 2);
+  double knock = sine(t, 340 - 400 * t) * env(t, 0.13, 3);
+  return chip * 0.6 + knock * 0.4;
+}
+
+static double sfx_wall_break(double t, SynthState *s) {
+  double n = noise();
+  s->z += (n - s->z) * 0.08;
+  double crack = n * env(t, 0.08, 2) * 0.8;
+  double tumble = (s->z * 2.5 + sine(t, 85 - t * 45) * 0.3) * env(t, 0.75, 1.6);
+  double chips = n * pow(fmax(0, sine(t, 23)), 6) * env(t, 0.65, 1.3) * 0.45;
+  return crack + tumble + chips;
+}
+
 // --- player
 
 static double sfx_player_pain(double t, SynthState *s) { return saw(t, 280 - 500 * t) * env(t, 0.22, 3) * 0.5; }
@@ -467,6 +482,8 @@ static const SynthDef SYNTHS[SND_COUNT] = {
   [SND_TRAP_CLICK] = {0.16, sfx_trap_click},
   [SND_ARROW_HIT] = {0.09, sfx_arrow_hit},
   [SND_EXPLOSION] = {0.85, sfx_explosion},
+  [SND_WALL_HIT] = {0.15, sfx_wall_hit},
+  [SND_WALL_BREAK] = {0.8, sfx_wall_break},
   [SND_PLAYER_PAIN] = {0.22, sfx_player_pain},
   [SND_PLAYER_DEATH] = {0.9, sfx_player_death},
   [SND_STEP] = {0.07, sfx_step},

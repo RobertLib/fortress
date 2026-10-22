@@ -104,6 +104,37 @@ static Image *stone_texture(uint32_t seed, const char *base, bool moss) {
   return c;
 }
 
+static Image *breakable_texture(int damage) {
+  Image *c = stone_texture(88, "#837463", false);
+  // Wide, branching fissures distinguish weak masonry from decorative cracks.
+  static const float cracks[][8] = {
+    {27, 0, 34, 17, 25, 35, 32, 64},
+    {34, 17, 48, 23, 43, 39, 64, 46},
+    {25, 35, 12, 42, 16, 54, 0, 60},
+    {0, 15, 13, 23, 18, 17, 34, 17},
+    {43, 39, 37, 49, 49, 57, 46, 64},
+    {25, 35, 19, 29, 9, 31, 0, 26},
+    {48, 23, 52, 13, 45, 7, 50, 0},
+  };
+  int count = 3 + damage * 2;
+  for (int k = 0; k < count; k++) {
+    for (int j = 0; j < 3; j++) {
+      const float *p = cracks[k] + j * 2;
+      gfx_line(c, p[0] + 1, p[1], p[2] + 1, p[3], 3 + damage, color_parse("#ad9679"));
+      gfx_line(c, p[0], p[1], p[2], p[3], 1.8f + damage, color_parse("#211b17"));
+    }
+  }
+  if (damage) {
+    Lcg r = lcg(891);
+    for (int i = 0; i < damage * 10; i++) {
+      double x = 17 + lcg_next(&r) * 28, y = 4 + lcg_next(&r) * 56;
+      rect(c, x, y, 2 + damage, 2, "#302720");
+      rect(c, x, y + 2, 2 + damage, 1, "#b49c7d");
+    }
+  }
+  return c;
+}
+
 static void beam(Image *g, double x, double y, double w, double h) {
   rect(g, x, y, w, h, "#46331e");
   rect(g, x, y, w, 1, "rgba(255,255,255,0.08)");
@@ -1539,6 +1570,39 @@ static Image *barrel_sprite(int kind) {
   return c;
 }
 
+static Image *wall_rubble_sprite(void) {
+  Image *c = image_new(TEX, TEX);
+  Lcg r = lcg(1881);
+  px_c(c, 0.5, 14.4, 15, 1.6, faded("#221c17", 0.7));
+  for (int i = 0; i < 22; i++) {
+    double x = 1 + lcg_next(&r) * 12, y = 12.5 + lcg_next(&r) * 2.5;
+    double w = 0.7 + lcg_next(&r) * 2.3, h = 0.4 + lcg_next(&r) * 1.3;
+    px(c, x, y, w, h, i % 2 ? "#6b5e50" : "#87745f");
+    px(c, x, y, w, 0.25, "#b29b7e");
+    px(c, x + w - 0.3, y + 0.25, 0.3, h - 0.25, "#42392f");
+  }
+  return c;
+}
+
+static Image *wall_dust_sprite(int frame) {
+  Image *c = image_new(TEX, TEX);
+  Lcg r = lcg(1882);
+  double t = (double)frame / (WALL_DUST_FRAMES - 1);
+  for (int i = 0; i < 24; i++) {
+    double x = 8 + (lcg_next(&r) - 0.5) * (5 + t * 10);
+    double y = 10 + (lcg_next(&r) - 0.5) * 7 - t * 3;
+    double size = 1 + lcg_next(&r) * 2 + t;
+    px_c(c, x - size / 2, y - size / 2, size, size,
+         faded(i % 2 ? "#ac957a" : "#776653", (0.7 - t * 0.6) * 0.65));
+  }
+  for (int i = 0; i < 12; i++) {
+    double vx = (lcg_next(&r) - 0.5) * 11;
+    double x = 8 + vx * t, y = 7 + lcg_next(&r) * 3 - t * 3 + t * t * 10;
+    px_c(c, x, y, 0.4 + lcg_next(&r) * 0.6, 0.5, faded("#b19c7f", 1 - t));
+  }
+  return c;
+}
+
 static Image *explosion_sprite(int frame) {
   Image *c = image_new(TEX, TEX);
   Lcg r = lcg(1781);
@@ -2507,6 +2571,7 @@ void assets_build(Assets *a) {
   a->walls[WT_NICHE] = niche_texture(121);
   // the same stones as the dungeon wall, minus the window, for its jambs
   a->walls[WT_DUNGEON_BARE] = stone_texture(44, DUNGEON_BASE, false);
+  for (int d = 0; d < 3; d++) a->walls[WT_BREAKABLE + d] = breakable_texture(d);
   // the mirror's vortex churns over four frames
   for (int f = 0; f < 4; f++) a->walls[WT_PORTAL + f] = portal_texture(f);
   for (int k = 0; k < WT_COUNT; k++) a->walls_dark[k] = image_darken(a->walls[k], 0.65f);
@@ -2548,6 +2613,8 @@ void assets_build(Assets *a) {
   a->sparkle = sparkle_sprite();
   for (int k = 0; k < 3; k++) a->barrels[k] = barrel_sprite(k);
   for (int f = 0; f < EXPLOSION_FRAMES; f++) a->explosion[f] = explosion_sprite(f);
+  a->wall_rubble = wall_rubble_sprite();
+  for (int f = 0; f < WALL_DUST_FRAMES; f++) a->wall_dust[f] = wall_dust_sprite(f);
 
   for (int k = 0; k < TRAP_SPRITE_COUNT; k++) a->trap[k] = trap_sprite((TrapSprite)k);
 

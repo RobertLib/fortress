@@ -2,13 +2,14 @@
 ; 1-6 walls, B bars, D door, R barred door, X gate, P player, K key, H potion, F bread,
 ; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, Y/y rat, W/w spider, ^ arrow trap, L lever, Z secret wall, ~ mirror portal (paired in reading order)
 ; Q gunpowder barrel, q ordinary barrel
+; 8 cracked masonry: break with weapons or a powder blast
 @name WARLORD'S KEEP
 @floor #4a3a30
 @ceil #201410
 @start E
 555555555565556555555555565555555
 5P..B...R.....O.B.R...^K5...w...5
-555.5.55555.55555H5...S.5...5.5.6
+585.5.55555.55555H5...S.5...5.5.6
 5.5.......5.......6...S...O.5.D.L
 5.~..T..55655.5.555...Q.555.5.5Z5
 5.D..Sc.....5.....5........S5.5T5
@@ -24,7 +25,7 @@
 5...D.6......CK.5.5D5.....5...5.5
 5S6.55555..Q..6.5...55....5.555.5
 5.5...5.....A.5.5....v....5.5SD.5
-5.555.5.5..565555.55555.A.~.5.555
+5.555.5.5..865555.55555.A.~.5.555
 5.5...5.D..F.Yy.5.H...5.S...5.5.X
 5.5.5K555556.55D555.655.5D555.5.5
 5...L.ZT5.....5...5.A...L.AA5...6

@@ -14,6 +14,9 @@
 #define BARREL_HEIGHT 0.65f
 #define BARREL_BLAST_RADIUS 3.2f
 #define BARREL_EXPLOSION_TIME 0.7f
+#define BREAKABLE_WALL_HEALTH 36
+#define WALL_BOLT_DAMAGE 12
+#define WALL_DUST_TIME 0.8f
 
 typedef struct Barrel {
   float x, y;
@@ -93,7 +96,7 @@ typedef struct Trap {
 // whoever stands in their way. Crossbow bolts only show a shot the hitscan
 // roll has already settled: one bound for its target homes in on it and
 // delivers the damage on arrival, a miss flies on into the masonry.
-// Any arrow can be intercepted by a barrel along its path.
+// Any arrow can be intercepted by a barrel or damage cracked masonry.
 typedef enum { SHOT_TRAP, SHOT_MISS, SHOT_AT_PLAYER, SHOT_AT_ENEMY } ShotKind;
 
 typedef struct Projectile {
@@ -101,7 +104,7 @@ typedef struct Projectile {
   float z; // height of the shaft above the floor
   ShotKind kind;
   Enemy *target; // SHOT_AT_ENEMY
-  int dmg; // SHOT_AT_PLAYER, SHOT_AT_ENEMY
+  int dmg; // damage on arrival; zero uses WALL_BOLT_DAMAGE against masonry
 } Projectile;
 
 typedef struct Game {
@@ -123,6 +126,8 @@ typedef struct Game {
   bool *lever_pulled; // parallel to level->levers
   // per-cell lookups: index into doors / levers / portals, or -1
   int *door_at, *lever_at, *portal_at;
+  uint8_t *wall_health; // per cell: '8' masonry becomes floor at zero health
+  float *wall_dust; // seconds of falling stone and dust after collapse
   Projectile projectiles[MAX_PROJECTILES];
   int projectile_count;
 
@@ -168,6 +173,7 @@ void game_loose_bolt(Game *g, float x, float y, float aim_x, float aim_y, ShotKi
 void game_hurt_player(Game *g, int dmg);
 // A shot ignites powder; ordinary barrels just stop the projectile.
 void game_hit_barrel(Game *g, int index);
+void game_hit_wall(Game *g, int x, int y, int dmg);
 // Venom that goes on eating amount of health over the next few seconds.
 void game_poison_player(Game *g, int amount);
 void game_on_enemy_killed(Game *g, const Enemy *e);

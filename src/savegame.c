@@ -8,7 +8,7 @@
 
 // Explicit little-endian fields: no struct padding, native enums or pointers
 // reach disk. Bump the version when the schema or gameplay interpretation changes.
-#define SAVE_VERSION 1
+#define SAVE_VERSION 2
 #define SAVE_LIMIT (16 * 1024 * 1024)
 #define TIME_LIMIT 100000000.0f
 static const char MAGIC[8] = {'F', 'R', 'T', 'S', 'A', 'V', 'E', '\0'};
@@ -17,6 +17,7 @@ typedef struct Codec {
   uint8_t *data;
   size_t size, pos, capacity;
   bool reading, ok;
+  uint32_t version;
 } Codec;
 
 static bool fail(char *err, size_t size, const char *message) {
@@ -231,12 +232,20 @@ static void transfer_game(Codec *c, Game *g) {
   bytes(c, g->message, sizeof g->message);
   if (!memchr(g->message, '\0', sizeof g->message)) c->ok = false;
   T(g->message_timer); T(g->fire_timer); B(g->fire_held); T(g->weapon_anim_timer); B(g->show_map);
+  if (c->version >= 2) {
+    for (int i = 0; c->ok && i < lv->w * lv->h; i++) {
+      if (lv->grid[i] != '8') continue;
+      I(g->wall_health[i], 0, BREAKABLE_WALL_HEALTH);
+      F(g->wall_dust[i], 0, WALL_DUST_TIME);
+      if (g->wall_health[i] && g->wall_dust[i] > 0) c->ok = false;
+    }
+  }
 }
 
 bool savegame_write(const char *path, Game *g, char *err, size_t err_size) {
   if (!g || g->player_dead || g->completed || g->player.health <= 0)
     return fail(err, err_size, "SAVE DURING A LIVE GAME");
-  Codec storage = {.ok = true}, *c = &storage;
+  Codec storage = {.ok = true, .version = SAVE_VERSION}, *c = &storage;
   char magic[sizeof MAGIC];
   memcpy(magic, MAGIC, sizeof magic);
   bytes(c, magic, sizeof magic);
@@ -294,10 +303,11 @@ bool savegame_load(const char *path, const Level *levels, int level_count,
   c->pos = 0;
   char magic[sizeof MAGIC];
   bytes(c, magic, sizeof magic);
+  c->version = u32(c, 0);
   const char *error = NULL;
   if (memcmp(magic, MAGIC, sizeof magic) || checksum(data, c->size) != stored_checksum)
     error = "SAVED GAME IS DAMAGED";
-  else if (u32(c, 0) != SAVE_VERSION)
+  else if (c->version < 1 || c->version > SAVE_VERSION)
     error = "SAVED GAME VERSION IS NOT SUPPORTED";
   int index = integer(c, 0, 0, level_count - 1);
   uint32_t signature = u32(c, 0);

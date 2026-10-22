@@ -4,6 +4,7 @@
 //   @start (initial facing: N/S/E/W, default E).
 //   Everything else is the map grid, one character per cell:
 //     1-6    walls (texture variants), # = 1
+//     8      cracked, breakable masonry (interior walls only)
 //     B      barred wall (solid, but can be seen and shot through)
 //     .      floor
 //     D      door (slides open)
@@ -74,7 +75,7 @@ static const int CARDINAL[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
 static bool in_set(const char *set, char c) { return c && strchr(set, c) != NULL; }
 
-bool level_is_wall(char c) { return in_set("1234567B#", c); }
+bool level_is_wall(char c) { return in_set("12345678B#", c); }
 
 static int item_kind_for(char ch) {
   switch (ch) {
@@ -330,6 +331,8 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
     for (int x = 0; x < w; x++) {
       char ch = x < (int)rows[y].len ? rows[y].s[x] : '1';
       if (ch == ' ' || ch == '#') ch = '1'; // padding counts as wall
+      // Keep the map sealed even if breakable masonry is put on its edge.
+      if (ch == '8' && (x == 0 || y == 0 || x == w - 1 || y == h - 1)) ch = '1';
       char cell = '.';
       int kind;
       if (level_is_wall(ch)) {
@@ -408,7 +411,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
         if (cx < 0 || cy < 0 || cx >= w || cy >= h) break;
         char cell = grid[cy * w + cx];
         if (cell == '.') continue;
-        if (level_is_wall(cell)) {
+        if (level_is_wall(cell) && cell != '8') {
           int rank = (d >= 2 ? 0 : 100) + d;
           if (!found || rank < best_rank) {
             found = true;
@@ -552,7 +555,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   for (int y = 1; y < h - 1; y++) {
     for (int x = 1; x < w - 1; x++) {
       char cell = grid[y * w + x];
-      if (!level_is_wall(cell) || cell == '6' || cell == '7' || cell == 'B') continue;
+      if (!level_is_wall(cell) || cell == '6' || cell == '7' || cell == '8' || cell == 'B') continue;
       for (int d = 0; d < 4; d++) {
         int dx = CARDINAL[d][0], dy = CARDINAL[d][1];
         if (grid[(y + dy) * w + x + dx] != '.') continue;

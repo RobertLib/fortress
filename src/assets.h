@@ -14,6 +14,7 @@
 #define PORTRAIT_ROWS 2 // row 0: level gaze, row 1: glancing down
 #define PORTRAIT_SITTERS 3
 #define EXPLOSION_FRAMES 8
+#define WALL_DUST_FRAMES 6
 
 typedef enum {
   WT_STONE, // "1" rough masonry
@@ -31,6 +32,9 @@ typedef enum {
   WT_LEVER_PULLED, // "l" lever, pulled
   WT_NICHE, // "N" back wall of a niche
   WT_DUNGEON_BARE, // "4" without its window, for door and niche jambs
+  WT_BREAKABLE, // "8" cracked masonry, three stages of damage
+  WT_BREAKABLE_DAMAGED,
+  WT_BREAKABLE_CRUMBLING,
   WT_PORTAL, // "~" mirror portal, four animation frames
   WT_PORTAL_LAST = WT_PORTAL + 3,
   WT_COUNT
@@ -82,6 +86,7 @@ typedef struct Assets {
   Image *sparkle;
   Image *barrels[3]; // ordinary, gunpowder, charred debris
   Image *explosion[EXPLOSION_FRAMES];
+  Image *wall_rubble, *wall_dust[WALL_DUST_FRAMES];
   Image *trap[TRAP_SPRITE_COUNT];
   Image *weapons[WEAPON_COUNT][3]; // idle, just fired, recovering
   Image *weapon_icons[WEAPON_COUNT];

@@ -103,6 +103,10 @@ Game *game_create(const Level *level, int level_index, Session *session, const P
   p->radius = 0.22f;
 
   const int cells = level->w * level->h;
+  g->wall_health = calloc((size_t)cells, 1);
+  g->wall_dust = calloc((size_t)cells, sizeof(float));
+  for (int i = 0; i < cells; i++)
+    if (level->grid[i] == '8') g->wall_health[i] = BREAKABLE_WALL_HEALTH;
   // room for every enemy to drop a quiver on top of the placed items
   g->items = malloc(sizeof(Item) * (level->item_count + level->enemy_count + 1));
   memcpy(g->items, level->items, sizeof(Item) * level->item_count);
@@ -169,6 +173,8 @@ void game_destroy(Game *g) {
   free(g->lever_at);
   free(g->portal_at);
   free(g->visited);
+  free(g->wall_health);
+  free(g->wall_dust);
   free(g);
 }
 
@@ -198,7 +204,9 @@ Listener game_listener(const Game *g) {
 char game_cell(const Game *g, int x, int y) {
   const Level *lv = g->level;
   if (x < 0 || y < 0 || x >= lv->w || y >= lv->h) return '1';
-  return lv->grid[y * lv->w + x];
+  int cell = y * lv->w + x;
+  char kind = lv->grid[cell];
+  return kind == '8' && !g->wall_health[cell] ? '.' : kind;
 }
 
 Door *game_door_at(Game *g, int x, int y) {
@@ -536,6 +544,46 @@ static void alert_nearby(Game *g, float x, float y, float radius) {
   }
 }
 
+void game_hit_wall(Game *g, int x, int y, int dmg) {
+  if (dmg <= 0 || game_cell(g, x, y) != '8') return;
+  int cell = y * g->level->w + x;
+  g->wall_health[cell] = maxi(0, g->wall_health[cell] - dmg);
+  bool broken = !g->wall_health[cell];
+  Listener l = game_listener(g);
+  audio_play_at(broken ? SND_WALL_BREAK : SND_WALL_HIT, x + 0.5f, y + 0.5f, &l, broken ? 1.2f : 0.8f, 1);
+  if (broken) {
+    g->wall_dust[cell] = WALL_DUST_TIME;
+    float dist = hypotf(x + 0.5f - g->player.x, y + 0.5f - g->player.y);
+    if (dist < 5) g->shake = maxf(g->shake, 0.35f * (1 - dist / 5));
+    game_say(g, "THE WALL CRUMBLES!", 1.8f);
+    alert_nearby(g, x + 0.5f, y + 0.5f, 9);
+  }
+}
+
+// First opaque cell on the actual weapon ray. Bars let the strike through;
+// a door, lever or ordinary wall stops it before any fragile masonry behind.
+static float weapon_wall(const Game *g, float x, float y, float dx, float dy, float range, int *wx, int *wy) {
+  int cx = (int)floorf(x), cy = (int)floorf(y);
+  int sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1;
+  float tx = dx != 0 ? fabsf(1 / dx) : INFINITY;
+  float ty = dy != 0 ? fabsf(1 / dy) : INFINITY;
+  float nx = dx != 0 ? (dx > 0 ? cx + 1 - x : x - cx) * tx : INFINITY;
+  float ny = dy != 0 ? (dy > 0 ? cy + 1 - y : y - cy) * ty : INFINITY;
+  for (int i = 0; i < 128; i++) {
+    float dist;
+    if (nx < ny) { dist = nx; nx += tx; cx += sx; }
+    else { dist = ny; ny += ty; cy += sy; }
+    if (dist > range) break;
+    char cell = game_cell(g, cx, cy);
+    if (cell == '.' || cell == 'B' || cell == 'R') continue;
+    if ((cell == 'D' || cell == 'Z') && game_door_open_amount(g, cx, cy) > 0.85f) continue;
+    *wx = cx;
+    *wy = cy;
+    return dist;
+  }
+  return INFINITY;
+}
+
 static int blast_damage(const Game *g, const Barrel *b, float x, float y) {
   float dist = hypotf(x - b->x, y - b->y);
   if (dist >= BARREL_BLAST_RADIUS || !game_line_of_sight(g, b->x, b->y, x, y)) return 0;
@@ -554,6 +602,19 @@ void game_hit_barrel(Game *g, int index) {
   // Mark it first: chain reactions can never detonate the same barrel twice.
   b->destroyed = true;
   b->blast_timer = BARREL_EXPLOSION_TIME;
+  // Snapshot cover before any wall collapses: one blast cannot tunnel through
+  // several layers of masonry or hurt someone sheltered behind the breach.
+  int wall_cells[81], wall_damage[81], wall_count = 0;
+  int bx = (int)floorf(b->x), by = (int)floorf(b->y);
+  for (int y = maxi(0, by - 4); y <= mini(g->level->h - 1, by + 4); y++) {
+    for (int x = maxi(0, bx - 4); x <= mini(g->level->w - 1, bx + 4); x++) {
+      if (game_cell(g, x, y) != '8') continue;
+      int dmg = blast_damage(g, b, x + 0.5f, y + 0.5f);
+      if (!dmg) continue;
+      wall_cells[wall_count] = y * g->level->w + x;
+      wall_damage[wall_count++] = dmg;
+    }
+  }
   audio_play_at(SND_EXPLOSION, b->x, b->y, &l, 1.6f, 0.9f + (float)frand() * 0.2f);
   alert_nearby(g, b->x, b->y, 12);
   for (int i = 0; i < g->enemy_count; i++) {
@@ -571,6 +632,8 @@ void game_hit_barrel(Game *g, int index) {
     const Barrel *next = &g->barrels[i];
     if (next->powder && !next->destroyed && blast_damage(g, b, next->x, next->y)) game_hit_barrel(g, i);
   }
+  for (int i = 0; i < wall_count; i++)
+    game_hit_wall(g, wall_cells[i] % g->level->w, wall_cells[i] / g->level->w, wall_damage[i]);
 }
 
 static void update_weapon(Game *g, float dt, const Input *in) {
@@ -637,6 +700,11 @@ static void update_weapon(Game *g, float dt, const Input *in) {
   // the hit to its mark, or flies on along the view into the wall
   if (p->weapon == WEAPON_DAGGER) {
     if (best) enemy_hit(best, g, dmg);
+    else if (barrel < 0) {
+      int x, y;
+      if (weapon_wall(g, p->x, p->y, p->dir_x, p->dir_y, spec->range, &x, &y) <= spec->range)
+        game_hit_wall(g, x, y, (int)round_half_up(spec->dmg_lo + frand() * (spec->dmg_hi - spec->dmg_lo)));
+    }
   } else if (barrel >= 0) {
     const Barrel *b = &g->barrels[barrel];
     if (g->projectile_count == MAX_PROJECTILES)
@@ -646,7 +714,7 @@ static void update_weapon(Game *g, float dt, const Input *in) {
   } else if (best) {
     game_loose_bolt(g, p->x, p->y, best->x - p->x, best->y - p->y, SHOT_AT_ENEMY, best, dmg);
   } else {
-    game_loose_bolt(g, p->x, p->y, p->dir_x, p->dir_y, SHOT_MISS, NULL, 0);
+    game_loose_bolt(g, p->x, p->y, p->dir_x, p->dir_y, SHOT_MISS, NULL, WALL_BOLT_DAMAGE);
   }
 }
 
@@ -765,7 +833,11 @@ void game_loose_bolt(Game *g, float x, float y, float aim_x, float aim_y, ShotKi
   Projectile a = {x, y, aim_x / len, aim_y / len, 0, SHOT_Z, kind, target, dmg};
   if (g->projectile_count < MAX_PROJECTILES)
     g->projectiles[g->projectile_count++] = a;
-  else
+  else if (kind == SHOT_MISS) {
+    int wx, wy;
+    if (weapon_wall(g, x, y, a.dir_x, a.dir_y, BOLT_RANGE, &wx, &wy) <= BOLT_RANGE)
+      game_hit_wall(g, wx, wy, dmg > 0 ? dmg : WALL_BOLT_DAMAGE);
+  } else
     land_bolt(g, &a); // no room left in the air: the hit lands at once
 }
 
@@ -812,8 +884,11 @@ static void update_projectiles(Game *g, float dt) {
       char cell = game_cell(g, cx, cy);
       if (cell == 'B' || cell == 'R') continue;
       if (cell != '.' && !((cell == 'D' || cell == 'Z') && game_door_open_amount(g, cx, cy) > 0.85f)) {
-        Listener l = game_listener(g);
-        audio_play_at(SND_ARROW_HIT, a->x, a->y, &l, 0.7f, 1);
+        if (cell == '8') game_hit_wall(g, cx, cy, a->dmg > 0 ? a->dmg : WALL_BOLT_DAMAGE);
+        else {
+          Listener l = game_listener(g);
+          audio_play_at(SND_ARROW_HIT, a->x, a->y, &l, 0.7f, 1);
+        }
         dead = true;
         break;
       }
@@ -927,6 +1002,8 @@ static void update_pickups(Game *g) {
 static void decay_fx(Game *g, float dt) {
   for (int i = 0; i < g->barrel_count; i++)
     g->barrels[i].blast_timer = maxf(0, g->barrels[i].blast_timer - dt);
+  for (int i = 0; i < g->level->w * g->level->h; i++)
+    g->wall_dust[i] = maxf(0, g->wall_dust[i] - dt);
   g->damage_flash = maxf(0, g->damage_flash - dt * 1.6f);
   g->shake = maxf(0, g->shake - dt * 3.2f);
   g->pickup_flash = maxf(0, g->pickup_flash - dt * 2.5f);
