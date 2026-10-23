@@ -122,9 +122,30 @@ static Image *bars(bool door) {
   }
   return im;
 }
+static Image *lever_wall(const Image *stone, const Image *atlas, bool pulled) {
+  Image *im = stone_base(stone, 0, 1, false);
+  Image *source = art_cell(atlas, 4, pulled ? 3 : 2);
+  // Keep the painted plate and handle at half scale, centred at hand height.
+  // Mask their source bounds so the surrounding masonry keeps its texel scale.
+  const float scale = .5f;
+  for (int y = 0; y < TEX; y++)
+    for (int x = 0; x < TEX; x++) {
+      float u = ((x + .5f) * 64 / TEX - 32) / scale + 32;
+      float v = ((y + .5f) * 64 / TEX - 32) / scale + 32;
+      float plate = minf(minf(u - 19, 45.5f - u), minf(v - 16, 52.5f - v));
+      float handle = minf(minf(u - 28, 37.5f - u),
+                          minf(v - (pulled ? 49 : 1), (pulled ? 61.5f : 18) - v));
+      float alpha = clampf(maxf(plate, handle) / .8f, 0, 1);
+      if (alpha > 0)
+        px_over(&im->px[y * TEX + x], art_sample(source, u * TEX / 64 - .5f, v * TEX / 64 - .5f), alpha);
+    }
+  image_free(source);
+  return im;
+}
 static Image *painted_wall(const Image *stone, const Image *atlas, WallTex kind) {
   static const int cell[WT_COUNT] = {-1, -1, 8, 6, 12, 1, 7, -1, 0, -1, 4, 2, 3, -1, -1, 9, 10, 11, 5, 5, 5, 5};
   if (kind == WT_BARS || kind == WT_BAR_DOOR) return bars(kind == WT_BAR_DOOR);
+  if (kind == WT_LEVER || kind == WT_LEVER_PULLED) return lever_wall(stone, atlas, kind == WT_LEVER_PULLED);
   if (cell[kind] >= 0) {
     Image *im = art_cell(atlas, 4, cell[kind]);
     if (kind >= WT_PORTAL && kind <= WT_PORTAL_LAST) {
