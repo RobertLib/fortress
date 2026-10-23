@@ -114,7 +114,7 @@ static void test_enemies_and_arrows(void) {
   Input in = {.weapon = -1};
   for (int trap = 0; trap < 2; trap++) {
     g->projectile_count = 1;
-    g->projectiles[0] = (Projectile){3.5f, 2.5f, 1, 0, 0, 0.44f, trap ? SHOT_TRAP : SHOT_MISS, NULL, 0};
+    g->projectiles[0] = (Projectile){3.5f, 2.5f, 1, 0, 0, 0.44f, trap ? SHOT_TRAP : SHOT_MISS, NULL, 0, 0};
     game_update(g, 0.2f, &in);
     CHECK(g->projectile_count == 1 && g->projectiles[0].x > 5);
   }
@@ -242,6 +242,7 @@ static void test_shipped_levels(void) {
     seen[start] = 1;
     for (int next = 0; next < count; next++) {
       int at = queue[next], x = at % lv.w, y = at / lv.w;
+      g->player.x = x + .5f; g->player.y = y + .5f;
       for (int d = 0; d < 4; d++) {
         int nx = x + dirs[d][0], ny = y + dirs[d][1];
         if (nx < 0 || ny < 0 || nx >= lv.w || ny >= lv.h) continue;

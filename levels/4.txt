@@ -11,6 +11,13 @@
 @floor #3c3f42
 @ceil #15171a
 @start E
+; Static terraces joined by 0.125-high stone steps; no lifts.
+@height 0 11 31 14 -0.125
+@height 0 12 31 13 -0.25
+@height 0 13 31 12 -0.375
+@height 0 14 31 11 -0.5
+@height 0 15 31 10 -0.625
+@height 0 16 31 9 -0.75
 4444444454544454444454444444444
 4PB...4...RO.....HD...B...D.W.4
 4.8.T.4.4444444L44444...44544.5

@@ -245,11 +245,16 @@ static const Portal *portal_at(const Game *g, int x, int y) {
 }
 
 bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self) {
+  float from_x = self ? self->x : g->player.x, from_y = self ? self->y : g->player.y;
+  float from_z = level_floor(g->level, from_x, from_y);
+  bool airborne = self && (self->stats->swarm || self->flying);
   int min_x = (int)floorf(x - r), max_x = (int)floorf(x + r);
   int min_y = (int)floorf(y - r), max_y = (int)floorf(y + r);
   for (int cy = min_y; cy <= max_y; cy++) {
     for (int cx = min_x; cx <= max_x; cx++) {
       char cell = game_cell(g, cx, cy);
+      float floor = level_floor_at(g->level, cx, cy);
+      if (!airborne && fabsf(floor - from_z) > LEVEL_STEP + .001f) return true;
       if (cell == '.' || level_is_water(cell)) continue;
       // The player can step into a pit. Grounded enemies keep back from
       // its edge; bats and spiders suspended on silk can pass above it.
@@ -282,7 +287,6 @@ bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self
   // Two already caught overlapping (a rat the player has stepped onto, a
   // spider dropped right on top of someone) may always move apart.
   bool underfoot = self && self->stats->underfoot;
-  float from_x = self ? self->x : g->player.x, from_y = self ? self->y : g->player.y;
   for (int i = 0; i < g->enemy_count; i++) {
     const Enemy *e = &g->enemies[i];
     if (e == self || enemy_dead(e) || e->stats->swarm || e->flying || e->stats->underfoot != underfoot) continue;
@@ -298,33 +302,37 @@ bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self
 
 // Voxel traversal; solid walls and mostly-closed wooden doors block sight.
 // Bars are physical obstacles, but intentionally do not block vision/fire.
-bool game_line_of_sight(const Game *g, float x0, float y0, float x1, float y1) {
+bool game_line_of_sight_3d(const Game *g, float x0, float y0, float z0, float x1, float y1, float z1) {
   int cx = (int)floorf(x0), cy = (int)floorf(y0);
   int tx = (int)floorf(x1), ty = (int)floorf(y1);
   float dx = x1 - x0, dy = y1 - y0;
   int step_x = dx > 0 ? 1 : -1, step_y = dy > 0 ? 1 : -1;
-  float t_delta_x = dx != 0 ? fabsf(1 / dx) : INFINITY;
-  float t_delta_y = dy != 0 ? fabsf(1 / dy) : INFINITY;
-  float t_max_x = dx != 0 ? (dx > 0 ? cx + 1 - x0 : x0 - cx) * t_delta_x : INFINITY;
-  float t_max_y = dy != 0 ? (dy > 0 ? cy + 1 - y0 : y0 - cy) * t_delta_y : INFINITY;
-
-  for (int i = 0; i < 128; i++) {
+  float delta_x = dx != 0 ? fabsf(1 / dx) : INFINITY;
+  float delta_y = dy != 0 ? fabsf(1 / dy) : INFINITY;
+  float side_x = dx != 0 ? (dx > 0 ? cx + 1 - x0 : x0 - cx) * delta_x : INFINITY;
+  float side_y = dy != 0 ? (dy > 0 ? cy + 1 - y0 : y0 - cy) * delta_y : INFINITY;
+  float enter = 0;
+  for (int i = 0; i < 256; i++) {
+    float exit = minf(1, minf(side_x, side_y));
+    float za = z0 + (z1 - z0) * enter, zb = z0 + (z1 - z0) * exit;
+    float floor = level_floor_at(g->level, cx, cy);
+    if (minf(za, zb) < floor + .001f || maxf(za, zb) > floor + 1 - .001f) return false;
     if (cx == tx && cy == ty) return true;
-    if (t_max_x < t_max_y) {
-      t_max_x += t_delta_x;
-      cx += step_x;
-    } else {
-      t_max_y += t_delta_y;
-      cy += step_y;
+    if (enter > 0) {
+      char cell = game_cell(g, cx, cy);
+      if (!level_is_open(cell) && cell != 'B' && cell != 'R' &&
+          !((cell == 'D' || cell == 'Z') && game_door_open_amount(g, cx, cy) > .6f)) return false;
     }
-    char cell = game_cell(g, cx, cy);
-    if (level_is_open(cell)) continue;
-    if (cell == 'B' || cell == 'R') continue;
-    if ((cell == 'D' || cell == 'Z') && game_door_open_amount(g, cx, cy) > 0.6f) continue;
-    if (cx == tx && cy == ty) return true;
-    return false;
+    enter = exit;
+    if (side_x < side_y) { side_x += delta_x; cx += step_x; }
+    else { side_y += delta_y; cy += step_y; }
   }
   return false;
+}
+
+bool game_line_of_sight(const Game *g, float x0, float y0, float x1, float y1) {
+  return game_line_of_sight_3d(g, x0, y0, level_floor(g->level, x0, y0) + SHOT_Z,
+                             x1, y1, level_floor(g->level, x1, y1) + SHOT_Z);
 }
 
 // ------------------------------------------------------------------ doors
@@ -470,6 +478,7 @@ static void use_action(Game *g) {
     int cx = (int)floorf(p->x + p->dir_x * reach[i]);
     int cy = (int)floorf(p->y + p->dir_y * reach[i]);
     char cell = game_cell(g, cx, cy);
+    if (fabsf(level_floor_at(g->level, cx, cy) - level_floor(g->level, p->x, p->y)) > .25f) return;
     if (level_is_open(cell)) continue;
     if (cell == 'D' || cell == 'R') {
       Door *door = game_door_at(g, cx, cy);
@@ -560,6 +569,7 @@ static void update_player(Game *g, float dt, Input *in) {
   if (g->level->pendulum_count) steps = maxi(steps, (int)ceilf(dt / 0.01f));
   float start_x = p->x, start_y = p->y;
   for (int i = 0; i < steps; i++) {
+    float before_floor = level_floor(g->level, p->x, p->y);
     if (len > 0.001f) {
       bool wet = level_is_water(game_cell(g, (int)floorf(p->x), (int)floorf(p->y)));
       float step = speed / steps * (wet ? WATER_SPEED : 1);
@@ -572,6 +582,8 @@ static void update_player(Game *g, float dt, Input *in) {
       if (wet != level_is_water(game_cell(g, (int)floorf(p->x), (int)floorf(p->y))))
         audio_play(SND_SPLASH, .65f, 1);
     }
+    p->step_offset = clampf(p->step_offset + before_floor - level_floor(g->level, p->x, p->y), -.25f, .25f);
+    p->step_offset *= expf(-18 * dt / steps);
     update_pendulums(g, dt / steps, g->time - dt + dt * (i + 1) / steps);
     if (g->player_dead) return;
   }
@@ -602,6 +614,7 @@ static void update_player(Game *g, float dt, Input *in) {
     p->dir_y = (float)dest->dy;
     p->plane_x = -dest->dy * 0.66f;
     p->plane_y = dest->dx * 0.66f;
+    p->step_offset = 0;
     g->portal_flash = 0.6f;
     audio_play(SND_PORTAL, 1, 1);
   }
@@ -755,6 +768,7 @@ static void update_weapon(Game *g, float dt, const Input *in) {
   for (int i = 0; i < g->enemy_count; i++) {
     Enemy *e = &g->enemies[i];
     if (enemy_dead(e)) continue;
+    if (p->weapon == WEAPON_DAGGER && fabsf(level_floor(g->level, e->x, e->y) - level_floor(g->level, p->x, p->y)) > .25f) continue;
     float dx = e->x - p->x, dy = e->y - p->y;
     float dist = hypotf(dx, dy);
     if (dist > spec->range || dist >= best_dist) continue;
@@ -798,8 +812,12 @@ static void update_weapon(Game *g, float dt, const Input *in) {
     const Barrel *b = &g->barrels[barrel];
     if (g->projectile_count == MAX_PROJECTILES)
       game_hit_barrel(g, barrel);
-    else
+    else {
+      int index = g->projectile_count;
       game_loose_bolt(g, p->x, p->y, b->x - p->x, b->y - p->y, SHOT_MISS, NULL, 0);
+      Projectile *shot = &g->projectiles[index];
+      shot->slope = (level_floor(g->level, b->x, b->y) + SHOT_Z - shot->z) / maxf(.01f, best_dist);
+    }
   } else if (best) {
     game_loose_bolt(g, p->x, p->y, best->x - p->x, best->y - p->y, SHOT_AT_ENEMY, best, dmg);
   } else {
@@ -890,7 +908,8 @@ static void update_traps(Game *g, float dt) {
       if (t->timer <= 0) {
         if (g->projectile_count < MAX_PROJECTILES)
           g->projectiles[g->projectile_count++] =
-              (Projectile){s->origin_x, s->origin_y, s->dir_x, s->dir_y, 0, SHOT_Z, SHOT_TRAP, NULL, 0};
+              (Projectile){s->origin_x, s->origin_y, s->dir_x, s->dir_y, 0,
+                           level_floor_at(g->level, s->x, s->y) + SHOT_Z, SHOT_TRAP, NULL, 0, 0};
         audio_play_at(SND_ENEMY_SHOT, s->origin_x, s->origin_y, &l, 0.9f, 1.25f);
         t->timer = 0.16f;
         if (--t->shots <= 0) {
@@ -919,7 +938,7 @@ static void land_bolt(Game *g, const Projectile *a) {
 void game_loose_bolt(Game *g, float x, float y, float aim_x, float aim_y, ShotKind kind, Enemy *target, int dmg) {
   float len = hypotf(aim_x, aim_y);
   if (len == 0) len = 1;
-  Projectile a = {x, y, aim_x / len, aim_y / len, 0, SHOT_Z, kind, target, dmg};
+  Projectile a = {x, y, aim_x / len, aim_y / len, 0, level_floor(g->level, x, y) + SHOT_Z, kind, target, dmg, 0};
   if (g->projectile_count < MAX_PROJECTILES)
     g->projectiles[g->projectile_count++] = a;
   else if (kind == SHOT_MISS) {
@@ -937,11 +956,11 @@ static bool home_bolt(Game *g, Projectile *a, float step) {
   bool at_player = a->kind == SHOT_AT_PLAYER;
   float tx = at_player ? p->x : a->target->x;
   float ty = at_player ? p->y : a->target->y;
-  float tz = !at_player && a->target->flying ? a->target->fly_height : SHOT_Z;
+  float tz = level_floor(g->level, tx, ty) + (!at_player && a->target->flying ? a->target->fly_height : SHOT_Z);
   float reach = at_player ? p->radius : a->target->radius;
   float d = hypotf(tx - a->x, ty - a->y);
   if (d <= step + reach) {
-    land_bolt(g, a);
+    if (game_line_of_sight_3d(g, a->x, a->y, a->z, tx, ty, tz)) land_bolt(g, a);
     return true;
   }
   a->dir_x = (tx - a->x) / d;
@@ -966,11 +985,14 @@ static void update_projectiles(Game *g, float dt) {
         dead = true;
         break;
       }
+      if (a->kind == SHOT_MISS || a->kind == SHOT_TRAP) a->z += a->slope * step;
       a->x += a->dir_x * step;
       a->y += a->dir_y * step;
       a->dist += step;
       int cx = (int)floorf(a->x), cy = (int)floorf(a->y);
       char cell = game_cell(g, cx, cy);
+      float floor = level_floor_at(g->level, cx, cy);
+      if (a->z <= floor || a->z >= floor + 1) { dead = true; break; }
       if (cell == 'B' || cell == 'R') continue;
       if (!level_is_open(cell) && !((cell == 'D' || cell == 'Z') && game_door_open_amount(g, cx, cy) > 0.85f)) {
         if (cell == '8') game_hit_wall(g, cx, cy, a->dmg > 0 ? a->dmg : WALL_BOLT_DAMAGE);
@@ -984,7 +1006,8 @@ static void update_projectiles(Game *g, float dt) {
       // Any real arrow can strike a barrel, including enemy and trap shots.
       for (int k = 0; k < g->barrel_count; k++) {
         const Barrel *b = &g->barrels[k];
-        if (!b->destroyed && a->z <= BARREL_HEIGHT &&
+        if (!b->destroyed && a->z >= level_floor(g->level, b->x, b->y) &&
+            a->z <= level_floor(g->level, b->x, b->y) + BARREL_HEIGHT &&
             sq(b->x - a->x) + sq(b->y - a->y) <= sq(BARREL_RADIUS)) {
           game_hit_barrel(g, k);
           dead = true;
@@ -996,16 +1019,18 @@ static void update_projectiles(Game *g, float dt) {
         if (a->dist > BOLT_RANGE) dead = true;
         continue; // bolts strike nothing but their mark
       }
-      if (!g->player_dead && hypotf(p->x - a->x, p->y - a->y) < p->radius + 0.12f) {
-        game_hurt_player(g, 10 + (int)floor(frand() * 9));
+      if (!g->player_dead && fabsf(a->z - level_floor(g->level, p->x, p->y) - SHOT_Z) < .35f &&
+          hypotf(p->x - a->x, p->y - a->y) < p->radius + 0.12f) {
+        game_hurt_player(g, 10 + (int)floorf(frand() * 9));
         dead = true;
         break;
       }
       for (int k = 0; k < g->enemy_count; k++) {
         Enemy *e = &g->enemies[k];
         if (enemy_dead(e)) continue;
-        if (hypotf(e->x - a->x, e->y - a->y) < e->radius + 0.05f) {
-          enemy_hit(e, g, 14 + (int)floor(frand() * 10));
+        if (fabsf(a->z - level_floor(g->level, e->x, e->y) - (e->flying ? e->fly_height : SHOT_Z)) < .35f &&
+            hypotf(e->x - a->x, e->y - a->y) < e->radius + 0.05f) {
+          enemy_hit(e, g, 14 + (int)floorf(frand() * 10));
           dead = true;
           break;
         }
@@ -1078,7 +1103,8 @@ static void update_pickups(Game *g) {
   const Player *p = &g->player;
   for (int i = g->item_count - 1; i >= 0; i--) {
     Item it = g->items[i];
-    if (hypotf(it.x - p->x, it.y - p->y) > 0.55f) continue;
+    if (hypotf(it.x - p->x, it.y - p->y) > 0.55f ||
+        fabsf(level_floor(g->level, it.x, it.y) - level_floor(g->level, p->x, p->y)) > LEVEL_STEP + .001f) continue;
     if (!apply_pickup(g, &it)) continue;
     memmove(&g->items[i], &g->items[i + 1], sizeof(Item) * (g->item_count - i - 1));
     g->item_count--;

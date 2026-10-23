@@ -159,16 +159,20 @@ static bool column_rows(const Image *fb, float top, float height, int *y0, int *
 
 // One texture column stretched over [top, top + height) at screen column x,
 // composited and then tinted as a whole.
-static void draw_column(Image *fb, const Image *tex, int tex_x, int x, float top, float height, const Tint *tint) {
+static void draw_column(Renderer *r, Image *fb, const Image *tex, int tex_x, int x, float top, float height,
+                        const Tint *tint, float dist, bool write_depth) {
   int y0, y1;
   if (height <= 0 || x < fb->clip_x0 || x >= fb->clip_x1 || !column_rows(fb, top, height, &y0, &y1)) return;
   float ky = (float)tex->h / height;
   for (int py = y0; py < y1; py++) {
+    int index = py * W + x;
+    if (dist > r->depth[index] + .0001f) continue;
     int ty = (int)floorf(((float)py + 0.5f - top) * ky);
     if (ty < 0) ty = 0;
     if (ty >= tex->h) ty = tex->h - 1;
     uint32_t *d = fb->px + (size_t)py * fb->w + x;
     px_over(d, tex->px[ty * tex->w + tex_x], 1);
+    if (write_depth) { r->depth[index] = dist; r->floor_mask[index] = 0; }
     if (tint) {
       uint32_t v = *d;
       *d = pack_argb(255, (float)((v >> 16) & 255) * tint->k + tint->r, (float)((v >> 8) & 255) * tint->k + tint->g,
@@ -251,6 +255,8 @@ void renderer_init(Renderer *r, const Assets *assets) {
   memset(r, 0, sizeof *r);
   r->assets = assets;
   r->shake_buf = malloc(sizeof(uint32_t) * W * VIEW_H);
+  r->depth = malloc(sizeof(float) * W * VIEW_H);
+  r->floor_mask = calloc((size_t)W * VIEW_H, 1);
   // static vignette overlay for the 3D view
   r->vignette = image_new(W, VIEW_H);
   GradientStop stops[2] = {{0, {0, 0, 0, 0}}, {1, {6, 4, 2, 0.5f}}};
@@ -261,9 +267,13 @@ void renderer_free(Renderer *r) {
   image_free(r->vignette);
   free(r->shake_buf);
   free(r->plane_tints);
+  free(r->depth);
+  free(r->floor_mask);
   r->vignette = NULL;
   r->shake_buf = NULL;
   r->plane_tints = NULL;
+  r->depth = NULL;
+  r->floor_mask = NULL;
   r->plane_tint_count = 0;
 }
 
@@ -335,6 +345,8 @@ static void render_planes(Renderer *r, Image *fb, const Game *g) {
       Tint tint = plane_tint(r, lv->w + 1, cx, cy, u, v);
       floor_row[x] = plane_color(floor_tex->px[ty * floor_tex->w + tx], floor_palette, &tint);
       ceil_row[x] = plane_color(ceil_tex->px[ty * ceil_tex->w + tx], ceil_palette, &tint);
+      r->depth[y * W + x] = r->depth[(VIEW_H - 1 - y) * W + x] = dist;
+      r->floor_mask[y * W + x] = 1;
     }
   }
 }
@@ -348,9 +360,9 @@ typedef struct {
   float wall_x;
 } Hit;
 
-static void push_overlay(Renderer *r, int column, float dist, int side, int tex, float wall_x) {
+static void push_overlay(Renderer *r, int column, float dist, int side, int tex, float wall_x, float floor) {
   if (r->overlay_count[column] >= MAX_OVERLAYS) return;
-  r->overlays[column][r->overlay_count[column]++] = (Overlay){dist, side, tex, wall_x};
+  r->overlays[column][r->overlay_count[column]++] = (Overlay){dist, side, tex, wall_x, floor};
 }
 
 static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float pos_y, float ray_x, float ray_y) {
@@ -409,7 +421,7 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
       float open = game_door_open_amount(g, map_x, map_y);
       if (coord >= 0 && coord < 1 && coord >= open) {
         if (cell == 'R') {
-          push_overlay(r, column, dist_mid, side, WT_BAR_DOOR, coord - open);
+          push_overlay(r, column, dist_mid, side, WT_BAR_DOOR, coord - open, level_floor_at(lv, map_x, map_y));
           continue;
         }
         return (Hit){dist_mid, side, WT_DOOR, coord - open};
@@ -429,7 +441,8 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
     wall_x -= floorf(wall_x);
     if ((side == 0 && ray_x > 0) || (side == 1 && ray_y < 0)) wall_x = 1 - wall_x;
     if (cell == 'B') {
-      push_overlay(r, column, dist, side, WT_BARS, wall_x);
+      push_overlay(r, column, dist, side, WT_BARS, wall_x,
+                   level_floor_at(lv, map_x, map_y));
       continue;
     }
     int tex;
@@ -470,6 +483,101 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
   return (Hit){1e9f, 0, WT_STONE, 0};
 }
 
+// Walk every sector crossed by a column. Each tread owns a horizontal span;
+// height changes expose stone risers and ceiling soffits. Depth is stored per
+// pixel so a ledge hides feet while leaving the upper body visible.
+static void sector_plane(Renderer *r, Image *fb, const Game *g, int x, float rx, float ry,
+                          float enter, float exit, float z, bool ceiling) {
+  float rise = r->eye_z - z;
+  if ((!ceiling && rise <= 0) || (ceiling && rise >= 0)) return;
+  float a = VIEW_H / 2.0f + rise * VIEW_H / maxf(.001f, enter);
+  float b = VIEW_H / 2.0f + rise * VIEW_H / maxf(.001f, exit);
+  int y0 = maxi(0, (int)ceilf(minf(a, b) - .5f));
+  int y1 = mini(VIEW_H, (int)ceilf(maxf(a, b) - .5f));
+  const Level *lv = g->level;
+  Color palette = ceiling ? rgb(lv->ceil_color.r * (2.1f / 128), lv->ceil_color.g * (2.1f / 128), lv->ceil_color.b * (2.1f / 128))
+                          : rgb(lv->floor_color.r * (1.3f / 128), lv->floor_color.g * (1.3f / 128), lv->floor_color.b * (1.3f / 128));
+  for (int y = y0; y < y1; y++) {
+    float offset = y + .5f - VIEW_H / 2.0f;
+    float dist = rise * VIEW_H / offset;
+    int index = y * W + x;
+    if (dist < enter - .0001f || dist > exit + .0001f || dist >= r->depth[index]) continue;
+    float wx = g->player.x + rx * dist, wy = g->player.y + ry * dist;
+    int cx = (int)floorf(wx), cy = (int)floorf(wy);
+    if (cx < 0 || cy < 0 || cx >= lv->w || cy >= lv->h) continue;
+    float u = wx - cx, v = wy - cy;
+    float footprint = TEX * maxf(dist * hypotf(rx, ry) / fabsf(offset), 1.32f * dist / W);
+    int mip = clampi((int)log2f(maxf(1, footprint)), 0, SURFACE_MIPS - 1);
+    const Image *tex = ceiling ? r->assets->ceilings[lv->surface_theme][mip] : r->assets->floors[lv->surface_theme][mip];
+    int tx = mini(tex->w - 1, (int)(u * tex->w)), ty = mini(tex->h - 1, (int)(v * tex->h));
+    Tint tint = plane_tint(r, lv->w + 1, cx, cy, u, v);
+    fb->px[(size_t)y * fb->w + x] = plane_color(tex->px[ty * tex->w + tx], palette, &tint);
+    r->depth[index] = dist;
+    r->floor_mask[index] = !ceiling;
+  }
+}
+
+static void sector_riser(Renderer *r, Image *fb, const Game *g, int x, float rx, float ry,
+                          float dist, int side, float bottom, float top) {
+  if (dist < .001f || top <= bottom) return;
+  float h = VIEW_H / dist;
+  float screen_top = VIEW_H / 2.0f + h * (r->eye_z - top);
+  int y0, y1;
+  if (!column_rows(fb, screen_top, h * (top - bottom), &y0, &y1)) return;
+  float wx = g->player.x + rx * dist, wy = g->player.y + ry * dist;
+  float along = side ? wx : wy;
+  along -= floorf(along);
+  const Image *tex = (side ? r->assets->walls_dark : r->assets->walls)[WT_STONE];
+  Tint tint = surface_tint(g, wx, wy, dist);
+  for (int y = y0; y < y1; y++) {
+    int index = y * W + x;
+    if (dist >= r->depth[index]) continue;
+    float z = r->eye_z - (y + .5f - VIEW_H / 2.0f) / h;
+    float v = top - z;
+    v -= floorf(v);
+    uint32_t color = tex->px[tex_column(v) * tex->w + tex_column(along)];
+    float bevel = top - z < .009f ? 1.16f : z - bottom < .012f ? .62f : .82f;
+    fb->px[(size_t)y * fb->w + x] = pack_argb(255,
+        minf(255, ((color >> 16) & 255) * bevel * tint.k + tint.r),
+        minf(255, ((color >> 8) & 255) * bevel * tint.k + tint.g),
+        minf(255, (color & 255) * bevel * tint.k + tint.b));
+    r->depth[index] = dist;
+    r->floor_mask[index] = 0;
+  }
+}
+
+static void render_sectors(Renderer *r, Image *fb, const Game *g) {
+  build_plane_tints(r, g);
+  const Player *p = &g->player;
+  for (int x = 0; x < W; x++) {
+    float camera = 2.0f * x / W - 1;
+    float rx = p->dir_x + p->plane_x * camera, ry = p->dir_y + p->plane_y * camera;
+    int cx = (int)floorf(p->x), cy = (int)floorf(p->y);
+    int sx = rx < 0 ? -1 : 1, sy = ry < 0 ? -1 : 1;
+    float dx = rx != 0 ? fabsf(1 / rx) : INFINITY, dy = ry != 0 ? fabsf(1 / ry) : INFINITY;
+    float side_x = (rx < 0 ? p->x - cx : cx + 1 - p->x) * dx;
+    float side_y = (ry < 0 ? p->y - cy : cy + 1 - p->y) * dy;
+    float enter = 0;
+    for (int i = 0; i < MAX_STEPS; i++) {
+      float exit = minf(r->zbuffer[x], minf(side_x, side_y));
+      float floor = level_floor_at(g->level, cx, cy);
+      sector_plane(r, fb, g, x, rx, ry, enter, exit, floor, false);
+      sector_plane(r, fb, g, x, rx, ry, enter, exit, floor + 1, true);
+      if (exit >= r->zbuffer[x]) break;
+      int side;
+      if (side_x < side_y) { side_x += dx; cx += sx; side = 0; }
+      else { side_y += dy; cy += sy; side = 1; }
+      if (cx < 0 || cy < 0 || cx >= g->level->w || cy >= g->level->h) break;
+      float next = level_floor_at(g->level, cx, cy);
+      if (next != floor) {
+        sector_riser(r, fb, g, x, rx, ry, exit, side, minf(floor, next), maxf(floor, next));
+        sector_riser(r, fb, g, x, rx, ry, exit, side, minf(floor, next) + 1, maxf(floor, next) + 1);
+      }
+      enter = exit;
+    }
+  }
+}
+
 // Cast pits and shallow water into the floor plane. These surfaces never
 // write the column z-buffer: sight and arrows pass above them.
 static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
@@ -488,8 +596,8 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
     Tint tint = {1, 0, 0, 0};
     for (int y = VIEW_H / 2; y < VIEW_H; y++) {
       float slope = ((float)y + 0.5f - VIEW_H / 2.0f) / VIEW_H;
-      float dist = 0.5f / slope;
-      if (dist >= r->zbuffer[x]) continue;
+      float dist = g->level->has_heights ? r->depth[y * W + x] : 0.5f / slope;
+      if (!r->floor_mask[y * W + x] || dist >= r->zbuffer[x]) continue;
       float wx = p->x + rx * dist, wy = p->y + ry * dist;
       int cx = (int)floorf(wx), cy = (int)floorf(wy);
       char kind = game_cell(g, cx, cy);
@@ -553,7 +661,7 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
         float ex = rx != 0 ? ((rx > 0 ? cx + 1 - PIT_RIM : cx + PIT_RIM) - p->x) / rx : INFINITY;
         float ey = ry != 0 ? ((ry > 0 ? cy + 1 - PIT_RIM : cy + PIT_RIM) - p->y) / ry : INFINITY;
         float exit = minf(ex, ey);
-        float depth = maxf(0, exit * slope - 0.5f);
+        float depth = maxf(0, exit * slope - (r->eye_z - level_floor_at(g->level, cx, cy)));
         float along = ex < ey ? p->y + ry * exit : p->x + rx * exit;
         along -= floorf(along);
         float tz = depth - floorf(depth);
@@ -581,7 +689,7 @@ static void render_transparent_walls(Renderer *r, Image *fb, int start_x, int en
       if (o->dist >= in_front_of || o->dist <= 0.0001f) continue;
       float line_h = VIEW_H / o->dist;
       const Image *tex = (o->side == 1 ? r->assets->walls_dark : r->assets->walls)[o->tex];
-      draw_column(fb, tex, tex_column(o->wall_x), x, VIEW_H / 2.0f - line_h / 2, line_h, NULL);
+      draw_column(r, fb, tex, tex_column(o->wall_x), x, VIEW_H / 2.0f + line_h * (r->eye_z - o->floor - 1), line_h, NULL, o->dist, false);
     }
   }
 }
@@ -605,10 +713,11 @@ static void draw_box_face(Renderer *r, Image *fb, const Game *g, float x0, float
     quad_at(&q, x, &dist, &u);
     if (dist >= r->zbuffer[x]) continue;
     float line_h = VIEW_H / dist;
-    float top = VIEW_H / 2.0f + line_h * (0.5f - height);
+    float base = level_floor(g->level, (x0 + x1) * .5f + nx * .1f, (y0 + y1) * .5f + ny * .1f);
+    float top = VIEW_H / 2.0f + line_h * (r->eye_z - base - height);
     Tint tint = surface_tint(g, x0 + (x1 - x0) * u, y0 + (y1 - y0) * u, dist);
-    draw_column(fb, tex, tex_column(u), x, top, line_h * height, &tint);
-    r->zbuffer[x] = dist;
+    draw_column(r, fb, tex, tex_column(u), x, top, line_h * height, &tint, dist, true);
+    if (!g->level->has_heights) r->zbuffer[x] = dist;
   }
 }
 
@@ -677,14 +786,15 @@ static void draw_box_lid(Renderer *r, Image *fb, const Game *g, const WallBox *w
     }
     if (s_far <= s_near || s_near >= r->zbuffer[x]) continue;
 
-    float rise = (0.5f - spec->height) * VIEW_H; // eye sits above the lid
+    float base = level_floor_at(g->level, wd->x + wd->dx, wd->y + wd->dy);
+    float rise = (r->eye_z - base - spec->height) * VIEW_H; // eye sits above the lid
     float y_top = VIEW_H / 2.0f + rise / s_far;
     float y_bot = VIEW_H / 2.0f + rise / s_near;
     if (y_bot - y_top < 0.05f) continue;
     float s_mid = (s_near + s_far) / 2;
     float u = (pt + s_mid * rt + spec->half_w) / (spec->half_w * 2);
     Tint tint = surface_tint(g, p->x + rdx * s_mid, p->y + rdy * s_mid, s_mid);
-    draw_column(fb, tex, tex_column(u), x, y_top, y_bot - y_top, &tint);
+    draw_column(r, fb, tex, tex_column(u), x, y_top, y_bot - y_top, &tint, s_near, true);
   }
 }
 
@@ -701,7 +811,7 @@ static void render_wall_boxes(Renderer *r, Image *fb, const Game *g) {
     const WallBox *wd = &lv->wall_boxes[i];
     const BoxSpec *spec = &BOX_SPECS[wd->kind];
     const BoxTextures *texs = &r->assets->boxes[wd->kind];
-    if (spec->height < 0.5f && texs->lid) draw_box_lid(r, fb, g, wd, spec, texs->lid);
+    if (level_floor_at(lv, wd->x + wd->dx, wd->y + wd->dy) + spec->height < r->eye_z && texs->lid) draw_box_lid(r, fb, g, wd, spec, texs->lid);
     float fx = wd->x + 0.5f + wd->dx * 0.5f; // centre of the wall face
     float fy = wd->y + 0.5f + wd->dy * 0.5f;
     float tx = (float)-wd->dy, ty = (float)wd->dx; // tangent along the wall
@@ -726,8 +836,9 @@ static void draw_hanging_quad(Renderer *r, Image *fb, const Game *g, float x0, f
     quad_at(&q, x, &dist, &u);
     if (dist >= r->zbuffer[x]) continue;
     float line_h = VIEW_H / dist;
-    float top = VIEW_H / 2.0f + line_h * (0.5f - spec->z_top);
-    draw_column(fb, tex, tex_column(u), x, top, line_h * (spec->z_top - spec->z_bot), NULL);
+    float base = level_floor(g->level, (x0 + x1) * .5f, (y0 + y1) * .5f);
+    float top = VIEW_H / 2.0f + line_h * (r->eye_z - base - spec->z_top);
+    draw_column(r, fb, tex, tex_column(u), x, top, line_h * (spec->z_top - spec->z_bot), NULL, dist, false);
   }
 }
 
@@ -913,7 +1024,7 @@ static void collect_sprites(Renderer *r, const Game *g) {
     if (sq(a->x - p->x) + sq(a->y - p->y) < sq(min_dist)) continue;
     Sprite *s = add_sprite(a->x, a->y, as->trap[view], 0.82f);
     s->has_z = true;
-    s->z_center = a->z - 0.03f; // the shaft is painted just above the texture's middle
+    s->z_center = a->z - level_floor(lv, a->x, a->y) - 0.03f; // the shaft is painted just above the texture's middle
   }
   for (int i = 0; i < lv->decoration_count; i++) {
     const Decoration *d = &lv->decorations[i];
@@ -972,7 +1083,8 @@ static void pendulum_quad(Renderer *r, Image *fb, const Game *g, const Image *te
     if (dist >= r->zbuffer[x]) continue;
     float h = VIEW_H / dist;
     const Image *img = shaded(tex, shade_bucket(dist));
-    draw_column(fb, img, tex_column(u), x, VIEW_H / 2.0f + h * (0.5f - top), h * (top - bottom), NULL);
+    float base = level_floor(g->level, (x0 + x1) * .5f, (y0 + y1) * .5f);
+    draw_column(r, fb, img, tex_column(u), x, VIEW_H / 2.0f + h * (r->eye_z - base - top), h * (top - bottom), NULL, dist, false);
     render_transparent_walls(r, fb, x, x, dist);
   }
 }
@@ -1026,8 +1138,9 @@ static void render_sprites(Renderer *r, Image *fb, const Game *g) {
     float full_h = fabsf(VIEW_H / transform_y);
     float spr_h = full_h * s->scale;
     float spr_w = spr_h;
-    float top = !s->has_z ? VIEW_H / 2.0f + full_h / 2 - spr_h
-                          : VIEW_H / 2.0f + full_h * (0.5f - s->z_center) - spr_h / 2;
+    float base = level_floor(g->level, s->x, s->y);
+    float top = !s->has_z ? VIEW_H / 2.0f + full_h * (r->eye_z - base) - spr_h
+                          : VIEW_H / 2.0f + full_h * (r->eye_z - base - s->z_center) - spr_h / 2;
     int start_x = (int)floorf(screen_x - spr_w / 2);
     int end_x = (int)ceilf(screen_x + spr_w / 2);
     if (end_x < 0 || start_x >= W || spr_w < 1) continue;
@@ -1048,13 +1161,33 @@ static void render_sprites(Renderer *r, Image *fb, const Game *g) {
     // the dropline goes in first, so the spider hangs in front of its own
     // thread; a wall in front of the middle column hides all of it
     int mid = (int)floorf(screen_x);
-    float ceil_y = VIEW_H / 2.0f - full_h / 2;
+    float ceil_y = VIEW_H / 2.0f + full_h * (r->eye_z - base - 1);
     if (s->dropline && mid >= 0 && mid < W && transform_y < r->zbuffer[mid] && top > ceil_y) {
       float lw = maxf(1, full_h / 240);
       float f = SPRITE_SHADES[bucket];
-      gfx_fill_rect(fb, screen_x - lw / 2, ceil_y, lw, top + 1 - ceil_y, rgba(216 * f, 211 * f, 198 * f, 0.5f));
+      if (!g->level->has_heights) {
+        gfx_fill_rect(fb, screen_x - lw / 2, ceil_y, lw, top + 1 - ceil_y, rgba(216 * f, 211 * f, 198 * f, 0.5f));
+      } else {
+        for (int y = maxi(0, (int)ceilf(ceil_y)); y < mini(VIEW_H, (int)ceilf(top)); y++)
+          if (transform_y < r->depth[y * W + mid])
+            gfx_fill_rect(fb, screen_x - lw / 2, y, lw, 1, rgba(216 * f, 211 * f, 198 * f, 0.5f));
+      }
     }
     int x0 = maxi(0, start_x), x1 = mini(W - 1, end_x);
+    if (g->level->has_heights) {
+      int y0, y1;
+      if (!column_rows(fb, top, spr_h, &y0, &y1)) continue;
+      for (int x = x0; x <= x1; x++) {
+        int tx = clampi((int)((x + .5f - (screen_x - spr_w / 2)) / spr_w * img->w), 0, img->w - 1);
+        for (int y = y0; y < y1; y++) {
+          if (transform_y > r->depth[y * W + x] + .0001f) continue;
+          int ty = clampi((int)((y + .5f - top) / spr_h * img->h), 0, img->h - 1);
+          px_over(&fb->px[(size_t)y * fb->w + x], img->px[ty * img->w + tx], s->alpha);
+        }
+        render_transparent_walls(r, fb, x, x, transform_y);
+      }
+      continue;
+    }
     int run_start = -1;
     for (int x = x0; x <= x1 + 1; x++) {
       bool visible = x <= x1 && transform_y < r->zbuffer[x];
@@ -1092,10 +1225,18 @@ static void draw_glow(Renderer *r, Image *fb, const Player *p, const GlowSpec *g
   int zi = clampi((int)round_half_up(screen_x), 0, W - 1);
   if (transform_y > r->zbuffer[zi] + 0.15f) return;
   float full_h = VIEW_H / transform_y;
-  float screen_y = VIEW_H / 2.0f + full_h * (0.5f - gs->height);
+  float screen_y = VIEW_H / 2.0f + full_h * (r->eye_z - gs->height);
   float radius = maxf(gs->min_r, minf(gs->max_r, full_h * gs->r_scale));
+  int x0 = maxi(0, (int)floorf(screen_x - radius)), x1 = mini(W, (int)ceilf(screen_x + radius));
+  int y0 = maxi(0, (int)floorf(screen_y - radius)), y1 = mini(VIEW_H, (int)ceilf(screen_y + radius));
+  if (x0 >= x1 || y0 >= y1) return;
+  for (int y = y0; y < y1; y++)
+    memcpy(r->shake_buf + y * W + x0, fb->px + (size_t)y * fb->w + x0, (size_t)maxi(0, x1 - x0) * sizeof(uint32_t));
   gfx_radial(fb, screen_x - radius, screen_y - radius, radius * 2, radius * 2, screen_x, screen_y, 0, radius, gs->stops,
              3, BLEND_SCREEN);
+  for (int y = y0; y < y1; y++)
+    for (int x = x0; x < x1; x++)
+      if (transform_y > r->depth[y * W + x] + .15f) fb->px[(size_t)y * fb->w + x] = r->shake_buf[y * W + x];
 }
 
 static GradientStop stop(float pos, float r, float g, float b, float a) {
@@ -1113,6 +1254,7 @@ static void render_glows(Renderer *r, Image *fb, const Game *g) {
     GlowSpec gs = {b->x, b->y, 0.5f, 220, 12, 180, 1.2f,
                    {stop(0, 255, 190, 80, 0.5f * heat), stop(0.3f, 255, 100, 20, 0.2f * heat),
                     stop(1, 255, 70, 0, 0)}};
+    gs.height += level_floor(lv, gs.x, gs.y);
     draw_glow(r, fb, p, &gs);
   }
   for (int i = 0; i < lv->torch_count; i++) {
@@ -1121,6 +1263,7 @@ static void render_glows(Renderer *r, Image *fb, const Game *g) {
     GlowSpec gs = {(float)t->x, (float)t->y, 0.72f, 180, 16, 150, 0.62f,
                    {stop(0, 255, 174, 55, 0.2f * flicker), stop(0.28f, 255, 112, 22, 0.1f * flicker),
                     stop(1, 255, 80, 0, 0)}};
+    gs.height += level_floor(lv, gs.x, gs.y);
     draw_glow(r, fb, p, &gs);
   }
   // candle flames breathe a smaller, calmer halo than the torches — a glow
@@ -1135,6 +1278,7 @@ static void render_glows(Renderer *r, Image *fb, const Game *g) {
     GlowSpec gs = {(float)d->x, (float)d->y, stand ? 0.52f : 0.18f, 120, 10, 90, stand ? 0.38f : 0.28f,
                    {stop(0, 255, 196, 96, 0.13f * flicker), stop(0.35f, 255, 140, 40, 0.06f * flicker),
                     stop(1, 255, 90, 10, 0)}};
+    gs.height += level_floor(lv, gs.x, gs.y);
     draw_glow(r, fb, p, &gs);
   }
   // the hearths throw the broadest bloom of all — low, wide and ruddy,
@@ -1145,6 +1289,7 @@ static void render_glows(Renderer *r, Image *fb, const Game *g) {
     GlowSpec gs = {(float)f->x, (float)f->y, 0.19f, 220, 16, 170, 0.7f,
                    {stop(0, 255, 158, 44, 0.22f * flicker), stop(0.3f, 255, 96, 16, 0.11f * flicker),
                     stop(1, 255, 70, 0, 0)}};
+    gs.height += level_floor(lv, gs.x, gs.y);
     draw_glow(r, fb, p, &gs);
   }
   // keys breathe a soft golden halo in the same pass, hugging the floor
@@ -1156,6 +1301,7 @@ static void render_glows(Renderer *r, Image *fb, const Game *g) {
     GlowSpec gs = {it->x, it->y, 0.3f, 120, 10, 95, 0.42f,
                    {stop(0, 255, 224, 120, 0.13f * pulse), stop(0.35f, 255, 190, 70, 0.06f * pulse),
                     stop(1, 255, 170, 40, 0)}};
+    gs.height += level_floor(lv, gs.x, gs.y);
     draw_glow(r, fb, p, &gs);
   }
 }
@@ -1197,6 +1343,9 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
   const Player *p = &g->player;
   const Assets *as = r->assets;
   image_set_clip(fb, 0, 0, W, VIEW_H);
+  r->eye_z = level_floor(g->level, p->x, p->y) + .5f + p->step_offset;
+  for (int i = 0; i < W * VIEW_H; i++) r->depth[i] = INFINITY;
+  memset(r->floor_mask, 0, (size_t)W * VIEW_H);
 
   for (int y = 0; y < VIEW_H; y++) {
     uint32_t *row = fb->px + (size_t)y * fb->w;
@@ -1214,10 +1363,13 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     float line_h = VIEW_H / hit.dist;
     const Image *tex = (hit.side == 1 ? as->walls_dark : as->walls)[hit.tex];
     Tint tint = surface_tint(g, p->x + ray_x * hit.dist, p->y + ray_y * hit.dist, hit.dist);
-    draw_column(fb, tex, tex_column(hit.wall_x), x, VIEW_H / 2.0f - line_h / 2, line_h, &tint);
+    float near = maxf(0, hit.dist - .001f);
+    float base = level_floor(g->level, p->x + ray_x * near, p->y + ray_y * near);
+    draw_column(r, fb, tex, tex_column(hit.wall_x), x, VIEW_H / 2.0f + line_h * (r->eye_z - base - 1), line_h, &tint, hit.dist, true);
   }
 
-  render_planes(r, fb, g);
+  if (g->level->has_heights) render_sectors(r, fb, g);
+  else render_planes(r, fb, g);
   render_floor_features(r, fb, g);
 
   // Wall boxes (wardrobes, chests) are opaque geometry: drawn right after
@@ -1297,7 +1449,25 @@ void render_map(Renderer *r, Image *fb, const Game *g, const char *close_button)
       case '8': c = color_parse("#a58a66"); break;
       default: c = wall; break;
       }
+      if (cell == '.' && lv->has_heights) {
+        float z = level_floor_at(lv, x, y);
+        c = rgb(clampf(36 + z * 18, 15, 95), clampf(28 + z * 15, 12, 80), clampf(18 + z * 12, 8, 65));
+      }
       gfx_fill_rect(fb, ox + x * cs, oy + y * cs, cs - 0.5f, cs - 0.5f, c);
+      if (level_is_open(cell) && lv->has_heights) {
+        static const int dirs[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (int d = 0; d < 4; d++) {
+          int dx = dirs[d][0], dy = dirs[d][1];
+          if (!level_is_open(game_cell(g, x + dx, y + dy)) ||
+              level_floor_at(lv, x + dx, y + dy) <= level_floor_at(lv, x, y)) continue;
+          float cx = ox + (x + .5f) * cs, cy = oy + (y + .5f) * cs;
+          Color tread = color_parse("#b3a17b");
+          for (int k = -1; k <= 1; k++)
+            gfx_line(fb, cx + dx * k - dy * cs * .28f, cy + dy * k + dx * cs * .28f,
+                     cx + dx * k + dy * cs * .28f, cy + dy * k - dx * cs * .28f, 1, tread);
+          break;
+        }
+      }
       if (cell == '!')
         gfx_fill_rect(fb, ox + x * cs + 1, oy + y * cs + 1, cs - 2.5f, cs - 2.5f, color_parse("#080604"));
       if (level_is_water(cell) && cell != '=') {

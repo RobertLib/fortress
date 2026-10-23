@@ -107,7 +107,7 @@ static void test_full_snapshot(void) {
   game_say(game, "SNAPSHOT", 2);
   game_loose_bolt(game, 4, 3.5f, -1, 0, SHOT_AT_ENEMY, &game->enemies[1], 11);
   game_loose_bolt(game, 4, 3.5f, -1, 0, SHOT_AT_PLAYER, NULL, 8);
-  game->projectiles[game->projectile_count++] = (Projectile){5, 6.5f, 1, 0, 1, 0.44f, SHOT_TRAP, NULL, 0};
+  game->projectiles[game->projectile_count++] = (Projectile){5, 6.5f, 1, 0, 1, 0.44f, SHOT_TRAP, NULL, 0, 0};
   Session expected_session = session;
   uint64_t rng = random_state();
   save();

@@ -185,7 +185,7 @@ static void test_other_arrows(void) {
     Game *g = f.game;
     aim_along_row(g, 6.5f);
     if (trap)
-      g->projectiles[g->projectile_count++] = (Projectile){1.5f, 2.5f, 1, 0, 0, 0.44f, SHOT_TRAP, NULL, 0};
+      g->projectiles[g->projectile_count++] = (Projectile){1.5f, 2.5f, 1, 0, 0, 0.44f, SHOT_TRAP, NULL, 0, 0};
     else
       game_loose_bolt(g, 1.5f, 2.5f, 1, 0, SHOT_AT_PLAYER, NULL, 15);
     tick(g, 40);
@@ -201,7 +201,7 @@ static void test_full_projectile_pool(void) {
   aim_along_row(g, 1.5f);
   g->projectile_count = MAX_PROJECTILES;
   for (int i = 0; i < MAX_PROJECTILES; i++)
-    g->projectiles[i] = (Projectile){1.5f, 1.5f, 0, -1, 0, 0.44f, SHOT_MISS, NULL, 0};
+    g->projectiles[i] = (Projectile){1.5f, 1.5f, 0, -1, 0, 0.44f, SHOT_MISS, NULL, 0, 0};
   shoot(g);
   CHECK(g->barrels[0].destroyed);
   teardown(&f);
@@ -211,6 +211,7 @@ static void test_full_projectile_pool(void) {
 // or keys. Use the real movement collision with enemies cleared and doors open.
 static void reachable_cells(Game *g, uint8_t *seen) {
   const Level *lv = g->level;
+  float original_x = g->player.x, original_y = g->player.y;
   int *queue = malloc(sizeof(int) * lv->w * lv->h);
   int start = (int)g->player.y * lv->w + (int)g->player.x;
   int count = 1;
@@ -219,6 +220,7 @@ static void reachable_cells(Game *g, uint8_t *seen) {
   static const int dirs[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
   for (int next = 0; next < count; next++) {
     int at = queue[next], x = at % lv->w, y = at / lv->w;
+    g->player.x = x + .5f; g->player.y = y + .5f;
     for (int d = 0; d < 4; d++) {
       int nx = x + dirs[d][0], ny = y + dirs[d][1];
       if (nx < 0 || ny < 0 || nx >= lv->w || ny >= lv->h) continue;
@@ -228,6 +230,7 @@ static void reachable_cells(Game *g, uint8_t *seen) {
       queue[count++] = cell;
     }
   }
+  g->player.x = original_x; g->player.y = original_y;
   free(queue);
 }
 

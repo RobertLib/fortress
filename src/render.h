@@ -17,6 +17,7 @@ typedef struct Overlay {
   int side;
   int tex;
   float wall_x;
+  float floor;
 } Overlay;
 
 typedef struct SurfaceTint {
@@ -26,6 +27,9 @@ typedef struct SurfaceTint {
 typedef struct Renderer {
   const Assets *assets;
   float zbuffer[SCREEN_W];
+  float *depth; // per-pixel geometry depth: platforms can hide part of a sprite
+  uint8_t *floor_mask;
+  float eye_z;
   Overlay overlays[SCREEN_W][MAX_OVERLAYS];
   int overlay_count[SCREEN_W];
   Image *vignette;

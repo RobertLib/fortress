@@ -240,7 +240,7 @@ static void test_maps_and_projectiles(void) {
   CHECK(f.level.pendulum_count == 2 && f.level.pendulums[0].dx == 1 && f.level.pendulums[1].dy == 1);
   CHECK(game_cell(f.game, 4, 4) == '.' && !game_is_blocked(f.game, 4.5f, 4.5f, .22f, NULL));
   CHECK(game_line_of_sight(f.game, 1.5f, 4.5f, 10.5f, 4.5f));
-  f.game->projectiles[f.game->projectile_count++] = (Projectile){1.5f, 4.5f, 1, 0, 0, .44f, SHOT_TRAP, NULL, 0};
+  f.game->projectiles[f.game->projectile_count++] = (Projectile){1.5f, 4.5f, 1, 0, 0, .44f, SHOT_TRAP, NULL, 0, 0};
   tick(f.game, .6f);
   CHECK(f.game->projectile_count == 1 && f.game->projectiles[0].x > 6);
   teardown(&f);

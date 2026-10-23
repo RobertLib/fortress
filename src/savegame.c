@@ -8,7 +8,7 @@
 
 // Explicit little-endian fields: no struct padding, native enums or pointers
 // reach disk. Bump the version when the schema or gameplay interpretation changes.
-#define SAVE_VERSION 3
+#define SAVE_VERSION 4
 #define SAVE_LIMIT (16 * 1024 * 1024)
 #define TIME_LIMIT 100000000.0f
 static const char MAGIC[8] = {'F', 'R', 'T', 'S', 'A', 'V', 'E', '\0'};
@@ -156,6 +156,10 @@ static uint32_t level_signature(const Level *lv) {
       u32(c, p->x); u32(c, p->y); u32(c, p->dx); u32(c, p->dy);
     }
   }
+  // Flat legacy maps keep their signatures; elevation edits invalidate saves.
+  if (lv->has_heights) {
+    for (int i = 0; i < lv->w * lv->h; i++) real(c, lv->heights[i], -LEVEL_MAX_HEIGHT, LEVEL_MAX_HEIGHT);
+  }
   uint32_t hash = c->ok ? checksum(c->data, c->size) : 0;
   free(c->data);
   return hash;
@@ -223,7 +227,7 @@ static void transfer_game(Codec *c, Game *g) {
     Projectile *a = &g->projectiles[i];
     F(a->x, -1, lv->w + 1); F(a->y, -1, lv->h + 1);
     F(a->dir_x, -1.01f, 1.01f); F(a->dir_y, -1.01f, 1.01f);
-    F(a->dist, 0, 32); F(a->z, 0, 1); I(a->kind, SHOT_TRAP, SHOT_AT_ENEMY);
+    F(a->dist, 0, 32); F(a->z, c->version >= 4 ? -LEVEL_MAX_HEIGHT : 0, c->version >= 4 ? LEVEL_MAX_HEIGHT + 1 : 1); I(a->kind, SHOT_TRAP, SHOT_AT_ENEMY);
     int target = -1;
     if (!c->reading && a->target) {
       for (int j = 0; j < g->enemy_count; j++) if (a->target == &g->enemies[j]) target = j;
@@ -232,6 +236,7 @@ static void transfer_game(Codec *c, Game *g) {
     if (a->kind == SHOT_AT_ENEMY && target < 0) c->ok = false;
     if (c->reading) a->target = target >= 0 ? &g->enemies[target] : NULL;
     I(a->dmg, 0, INT_MAX);
+    if (c->version >= 4) F(a->slope, -1024, 1024);
   }
   F(g->time, 0, TIME_LIMIT);
   I(g->kills, 0, g->total_enemies); I(g->treasure, 0, g->total_treasure);
@@ -248,6 +253,7 @@ static void transfer_game(Codec *c, Game *g) {
       if (g->wall_health[i] && g->wall_dust[i] > 0) c->ok = false;
     }
   }
+  if (c->version >= 4) F(p->step_offset, -.25f, .25f);
   if (c->version >= 3) {
     for (int i = 0; c->ok && i < lv->pendulum_count; i++)
       F(g->pendulums[i].hit_cooldown, 0, PENDULUM_HIT_COOLDOWN);

@@ -106,16 +106,13 @@ static bool try_move(Enemy *e, Game *g, float nx, float ny, float step) {
       level_is_water(game_cell(g, (int)floorf(e->x), (int)floorf(e->y)))) step *= WATER_SPEED;
   float len = hypotf(nx, ny);
   if (len == 0) len = 1;
-  float tx = e->x + (nx / len) * step;
-  float ty = e->y + (ny / len) * step;
   bool moved = false;
-  if (!game_is_blocked(g, tx, e->y, e->radius, e)) {
-    e->x = tx;
-    moved = true;
-  }
-  if (!game_is_blocked(g, e->x, ty, e->radius, e)) {
-    e->y = ty;
-    moved = true;
+  int steps = maxi(1, (int)ceilf(fabsf(step) / .1f));
+  for (int i = 0; i < steps; i++) {
+    float tx = e->x + (nx / len) * step / steps;
+    float ty = e->y + (ny / len) * step / steps;
+    if (!game_is_blocked(g, tx, e->y, e->radius, e)) { e->x = tx; moved = true; }
+    if (!game_is_blocked(g, e->x, ty, e->radius, e)) { e->y = ty; moved = true; }
   }
   if (moved && e->stats->melee) {
     e->face_x = nx / len;
@@ -205,6 +202,8 @@ static void flutter_wings(Enemy *e, Game *g, float dt) {
 
 static void bite(Enemy *e, Game *g) {
   const Player *p = &g->player;
+  if (fabsf(level_floor(g->level, e->x, e->y) - level_floor(g->level, p->x, p->y)) > .25f ||
+      !game_line_of_sight(g, e->x, e->y, p->x, p->y)) return;
   play_at(e, g, e->stats->bite_sound, 1, 1);
   game_hurt_player(g, maxi(2, (int)round_half_up(2 + frand() * e->stats->dmg)));
   if (e->stats->venom) game_poison_player(g, e->stats->venom);
@@ -231,7 +230,8 @@ static void strike(Enemy *e, Game *g) {
   const Player *p = &g->player;
   play_at(e, g, e->stats->melee_weapon == MELEE_KNIFE ? SND_KNIFE_SLASH : SND_PUNCH, 1, 0.9f + frandf() * 0.2f);
   float dist = hypotf(p->x - e->x, p->y - e->y);
-  if (dist < 1.45f && game_line_of_sight(g, e->x, e->y, p->x, p->y))
+  if (dist < 1.45f && fabsf(level_floor(g->level, e->x, e->y) - level_floor(g->level, p->x, p->y)) <= .25f &&
+      game_line_of_sight(g, e->x, e->y, p->x, p->y))
     game_hurt_player(g, maxi(3, (int)round_half_up(3 + frand() * e->stats->melee_dmg)));
 }
 
@@ -251,7 +251,10 @@ static void fire(Enemy *e, Game *g) {
     // a miss hisses past the player's shoulder into the wall behind
     float side = frand() < 0.5 ? 1.0f : -1.0f;
     float wide = (0.45f + frandf() * 0.4f) * side / maxf(dist, 0.5f);
+    int index = g->projectile_count;
     game_loose_bolt(g, e->x, e->y, aim_x - aim_y * wide, aim_y + aim_x * wide, SHOT_MISS, NULL, 0);
+    if (g->projectile_count > index)
+      g->projectiles[index].slope = (level_floor(g->level, p->x, p->y) - level_floor(g->level, e->x, e->y)) / maxf(.01f, dist);
   }
 }
 

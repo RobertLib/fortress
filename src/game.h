@@ -71,6 +71,7 @@ typedef struct Player {
   float bob_phase, bob_amount;
   int speed_now;
   float radius;
+  float step_offset; // visual camera easing after stepping up or down
   int venom; // health a spider's bite is still to eat away
   float venom_timer; // until the next pang
 } Player;
@@ -109,10 +110,11 @@ typedef enum { SHOT_TRAP, SHOT_MISS, SHOT_AT_PLAYER, SHOT_AT_ENEMY } ShotKind;
 
 typedef struct Projectile {
   float x, y, dir_x, dir_y, dist;
-  float z; // height of the shaft above the floor
+  float z; // absolute world height of the shaft
   ShotKind kind;
   Enemy *target; // SHOT_AT_ENEMY
   int dmg; // damage on arrival; zero uses WALL_BOLT_DAMAGE against masonry
+  float slope; // vertical travel per horizontal unit for non-homing bolts
 } Projectile;
 
 typedef struct Game {
@@ -173,6 +175,7 @@ bool game_lever_pulled(const Game *g, int x, int y);
 // self is the moving enemy, or NULL when the player moves
 bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self);
 bool game_line_of_sight(const Game *g, float x0, float y0, float x1, float y1);
+bool game_line_of_sight_3d(const Game *g, float x0, float y0, float z0, float x1, float y1, float z1);
 Listener game_listener(const Game *g);
 float game_pendulum_angle(const PendulumSpawn *spawn, float time);
 

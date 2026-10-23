@@ -83,6 +83,14 @@ bool level_is_wall(char c) { return in_set("12345678B#", c); }
 bool level_is_water(char c) { return in_set("=><}{", c); }
 bool level_is_open(char c) { return c == '.' || c == '!' || level_is_water(c); }
 
+float level_floor_at(const Level *lv, int x, int y) {
+  return lv->heights && x >= 0 && y >= 0 && x < lv->w && y < lv->h ? lv->heights[y * lv->w + x] : 0;
+}
+
+float level_floor(const Level *lv, float x, float y) {
+  return level_floor_at(lv, (int)floorf(x), (int)floorf(y));
+}
+
 void level_water_flow(char c, int *dx, int *dy) {
   *dx = (c == '>') - (c == '<');
   *dy = (c == '}') - (c == '{');
@@ -145,6 +153,16 @@ static char neighbour_masonry(const Level *lv, int x, int y) {
     }
   }
   return best;
+}
+
+// The neighbouring treads belong to a stair flight or its landing.
+static bool on_steps(const Level *lv, int x, int y) {
+  for (int d = 0; d < 4; d++) {
+    int nx = x + CARDINAL[d][0], ny = y + CARDINAL[d][1];
+    if (nx >= 0 && ny >= 0 && nx < lv->w && ny < lv->h &&
+        level_floor_at(lv, x, y) != level_floor_at(lv, nx, ny)) return true;
+  }
+  return false;
 }
 
 static bool is_floor(const Level *lv, int x, int y) {
@@ -336,6 +354,33 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   lv->grid = malloc((size_t)cells + 1);
   memset(lv->grid, '1', (size_t)cells);
   lv->grid[cells] = 0;
+  lv->heights = calloc((size_t)cells, sizeof(float));
+  // Rectangles can overlap: later @height directives override earlier ones.
+  // Read bounded lines separately so malformed values cannot consume map rows.
+  for (const char *line = text; *line;) {
+    const char *end = strchr(line, '\n');
+    size_t len = end ? (size_t)(end - line) : strlen(line);
+    if (len >= 7 && !strncmp(line, "@height", 7) && (len == 7 || isspace((unsigned char)line[7]))) {
+      char value[256], extra;
+      int x, y, rw, rh;
+      float z;
+      copy_trimmed(value, sizeof value, line + 7, len - 7);
+      if (sscanf(value, "%d %d %d %d %f %c", &x, &y, &rw, &rh, &z, &extra) != 5 ||
+          x < 0 || y < 0 || rw <= 0 || rh <= 0 || x >= w || y >= h || rw > w - x || rh > h - y ||
+          !isfinite(z) || fabsf(z) > LEVEL_MAX_HEIGHT || fabsf(z / LEVEL_STEP - roundf(z / LEVEL_STEP)) > .001f) {
+        snprintf(err, err_size, "Invalid @height: expected x y width height elevation (steps of 0.125, -4 to 4)");
+        free(rows);
+        level_free(lv);
+        return false;
+      }
+      for (int yy = y; yy < y + rh; yy++)
+        for (int xx = x; xx < x + rw; xx++) lv->heights[yy * w + xx] = z;
+    }
+    if (!end) break;
+    line = end + 1;
+  }
+  for (int i = 0; i < cells; i++)
+    if (lv->heights[i] != 0) lv->has_heights = true;
   char *grid = lv->grid;
 
   lv->items = malloc(sizeof(Item) * cells);
@@ -1006,6 +1051,26 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
     if (lv->items[i].kind == ITEM_KEY) lv->key_count++;
     if (lv->items[i].kind == ITEM_TREASURE) lv->treasure_count++;
   }
+  // Preserve the stable dressing layout, then remove anything standing on
+  // stair treads. Moving rejected pieces elsewhere could block an old route.
+  int kept = 0;
+  for (int i = 0; i < lv->decoration_count; i++) {
+    Decoration d = decos[i];
+    bool stairs = false;
+    for (int dy = -1; dy <= 1; dy++)
+      for (int dx = -1; dx <= 1; dx++)
+        if (on_steps(lv, (int)floor(d.x + dx * d.radius), (int)floor(d.y + dy * d.radius))) stairs = true;
+    if (d.radius && stairs) continue;
+    decos[kept++] = d;
+  }
+  lv->decoration_count = kept;
+  kept = 0;
+  for (int i = 0; i < lv->wall_box_count; i++) {
+    WallBox box = lv->wall_boxes[i];
+    if (on_steps(lv, box.x + box.dx, box.y + box.dy) || on_steps(lv, box.x, box.y)) continue;
+    lv->wall_boxes[kept++] = box;
+  }
+  lv->wall_box_count = kept;
   // hearths feed the wall/floor light model exactly like torches do
   lv->fire_lights = malloc(sizeof(Torch) * (fireplaces + 1));
   for (int d = 0; d < lv->decoration_count; d++) {
@@ -1017,6 +1082,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
 
 void level_free(Level *lv) {
   free(lv->grid);
+  free(lv->heights);
   free(lv->items);
   free(lv->enemies);
   free(lv->barrels);

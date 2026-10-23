@@ -92,6 +92,8 @@ typedef struct Level {
   SurfaceTheme surface_theme;
   int w, h;
   char *grid; // one character per cell, see level.c
+  float *heights; // static floor elevations; ceilings are one unit above them
+  bool has_heights;
   Item *items;
   int item_count;
   EnemySpawn *enemies;
@@ -133,6 +135,11 @@ bool level_is_open(char c);
 bool level_is_water(char c);
 // '=' is still water; the other water tiles carry a cardinal current.
 void level_water_flow(char c, int *dx, int *dy);
+
+#define LEVEL_STEP 0.125f
+#define LEVEL_MAX_HEIGHT 4.0f
+float level_floor_at(const Level *lv, int x, int y);
+float level_floor(const Level *lv, float x, float y);
 
 #define WATER_SPEED 0.62f // wading speed relative to dry ground
 #define WATER_RIM 0.055f

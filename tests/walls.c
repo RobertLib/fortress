@@ -103,13 +103,13 @@ static void test_projectile_cover(void) {
       g->barrels[0] = (Barrel){3, 1.5f, false, false, 0};
       shoot(g); // an ordinary barrel stops the bolt first
     } else if (scenario == 2) {
-      g->projectiles[g->projectile_count++] = (Projectile){2, 1.5f, 1, 0, 0, 0.44f, SHOT_TRAP, NULL, 0};
+      g->projectiles[g->projectile_count++] = (Projectile){2, 1.5f, 1, 0, 0, 0.44f, SHOT_TRAP, NULL, 0, 0};
     } else if (scenario == 3) {
       game_loose_bolt(g, 7.5f, 1.5f, -1, 0, SHOT_AT_PLAYER, NULL, 12);
     } else if (scenario == 4) {
       g->projectile_count = MAX_PROJECTILES;
       for (int i = 0; i < MAX_PROJECTILES; i++)
-        g->projectiles[i] = (Projectile){1.5f, 1.5f, -1, 0, 0, 0.44f, SHOT_MISS, NULL, 0};
+        g->projectiles[i] = (Projectile){1.5f, 1.5f, -1, 0, 0, 0.44f, SHOT_MISS, NULL, 0, 0};
       shoot(g); // a full projectile pool must still resolve the wall hit
     } else {
       g->enemies[0].x = 8.5f;
@@ -180,8 +180,10 @@ static void rewrite_save(const char *path, bool legacy) {
   uint8_t *data = malloc((size_t)size);
   CHECK(data && fread(data, 1, (size_t)size, file) == (size_t)size);
   fclose(file);
-  if (legacy) data[8] = 1; // no wall cells means v1 and v2 have the same payload
-  else data[size - 12] = BREAKABLE_WALL_HEALTH + 1; // invalid last wall health
+  if (legacy) {
+    data[8] = 1;
+    size -= 4; // remove the v4 camera easing field; this arena has no walls or pendulums
+  } else data[size - 16] = BREAKABLE_WALL_HEALTH + 1; // invalid last wall health
   uint32_t checksum = 2166136261u;
   for (long i = 0; i < size - 4; i++) checksum = (checksum ^ data[i]) * 16777619u;
   for (int i = 0; i < 4; i++) data[size - 4 + i] = (uint8_t)(checksum >> (i * 8));
@@ -277,6 +279,7 @@ static void test_rendering(bool screenshots) {
 
 static void reachable_cells(Game *g, uint8_t *seen) {
   const Level *lv = g->level;
+  float original_x = g->player.x, original_y = g->player.y;
   int *queue = malloc(sizeof(int) * lv->w * lv->h);
   int start = (int)g->player.y * lv->w + (int)g->player.x, count = 1;
   queue[0] = start;
@@ -284,6 +287,7 @@ static void reachable_cells(Game *g, uint8_t *seen) {
   static const int dirs[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
   for (int next = 0; next < count; next++) {
     int at = queue[next], x = at % lv->w, y = at / lv->w;
+    g->player.x = x + .5f; g->player.y = y + .5f;
     for (int d = 0; d < 4; d++) {
       int nx = x + dirs[d][0], ny = y + dirs[d][1];
       if (nx < 0 || ny < 0 || nx >= lv->w || ny >= lv->h) continue;
@@ -293,6 +297,7 @@ static void reachable_cells(Game *g, uint8_t *seen) {
       queue[count++] = cell;
     }
   }
+  g->player.x = original_x; g->player.y = original_y;
   free(queue);
 }
 
@@ -324,7 +329,10 @@ static void test_shipped_levels(void) {
         CHECK(before[y * lv.w + x - 1] || before[y * lv.w + x + 1] ||
               before[(y - 1) * lv.w + x] || before[(y + 1) * lv.w + x]);
         game_hit_wall(g, x, y, 100);
+        float original_x = g->player.x, original_y = g->player.y;
+        g->player.x = x + .5f; g->player.y = y + .5f;
         CHECK(!game_is_blocked(g, x + 0.5f, y + 0.5f, g->player.radius, NULL));
+        g->player.x = original_x; g->player.y = original_y;
         walls++;
       }
     }

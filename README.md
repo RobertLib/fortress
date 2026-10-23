@@ -248,6 +248,19 @@ Entering, leaving and walking through water makes splashes; nearby water
 burbles softly, muffled by walls. Sight and arrows pass freely over the surface.
 Explored water appears blue on the map, with a mark indicating the current.
 
+### Stairs and elevation
+
+All five floors have static height differences: raised passages, stair flights
+and sunken rooms. Walk or run up and down the stone steps normally; the camera
+eases between treads. Grounded enemies use the same stairs. Abrupt ledges too
+high for a step block movement from either side. There are no lifts or jumping.
+
+Crossbows automatically aim up or down at visible enemies and barrels, keeping
+the original horizontal mouse controls. Floors and ceilings stop sight and
+arrows, and ledges can hide the lower part of an enemy. Close-range attacks
+cannot reach across a large height difference. Explored stairs appear as pale
+tread marks on the map; higher areas have lighter floor shading.
+
 ## Levels
 
 Levels are text files in [levels/](levels/) — one character = one tile,
@@ -301,6 +314,26 @@ Keep its swing and approaches clear. Automatic furniture leaves space around it.
 Mirror portals (`~`) pair up in reading order — step into the glass and its
 twin draws you out on the far side.
 
+Use repeated `@height x y width height elevation` headers to set rectangular
+floor regions. Coordinates start at `(0, 0)` in the top-left corner; dimensions
+must fit the map. Heights are in tile units, from `-4` to `4`, in increments of
+`0.125`. Unspecified cells stay at zero, and later rectangles override earlier
+ones. For example, on a 25×19 map this makes four steps leading to a raised wing:
+
+```text
+@height 4 0 21 19 0.125
+@height 5 0 20 19 0.25
+@height 6 0 19 19 0.375
+@height 7 0 18 19 0.5
+```
+
+Apply elevations to doors and wall cells as well as open floor, so door leaves,
+secret passages, traps and wall decorations match their surroundings. Keep
+adjacent walkable treads no more than `0.125` apart, and leave stair approaches
+clear of placed barrels. Automatic solid furniture is removed from stair
+flights and their landings. Each cell has one floor with its ceiling one unit
+above it, giving Doom-style 2.5D geometry. Elevations are static throughout play.
+
 Wall variants: rough stone masonry, weathered mossy stone, a
 timber-framed wall, a dungeon wall with a barred window, old brick,
 and a wall with a hanging banner.
@@ -331,10 +364,12 @@ in [src/common.h](src/common.h).
 ## Under the Hood
 
 - **Raycasting** (grid DDA) into a 640×400 software framebuffer with
-  textured walls, floors and ceilings, side shading, sliding doors and fog — the world sinks
+  textured walls, floors and ceilings, static height sectors, stone stair risers,
+  side shading, sliding doors and fog — the world sinks
   into darkness with distance, as if lit by torches; SDL scales the frame
   to the window ([src/render.c](src/render.c))
-- **Sprites** (enemies, items) as billboards clipped by the z-buffer,
+- **Sprites** (enemies, items) as billboards clipped by per-pixel geometry depth
+  in vertical levels, so ledges and low ceilings hide only the occluded parts;
   darkened with distance
 - **Sounds** synthesized into sample buffers once at startup and mixed in
   the SDL audio callback — playback only starts a cheap mixer voice
