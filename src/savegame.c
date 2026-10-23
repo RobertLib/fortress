@@ -8,7 +8,7 @@
 
 // Explicit little-endian fields: no struct padding, native enums or pointers
 // reach disk. Bump the version when the schema or gameplay interpretation changes.
-#define SAVE_VERSION 4
+#define SAVE_VERSION 5
 #define SAVE_LIMIT (16 * 1024 * 1024)
 #define TIME_LIMIT 100000000.0f
 static const char MAGIC[8] = {'F', 'R', 'T', 'S', 'A', 'V', 'E', '\0'};
@@ -160,6 +160,30 @@ static uint32_t level_signature(const Level *lv) {
   if (lv->has_heights) {
     for (int i = 0; i < lv->w * lv->h; i++) real(c, lv->heights[i], -LEVEL_MAX_HEIGHT, LEVEL_MAX_HEIGHT);
   }
+  const HorrorLayout *h = &lv->horror;
+  if (h->chapter) {
+    u32(c, h->chapter);
+    u32(c, h->scene_count);
+    for (int i = 0; i < h->scene_count; i++) {
+      const Haunt *s = &h->scenes[i];
+      u32(c, s->kind); u32(c, s->tx); u32(c, s->ty); u32(c, s->sx); u32(c, s->sy);
+      u32(c, s->keys); u32(c, s->dx); u32(c, s->dy);
+    }
+    u32(c, h->note_count);
+    for (int i = 0; i < h->note_count; i++) {
+      u32(c, h->notes[i].x); u32(c, h->notes[i].y);
+      bytes(c, (void *)h->notes[i].text, sizeof h->notes[i].text);
+    }
+    u32(c, h->haven_count);
+    for (int i = 0; i < h->haven_count; i++) {
+      u32(c, h->havens[i].x); u32(c, h->havens[i].y);
+      real(c, h->havens[i].radius, .6f, 3);
+    }
+    u32(c, h->trace_count);
+    for (int i = 0; i < h->trace_count; i++) {
+      u32(c, h->traces[i].x); u32(c, h->traces[i].y); u32(c, h->traces[i].kind);
+    }
+  }
   uint32_t hash = c->ok ? checksum(c->data, c->size) : 0;
   free(c->data);
   return hash;
@@ -227,7 +251,8 @@ static void transfer_game(Codec *c, Game *g) {
     Projectile *a = &g->projectiles[i];
     F(a->x, -1, lv->w + 1); F(a->y, -1, lv->h + 1);
     F(a->dir_x, -1.01f, 1.01f); F(a->dir_y, -1.01f, 1.01f);
-    F(a->dist, 0, 32); F(a->z, c->version >= 4 ? -LEVEL_MAX_HEIGHT : 0, c->version >= 4 ? LEVEL_MAX_HEIGHT + 1 : 1); I(a->kind, SHOT_TRAP, SHOT_AT_ENEMY);
+    F(a->dist, 0, 32); F(a->z, c->version >= 4 ? -LEVEL_MAX_HEIGHT : 0, c->version >= 4 ? LEVEL_MAX_HEIGHT + 1 : 1);
+    I(a->kind, SHOT_TRAP, c->version >= 5 ? SHOT_AT_WARDEN : SHOT_AT_ENEMY);
     int target = -1;
     if (!c->reading && a->target) {
       for (int j = 0; j < g->enemy_count; j++) if (a->target == &g->enemies[j]) target = j;
@@ -257,6 +282,27 @@ static void transfer_game(Codec *c, Game *g) {
   if (c->version >= 3) {
     for (int i = 0; c->ok && i < lv->pendulum_count; i++)
       F(g->pendulums[i].hit_cooldown, 0, PENDULUM_HIT_COOLDOWN);
+  }
+  if (c->version >= 5 && lv->horror.chapter) {
+    HorrorState *h = &g->horror;
+    I(h->scenes_fired, 0, (1 << lv->horror.scene_count) - 1);
+    I(h->scenes_changed, 0, (1 << lv->horror.scene_count) - 1);
+    if (h->scenes_changed & ~h->scenes_fired) c->ok = false;
+    I(h->notes_read, 0, (1 << lv->horror.note_count) - 1);
+    for (int i = 0; i < lv->horror.scene_count; i++) F(h->scene_timer[i], 0, 3.2f);
+    I(h->keys_seen, 0, mini(3, p->keys)); I(h->pending_hunts, 0, h->keys_seen);
+    I(h->ambient_cycle, 0, INT_MAX - 1); I(h->reading, -1, lv->horror.note_count - 1);
+    for (int i = 0; i < 3; i++) { F(h->key_x[i], 0, lv->w); F(h->key_y[i], 0, lv->h); }
+    for (int i = 0; i < 3; i++) I(h->opened_door[i], -1, g->door_count - 1);
+    F(h->blackout, 0, 8); T(h->ambient_timer); F(h->calm_timer, 0, TIME_LIMIT); F(h->tension, 0, 1);
+    F(h->noise_x, 0, lv->w); F(h->noise_y, 0, lv->h); F(h->noise_timer, 0, TIME_LIMIT); B(h->was_safe);
+    Warden *w = &h->warden;
+    I(w->state, WARDEN_DORMANT, WARDEN_FADING);
+    F(w->x, 0, lv->w); F(w->y, 0, lv->h); F(w->target_x, 0, lv->w); F(w->target_y, 0, lv->h);
+    F(w->state_timer, 0, TIME_LIMIT); F(w->remaining, 0, TIME_LIMIT); F(w->lost_timer, 0, TIME_LIMIT);
+    F(w->attack_timer, 0, 1.5f); T(w->step_timer); T(w->path_timer);
+    F(w->next_x, 0, lv->w); F(w->next_y, 0, lv->h); B(w->has_target);
+    if (w->state != WARDEN_DORMANT && (w->x < 1 || w->y < 1 || w->x >= lv->w - 1 || w->y >= lv->h - 1)) c->ok = false;
   }
 }
 

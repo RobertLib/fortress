@@ -11,6 +11,20 @@
 @floor #453a2c
 @ceil #1a140e
 @start S
+; Authored hauntings, candle refuges and fragments of the keepers' oath.
+@horror 2
+@haven 1 3 1.1
+@haven 23 19 1.2
+@note 3 3 The knocking comes from the old cistern. We drained it yesterday. There is nothing beneath the grating.|When I knock twice, it knocks three times. I have stopped counting.
+@note 24 19 We buried the first keeper below the cellars, his keys chained to his wrist.|The lord ordered every gate locked. By morning the keys were hanging outside his own chamber.
+@scene knock 3 1 7 1 0
+@scene shadow 10 5 15 5 0
+@scene armor 9 9 11 9 1 13 9
+@trace chains 11 5
+@trace blood 10 13
+@trace blood 11 13
+@trace scratch 15 15
+@trace scratch 16 15
 ; Static terraces joined by 0.125-high stone steps; no lifts.
 @height 0 4 27 17 -0.125
 @height 0 5 27 16 -0.25

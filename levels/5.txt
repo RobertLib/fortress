@@ -11,6 +11,22 @@
 @floor #4a3a30
 @ceil #201410
 @start E
+; Authored hauntings, candle refuges and fragments of the keepers' oath.
+@horror 5
+@haven 3 3 1.1
+@haven 18 19 1.15
+@note 4 3 The lord's chamber is empty. His armour sits at the table. Something inside it is breathing.|I saw his face in the mirror. It was standing behind mine.
+@note 19 19 This is the last gate. Take the keys beyond the walls and the oath will have no prison left to bind.|Do not stop for the voice behind you. Do not answer when it uses your name. Keep walking.
+@scene mirror 1 4 4 4 0
+@scene shadow 12 13 16 13 1
+@scene armor 28 15 29 17 1 29 15
+@trace chains 6 1
+@trace blood 11 13
+@trace blood 12 13
+@trace blood 13 13
+@trace scratch 4 3
+@trace scratch 19 19
+@trace chains 29 15
 ; Static terraces joined by 0.125-high stone steps; no lifts.
 @height 8 0 25 27 0.125
 @height 9 0 24 27 0.25
@@ -21,25 +37,25 @@
 @height 14 0 19 27 0.875
 @height 15 0 18 27 1
 555555555565556555555555565555555
-5P..B...R.....O.B.R...^K5...w...5
-585.5.55555.55555H5...S.5...5.5.6
-5.5.......5.......6.&.S...O.5.D.L
+5P..B...R.......B.R...^K5...w...5
+585.5.55555.55555H5.....5...5.5.6
+5.5.......5.......6.&.S.....5.D.L
 5.~..T..55655.5.555...Q.555.5.5Z5
 5.D..Sc.....5.....5........S5.5T5
-5.5555O6.55.55.M565.6D55566.5.555
-5.5.....S.5.......6A^T.....O5...5
+5.5555.6.55.55.M565.6D55566.5.555
+5.5.......5.......6A^T......5...5
 5.5.55565.5D5.555.5.F.Yy5...555.5
 5...5...5...5.5..V...T..5...5...5
 6.555.5.55555.5..55555666q..5.5.5
 5..Oc.5.T.5...6...5.....6.T...5.5
-6.5555555...5555555.555.5555555O5
+6.5555555...5555555.555.5555555.5
 6.....5.Y.5.FTDH....5...5.D.H.5.5
 5.555.5.555.55555.5.5.556.655...5
 5...D.6..==<<CK.5.5D5.....5...5.5
-5S6.55555==Q..6.5...55!...5.555.5
-5.5...5..==.A.5.5....v....5.5SD.5
+5.6.55555==Q..6.5...55!...5.555.5
+5.5...5..==.A.5.5....v....5.5.D.5
 5.555.5.5..865555.55555.A.~.5.555
-5.5...5.D..F.Yy.5.H...5.S...5.5.X
+5.5...5.D..F.Yy.5.H...5.....5.5.X
 5.5.5K555556.55D555.655.5D555.5.5
 5...L.ZT5.....5...5.A...L.AA5...6
 5.555.555.55..555.65555Z5.5.655.5

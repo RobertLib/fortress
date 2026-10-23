@@ -3,8 +3,8 @@
 A retro first-person action game set in a medieval fortress — a software
 raycasting engine written in C on top of SDL3, with no other dependencies
 and no asset files: all graphics, the font and the sounds are generated
-procedurally at startup. Torchlit stone corridors fade into darkness,
-defended by men-at-arms with crossbows.
+procedurally at startup. Torchlit stone corridors fade into darkness. Behind
+the remaining men-at-arms, something older drags its chains through the fortress.
 
 ## Building
 
@@ -116,6 +116,10 @@ working directory.
 
 Failed saves keep the previous slot. Missing, damaged, unsupported or
 map-incompatible saves display a message and leave the current run intact.
+Hauntings, extinguished lights, read notes, pending encounters and the Jailer's
+position and pursuit state are saved too. An event that already happened stays
+finished after loading. The revised campaign maps require a new run when moving
+from a pre-horror build; older saves on unchanged custom maps remain supported.
 
 ### Controls
 
@@ -125,7 +129,7 @@ map-incompatible saves display a message and leave the current run intact.
 | `Alt` + arrows | strafe |
 | mouse (click the view to capture it) | turn + shoot |
 | `Ctrl` / `J` | shoot |
-| `E` / `Space` | open doors, pull levers, use the gate |
+| `E` / `Space` | open doors, pull levers, use the gate, read/close notes |
 | `1` / `2` / `3` | dagger, crossbow, repeating crossbow |
 | `Shift` | run |
 | `Tab` | map |
@@ -146,7 +150,7 @@ button labels matched to its layout.
 | Left stick | move forward/back and strafe; tilt gently to walk slowly |
 | Right stick | turn |
 | `RT` / `R2` | shoot |
-| `A` / Cross (bottom face button) | use doors, levers and the gate; confirm menus |
+| `A` / Cross (bottom face button) | use doors, levers and the gate; read/close notes; confirm menus |
 | `B` / Circle (right face button) | back in menus; resume from pause |
 | `LB` / `RB` or `L1` / `R1` | previous / next weapon (skips weapons you do not own) |
 | Hold `LT` / `L2` or press and hold the left stick | run |
@@ -192,6 +196,40 @@ ways to jump straight to a chosen level. These are unavailable in
 Enemies patrol, and once they spot you (or hear a crossbow shot) they
 raise the alarm and give chase — they stop to shoot, pull a knife or
 swing a fist at close quarters, and can open doors.
+
+### The haunted fortress
+
+Each floor has its own authored hauntings, two handwritten story fragments
+and two refuges marked by **white candles**. Approach a note and press the use
+button to read it; use again to fold it. Reading pauses movement, enemies,
+projectiles, poison and the world clock. Notes gradually reveal the keeper's
+oath and the reason for your betrayal.
+
+Distant knocking, dragging iron, fading footsteps, breath and wind punctuate
+long stretches of silence. These sounds have positions in the world and are
+muffled by walls. Ambient hauntings wait during nearby combat and in refuges,
+so real attack warnings remain audible. Higher floors have fewer soldiers and
+more evidence of what has taken their place.
+
+Taking a key tolls a distant bell, dims nearby flames and can leave an explored
+door open on the journey back. Some torches stay weak afterwards; white candles
+keep their steady light. Figures vanish and empty armour changes position when
+unobserved. These authored scenes happen once per floor attempt, not every time
+you cross a trigger.
+
+The **Jailer** is a rare pursuer announced by chains and a heavy footfall,
+with several seconds of warning before he can hunt. Each key permits one
+encounter, separated by a quiet interval. He follows sight and the noise of
+running, splashing, crossbow fire and explosions, searches your last known
+position, opens ordinary doors and uses stairs. He avoids pits, solid obstacles
+and white-candle refuges. A closed door buys time; losing his sight and hearing
+or reaching the candles lets the pursuit end. His swing has a visible windup
+and can be dodged.
+
+He cannot be killed. A crossbow bolt or powder blast staggers him for 2.4
+seconds; the dagger buys only 0.75 seconds. He gives no score or ammunition and
+does not count toward the kill statistics. The white candles protect against
+the Jailer; other enemies and traps can still hurt you there.
 
 ### Barrels
 
@@ -354,6 +392,38 @@ shimmer. Each floor has its own materials:
 | The Vault | Slate tiles with metal inlay | Recessed stone coffers |
 | Warlord's Keep | Decorative stone with diamond inlays | Carved timber panels with metal bosses |
 
+Horror content is enabled explicitly in a map header; custom maps without
+`@horror` retain the original lighting and enemy roster. Example directives
+(all positions are integer tile coordinates on dry, interior floor):
+
+```text
+@horror 1
+@haven 1 3 1.15
+@note 3 3 Keep to the white candles.|A bolt buys time. Break his line of sight.
+@scene cell 3 1 5 1 0
+@scene shadow 11 7 13 7 0
+@scene knock 21 13 23 13 0
+@scene armor 3 13 1 15 1 3 15
+@trace blood 5 1
+@trace scratch 3 3
+@trace chains 1 17
+```
+
+`@horror` selects a chapter from 1 to 5. `@haven x y radius` places white
+candles, with a radius from 0.6 to 3 tiles; walls block their protection.
+`@note x y text` places a readable fragment (up to 223 ASCII characters;
+`|` starts a paragraph). Automatic furniture leaves these locations clear.
+
+`@scene kind trigger_x trigger_y source_x source_y keys [dest_x dest_y]`
+fires when the player comes within 1.65 tiles of the trigger with at least
+`keys` keys. Kinds are `cell` (a motionless guard who vanishes after the first
+key, when unobserved), `shadow`, `mirror` (a briefer apparition), `knock` and
+`armor`. Armour requires destination coordinates and moves only while both
+positions are out of view. Scene figures are apparitions, not combatants.
+`@trace blood|scratch|chains x y` places a world-anchored floor mark. A map can
+contain up to 16 scenes, 12 notes, 4 refuges and 24 traces. These directives
+participate in save compatibility checks.
+
 The `@name`, `@floor`, `@ceil` and `@start` headers set the floor name,
 floor/ceiling colors and the initial view direction. `@surfaces` selects
 the material theme: `guardhouse` (the default), `cellars`, `barracks`,
@@ -381,5 +451,7 @@ in [src/common.h](src/common.h).
   use ([src/font.c](src/font.c))
 - **AI**: patrol → spot → chase → stop & shoot, with pain staggers
   and death ([src/enemy.c](src/enemy.c))
+- **Horror**: authored scenes, candle refuges, positional ambience and a
+  persistent pursuer with grid pathfinding ([src/horror.c](src/horror.c))
 - **Levels**: parsing and the automatic set dressing
   ([src/level.c](src/level.c))

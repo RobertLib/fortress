@@ -4,6 +4,7 @@
 // models live in weapons.c.
 
 #include "assets.h"
+#include "horror.h"
 #include "level.h"
 
 #include <stdlib.h>
@@ -2763,6 +2764,91 @@ static Image *crest_sprite(CrestState state) {
 
 // ------------------------------------------------------------------ assemble
 
+// The Jailer has an empty iron face, a long burial coat and a dragging chain.
+// His silhouette stays narrow enough to read as a very tall human in a doorway.
+static Image *warden_sprite(int frame) {
+  Image *im = image_new(TEX, TEX);
+  float sway = frame == 1 ? -1 : frame == 2 ? 1 : 0;
+  Color coat = rgb(31, 34, 36), edge = rgb(63, 63, 60), iron = rgb(94, 100, 100);
+  float body[] = {24, 19, 39, 19, 44, 29, 43 + sway, 53, 47, 62, 36, 59, 32, 63, 27, 59, 18, 62, 22 + sway, 43, 20, 28};
+  gfx_fill_poly(im, body, 11, coat);
+  gfx_line(im, 24, 23, 22, 53, 1.6f, edge);
+  gfx_line(im, 39, 24, 42, 53, 1, rgb(49, 51, 52));
+  gfx_line(im, 30, 27, 28 + sway, 58, 2, rgb(18, 21, 24));
+  gfx_line(im, 35, 29, 37 + sway, 57, 1, rgb(72, 62, 51));
+  gfx_fill_rect(im, 25, 4, 14, 16, iron);
+  gfx_fill_rect(im, 24, 7, 16, 10, rgb(57, 64, 68));
+  gfx_line(im, 26, 5, 36, 5, 1, rgb(149, 151, 144));
+  gfx_fill_rect(im, 26, 10, 12, 4, rgb(3, 6, 9));
+  gfx_fill_rect(im, 30, 15, 4, 4, rgb(15, 20, 23));
+  gfx_fill_rect(im, 23, 21, 18, 4, rgb(76, 76, 71));
+  gfx_line(im, 25, 23, 38, 24, 1, rgb(124, 116, 94));
+  float hand = frame == 3 ? 23 : 42;
+  gfx_line(im, 22, 25, 17, 39, 5, coat);
+  gfx_line(im, 40, 26, 46, hand, 5, coat);
+  gfx_fill_rect(im, 14, 38, 5, 5, rgb(100, 96, 79));
+  gfx_fill_rect(im, 44, hand, 5, 4, rgb(100, 96, 79));
+  for (int i = 0; i < 9; i++) {
+    float x = 16 - sinf(i * .6f + sway) * 1.3f, y = 43 + i * 2;
+    gfx_stroke_poly(im, (float[]){x, y, x + 2, y, x + 2, y + 3, x, y + 3}, 4, .75f, iron);
+  }
+  gfx_line(im, 46, hand + 3, 46, hand + 11, 2, iron);
+  gfx_line(im, 46, hand + 10, 50, hand + 10, 1.5f, iron);
+  gfx_line(im, 50, hand + 7, 50, hand + 11, 1.5f, iron);
+  for (int i = 0; i < 9; i++)
+    gfx_line(im, 24 + i * 1.8f, 48 + (i % 3), 23 + i * 2, 59 - (i % 4), .6f, rgba(99, 83, 65, .4f));
+  return im;
+}
+
+static void horror_art(Assets *a) {
+  for (int i = 0; i < 4; i++) a->warden[i] = warden_sprite(i);
+  a->haunt_shadow = image_darken(a->warden[0], .23f);
+  Image *im = a->prisoner = image_new(TEX, TEX);
+  gfx_fill_poly(im, (float[]){24, 19, 40, 19, 44, 35, 40, 53, 24, 53, 20, 35}, 6, rgb(76, 69, 54));
+  gfx_fill_rect(im, 26, 8, 12, 13, rgb(57, 63, 65));
+  gfx_fill_rect(im, 24, 15, 16, 3, rgb(95, 98, 91));
+  gfx_line(im, 31, 21, 30, 51, 2, rgb(33, 30, 27));
+  gfx_line(im, 24, 26, 23, 42, 4, rgb(48, 44, 38));
+  gfx_line(im, 40, 26, 41, 42, 4, rgb(48, 44, 38));
+  gfx_line(im, 27, 52, 26, 62, 5, rgb(35, 31, 27));
+  gfx_line(im, 36, 52, 38, 62, 5, rgb(35, 31, 27));
+
+  im = a->white_candles = image_new(TEX, TEX);
+  gfx_fill_rect(im, 14, 55, 36, 6, rgb(64, 63, 56));
+  for (int i = 0; i < 3; i++) {
+    float x = 19 + i * 12, top = i == 1 ? 22 : 31;
+    gfx_fill_rect(im, x - 3, top, 6, 55 - top, rgb(222, 219, 192));
+    gfx_line(im, x - 2, top + 2, x - 2, 52, 1, rgb(255, 249, 218));
+    gfx_fill_poly(im, (float[]){x, top - 12, x - 3, top - 4, x, top, x + 3, top - 4}, 4, rgb(255, 223, 149));
+    gfx_fill_rect(im, x - 1, top - 6, 2, 5, rgb(255, 255, 236));
+  }
+  im = a->horror_note = image_new(TEX, TEX);
+  gfx_fill_poly(im, (float[]){10, 20, 49, 16, 54, 48, 15, 52}, 4, rgb(187, 164, 120));
+  gfx_line(im, 12, 21, 48, 18, 2, rgb(231, 209, 162));
+  for (int i = 0; i < 5; i++) gfx_line(im, 20, 27 + i * 4, 43 - (i % 3) * 3, 25 + i * 4, 1, rgb(74, 61, 48));
+  gfx_fill_rect(im, 38, 42, 7, 6, rgb(115, 40, 30));
+  for (int k = 0; k < 3; k++) {
+    im = a->horror_traces[k] = image_new(TEX, TEX);
+    Lcg rng = lcg(9147 + k * 123);
+    if (k == TRACE_BLOOD) {
+      for (int i = 0; i < 48; i++) {
+        float y = lcg_next(&rng) * 64, x = 31 + sinf(y * .08f) * 6 + (lcg_next(&rng) - .5f) * 15;
+        gfx_fill_rect(im, x, y, 1 + lcg_next(&rng) * 5, 2 + lcg_next(&rng) * 6, rgba(94, 25, 21, .7f));
+      }
+    } else if (k == TRACE_SCRATCH) {
+      for (int i = 0; i < 4; i++) {
+        gfx_line(im, 14 + i * 6, 9 + i, 25 + i * 6, 55 - i, 1.5f, rgba(181, 167, 134, .8f));
+        gfx_line(im, 16 + i * 6, 12 + i, 27 + i * 6, 54 - i, 1, rgba(19, 18, 16, .9f));
+      }
+    } else {
+      for (int i = 0; i < 12; i++) {
+        float x = 27 + sinf(i * .5f) * 9, y = i * 5;
+        gfx_stroke_poly(im, (float[]){x, y, x + 5, y + 1, x + 4, y + 7, x - 1, y + 6}, 4, 1.5f, rgb(94, 88, 73));
+      }
+    }
+  }
+}
+
 void assets_build(Assets *a) {
   memset(a, 0, sizeof(*a));
 
@@ -2864,6 +2950,7 @@ void assets_build(Assets *a) {
   a->decor[DECO_URN] = urn_sprite();
   a->decor[DECO_CANDELABRA] = candelabra_sprite();
   a->decor[DECO_CANDLES] = candle_cluster_sprite();
+  horror_art(a);
 
   // flame overlays for the candle stands, and the hearth blaze overlaid
   // fullbright on the fireplace's wall quad

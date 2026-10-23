@@ -11,6 +11,22 @@
 @floor #3c3f42
 @ceil #15171a
 @start E
+; Authored hauntings, candle refuges and fragments of the keepers' oath.
+@horror 4
+@haven 4 3 1.1
+@haven 17 15 1.2
+@note 3 3 There is no gold in the oldest vault. Only names cut into the stone.|I found mine among them. The date beside it is tomorrow. The scratch marks are still warm.
+@note 18 15 The lord paid his soldiers with keys taken from the dead. Each opened a gate that should have stayed shut.|Your betrayal was no accident. They needed someone alive to carry the keys upward.
+@scene armor 3 4 5 4 1 5 2
+@scene shadow 8 7 13 7 0
+@scene knock 24 9 28 9 1
+@trace scratch 3 3
+@trace scratch 4 3
+@trace chains 8 7
+@trace blood 16 11
+@trace blood 17 11
+@trace blood 18 11
+@trace scratch 18 15
 ; Static terraces joined by 0.125-high stone steps; no lifts.
 @height 0 11 31 14 -0.125
 @height 0 12 31 13 -0.25
@@ -19,18 +35,18 @@
 @height 0 15 31 10 -0.625
 @height 0 16 31 9 -0.75
 4444444454544454444454444444444
-4PB...4...RO.....HD...B...D.W.4
+4PB...4...R......HD...B...D.W.4
 4.8.T.4.4444444L44444...44544.5
-4D4...4.4...4TZ.Gc...O..4.....4
+4D4...4.4...4TZ.Gc......4.....4
 4...4.4.4.4.444...4.Q...4.444.4
-4.4.4.4...T...OG4.4.......4.4.4
+4.4.4.4...T....G4.4.......4.4.4
 4.4.4D454...44444.4.4444.54...4
 4...4.4..%.A....4.4A5.D.......4
 44454.4...q.444.4.4.4445444.444
-4H.Z4T..4...D.4...4....^....S.4
+4H.Z4T..4...D.4...4....^......4
 4T5SL44444484.4.44444.4544.54.4
 4T4..w....SQ...V....4...4...4.5
-444.4444...S44544...444.4T4.4.4
+444.4444....44544...444.4T4.4.4
 4.D...5......!...C....4..K5.4.4
 4.4.4.4.4.T.5.4.54444.44444.4.4
 4.4...v.....4.4.....4...H...D.4

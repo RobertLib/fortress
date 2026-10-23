@@ -497,6 +497,60 @@ static double sfx_start(double t, SynthState *s) {
   return square(t, f) * env(fmod(t, 0.17), 0.16, 3) * 0.3;
 }
 
+// Sparse, distant hauntings. Soft attacks avoid clicks and leave real combat
+// warnings distinguishable from the fortress's less explicable noises.
+static double sfx_horror_wind(double t, SynthState *s) {
+  s->z += (noise() - s->z) * .008;
+  double fade = sq(sin(M_PI * t / 4));
+  return (s->z * 1.6 + sine(t, 47) * .06 + sine(t, 49.3) * .035) * fade;
+}
+
+static double sfx_horror_knock(double t, SynthState *s) {
+  double beat = t < .37 ? t : t < .92 ? t - .37 : t - .92;
+  double strike = (sine(beat, 112) * .5 + sine(beat, 203) * .18 + noise() * .13) * env(beat, .24, 3);
+  return strike * fmin(1, beat / .003);
+}
+
+static double sfx_horror_scrape(double t, SynthState *s) {
+  s->z += (noise() - s->z) * .055;
+  double scrape = sine(t, 310 + 50 * sin(t * 17)) * .1 + s->z * .75;
+  return scrape * sq(sin(M_PI * t / 2.2)) * (.45 + .55 * sq(sin(t * 23)));
+}
+
+static double sfx_warden_step(double t, SynthState *s) {
+  s->z += (noise() - s->z) * .045;
+  double impact = sine(t, 61) * .7 + sine(t, 106) * .22 + s->z * 1.5;
+  return impact * env(t, .65, 2.5) * fmin(1, t / .004);
+}
+
+static double sfx_horror_steps(double t, SynthState *s) {
+  double beat = fmod(t, .83);
+  return sfx_warden_step(beat, s) * (.5 - .08 * floor(t / .83));
+}
+
+static double sfx_horror_breath(double t, SynthState *s) {
+  s->z += (noise() - s->z) * .09;
+  double fade = sq(sin(M_PI * t / 2.7));
+  return (s->z * .7 + sine(t, 92 + 3 * sin(t * 5)) * .045) * fade * (.7 + .3 * sin(t * 11));
+}
+
+static double sfx_horror_bell(double t, SynthState *s) {
+  double bell = sine(t, 74) * .36 * exp(-t * .8) + sine(t, 113.7) * .2 * exp(-t) +
+                sine(t, 179.1) * .13 * exp(-t * 1.4) + sine(t, 306.3) * .07 * exp(-t * 2);
+  return bell * fmin(1, t / .008) * fmin(1, (5 - t) / .3);
+}
+
+static double sfx_warden_chain(double t, SynthState *s) {
+  s->z += (noise() - s->z) * .15;
+  double links = sine(t, 740) * .16 + sine(t, 1083) * .09 + s->z * .4;
+  return links * (.2 + .8 * pow(fmax(0, sin(t * 41)), 4)) * env(t, 1.6, 1.3) * fmin(1, t / .015);
+}
+
+static double sfx_parchment(double t, SynthState *s) {
+  s->z += (noise() - s->z) * .25;
+  return s->z * .35 * sq(sin(M_PI * t / .3));
+}
+
 typedef struct {
   double duration; // seconds
   SynthFn fn;
@@ -564,6 +618,15 @@ static const SynthDef SYNTHS[SND_COUNT] = {
   [SND_START] = {0.5, sfx_start},
   [SND_SPLASH] = {0.32, sfx_splash},
   [SND_WATER_FLOW] = {0.9, sfx_water_flow},
+  [SND_HORROR_WIND] = {4, sfx_horror_wind},
+  [SND_HORROR_KNOCK] = {1.5, sfx_horror_knock},
+  [SND_HORROR_SCRAPE] = {2.2, sfx_horror_scrape},
+  [SND_HORROR_STEPS] = {2.49, sfx_horror_steps},
+  [SND_HORROR_BREATH] = {2.7, sfx_horror_breath},
+  [SND_HORROR_BELL] = {5, sfx_horror_bell},
+  [SND_WARDEN_STEP] = {.65, sfx_warden_step},
+  [SND_WARDEN_CHAIN] = {1.6, sfx_warden_chain},
+  [SND_PARCHMENT] = {.3, sfx_parchment},
 };
 
 static float *buffers[SND_COUNT];

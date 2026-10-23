@@ -1071,6 +1071,10 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
     lv->wall_boxes[kept++] = box;
   }
   lv->wall_box_count = kept;
+  if (!horror_configure(lv, text, err, err_size)) {
+    level_free(lv);
+    return false;
+  }
   // hearths feed the wall/floor light model exactly like torches do
   lv->fire_lights = malloc(sizeof(Torch) * (fireplaces + 1));
   for (int d = 0; d < lv->decoration_count; d++) {

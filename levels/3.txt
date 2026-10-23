@@ -11,6 +11,21 @@
 @floor #45443c
 @ceil #191a16
 @start N
+; Authored hauntings, candle refuges and fragments of the keepers' oath.
+@horror 3
+@haven 3 1 1.3
+@haven 15 15 1.2
+@note 5 1 The captain had the empty suits placed facing the wall. Each dawn they faced our bunks.|Now there are fewer men at roll call, and more suits of armour. Nobody asks where they came from.
+@note 16 15 Our oath was to keep the prisoners here until the last gate fell.|The keeper died with those words in his mouth. The oath did not die with him. Every stolen key wakes it again.
+@scene armor 7 5 7 3 0 5 3
+@scene shadow 3 9 7 9 0
+@scene mirror 17 21 18 21 1
+@trace blood 1 9
+@trace blood 2 9
+@trace blood 3 9
+@trace scratch 5 3
+@trace chains 16 15
+@trace scratch 18 21
 ; Static terraces joined by 0.125-high stone steps; no lifts.
 @height 8 0 21 23 0.125
 @height 9 0 20 23 0.25
@@ -21,8 +36,8 @@
 22222222222222422222222222222
 2P........B.RF......AHB..A..4
 282D2~2.222.222.22222.2D222.2
-2.2...2S..2.2.2.....2...2TZ.L
-2.2.2.222.2.2.2..S.S2.G.222.2
+2.2...2...2.2.2.....2...2TZ.L
+2.2.2.222.2.2.2....S2.G.222.2
 2...L...2.......T.Q.8...2...2
 2.2Z222.2222222.S...2.......2
 2.2.AT2.....2.D...A.2.2.2.2.2
@@ -30,7 +45,7 @@
 2........V>>>====w..2.2.D.2.4
 2..cG.22222.2====.222.42242.2
 2...Q.2.HT2....!..D...2...2.2
-2...G.2Z22222.2.2.24222.4...2
+2.....2Z22222.2.2.24222.4...2
 2.....L...G.2D4...2...2q2.W.2
 4.2.222.222.2.22222.2.2TT...4
 2...2..H..2H4K2H...T2...4.2.2

@@ -206,6 +206,14 @@ static void test_actions(SDL_Joystick *joystick) {
   CHECK(game->show_map);
   tap(joystick, SDL_GAMEPAD_BUTTON_BACK);
   CHECK(!game->show_map);
+  game->horror.reading = 0;
+  tap(joystick, SDL_GAMEPAD_BUTTON_NORTH);
+  CHECK(!game->show_map);
+  on_key_down(SDL_SCANCODE_TAB);
+  CHECK(!game->show_map); // the automap must not cover a readable note
+  tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
+  update(.01f);
+  CHECK(game->horror.reading == -1);
   update(.01f);
   CHECK(!input.use && input.weapon == -1 && game->player.weapon == WEAPON_DAGGER);
   game->player.weapon = WEAPON_CROSSBOW;

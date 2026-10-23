@@ -106,7 +106,7 @@ typedef struct Pendulum {
 // roll has already settled: one bound for its target homes in on it and
 // delivers the damage on arrival, a miss flies on into the masonry.
 // Any arrow can be intercepted by a barrel or damage cracked masonry.
-typedef enum { SHOT_TRAP, SHOT_MISS, SHOT_AT_PLAYER, SHOT_AT_ENEMY } ShotKind;
+typedef enum { SHOT_TRAP, SHOT_MISS, SHOT_AT_PLAYER, SHOT_AT_ENEMY, SHOT_AT_WARDEN } ShotKind;
 
 typedef struct Projectile {
   float x, y, dir_x, dir_y, dist;
@@ -118,6 +118,7 @@ typedef struct Projectile {
 } Projectile;
 
 typedef struct Game {
+  HorrorState horror;
   const Level *level;
   int level_index;
   Session *session;

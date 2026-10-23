@@ -14,6 +14,7 @@ find_package(SDL3 REQUIRED CONFIG COMPONENTS SDL3)
 
 set(GAME_SOURCES
   src/game.c
+  src/horror.c
   src/enemy.c
   src/level.c
   src/gfx.c
@@ -61,7 +62,8 @@ if(BUILD_TESTING)
   add_executable(water_tests tests/water.c ${VISUAL_SOURCES} ${GAME_SOURCES})
   add_executable(stair_tests tests/stairs.c ${VISUAL_SOURCES} ${GAME_SOURCES})
   add_executable(surface_tests tests/surfaces.c ${VISUAL_SOURCES} ${GAME_SOURCES})
-  foreach(test_target barrel_tests difficulty_tests savegame_tests savegame_ui_tests gamepad_tests comic_tests wall_tests pit_tests pendulum_tests water_tests surface_tests stair_tests)
+  add_executable(horror_tests tests/horror.c ${VISUAL_SOURCES} ${GAME_SOURCES})
+  foreach(test_target barrel_tests difficulty_tests savegame_tests savegame_ui_tests gamepad_tests comic_tests wall_tests pit_tests pendulum_tests water_tests surface_tests stair_tests horror_tests)
     target_include_directories(${test_target} PRIVATE src)
     target_link_libraries(${test_target} PRIVATE SDL3::SDL3)
     target_compile_definitions(${test_target} PRIVATE FORTRESS_DEBUG_TOOLS=$<BOOL:${FORTRESS_DEBUG_TOOLS}>)
@@ -85,6 +87,8 @@ if(BUILD_TESTING)
   add_test(NAME vertical_levels COMMAND stair_tests)
   set_tests_properties(vertical_levels PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   add_test(NAME floor_and_ceiling COMMAND surface_tests)
+  add_test(NAME horror_atmosphere COMMAND horror_tests)
+  set_tests_properties(horror_atmosphere PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(savegame_ui gamepad comic_story PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(barrel_combat PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(destructible_walls PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})

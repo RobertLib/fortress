@@ -668,7 +668,9 @@ static void on_gamepad_button(SDL_GamepadButton button) {
     case SDL_GAMEPAD_BUTTON_SOUTH: input.use = true; break;
     case SDL_GAMEPAD_BUTTON_NORTH:
     case SDL_GAMEPAD_BUTTON_BACK:
-    case SDL_GAMEPAD_BUTTON_TOUCHPAD: game->show_map = !game->show_map; break;
+    case SDL_GAMEPAD_BUTTON_TOUCHPAD:
+      if (game->horror.reading < 0) game->show_map = !game->show_map;
+      break;
     case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: cycle_weapon(-1); break;
     case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: cycle_weapon(1); break;
     default: break;
@@ -756,7 +758,7 @@ static void on_key_down(SDL_Scancode sc) {
     if (game) game_say(game, audio_enabled() ? "SOUND ON" : "SOUND OFF", 1.2f);
   }
   if (sc == SDL_SCANCODE_F) toggle_fullscreen();
-  if (sc == SDL_SCANCODE_TAB && game && state == ST_PLAYING) game->show_map = !game->show_map;
+  if (sc == SDL_SCANCODE_TAB && game && state == ST_PLAYING && game->horror.reading < 0) game->show_map = !game->show_map;
   handle_state_key(sc);
 }
 
@@ -1039,7 +1041,7 @@ static void draw_controls(void) {
       {"W A S D / ARROWS", "move & turn"},
       {"MOUSE (CLICK VIEW)", "turn & shoot"},
       {"CTRL / J", "shoot"},
-      {"E / SPACE", "open doors, pull levers, use the gate"},
+      {"E / SPACE", "doors, levers, gate, read / close notes"},
       {"1 / 2 / 3", "dagger, crossbow, repeater"},
       {"SHIFT / TAB / M", "run / map / sound"},
       {"F", "fullscreen"},
@@ -1055,7 +1057,7 @@ static void draw_controls(void) {
       {"LEFT STICK", "move & strafe"},
       {"RIGHT STICK", "turn"},
       {"RT / R2", "shoot"},
-      {use, "open doors, pull levers, use the gate"},
+      {use, "doors, levers, gate, read / close notes"},
       {"LB / RB (L1 / R1)", "previous / next weapon"},
       {"LT / L2 / L3", "run (hold)"},
       {map, "map"},

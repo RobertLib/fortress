@@ -52,20 +52,26 @@ static float torch_flicker(float time, float phase) {
   return 0.84f + sinf(time * 17 + phase) * 0.1f + sinf(time * 29 + phase * 1.7f) * 0.06f;
 }
 
-static float torch_light(const Level *lv, float x, float y, float time) {
+static float torch_light(const Game *g, float x, float y, float time) {
+  const Level *lv = g->level;
   float light = 0;
   for (int i = 0; i < lv->torch_count; i++) {
     const Torch *t = &lv->torches[i];
     float dist = hypotf((float)t->x - x, (float)t->y - y);
     if (dist >= 3.4f) continue;
-    light = maxf(light, (1 - dist / 3.4f) * torch_flicker(time, (float)t->phase));
+    light = maxf(light, (1 - dist / 3.4f) * torch_flicker(time, (float)t->phase) * horror_torch_strength(g, t->x, t->y));
   }
   // the hearths burn like oversized torches and reach a little further
   for (int i = 0; i < lv->fire_light_count; i++) {
     const Torch *f = &lv->fire_lights[i];
     float dist = hypotf((float)f->x - x, (float)f->y - y);
     if (dist >= 4.2f) continue;
-    light = maxf(light, (1 - dist / 4.2f) * torch_flicker(time, (float)f->phase));
+    light = maxf(light, (1 - dist / 4.2f) * torch_flicker(time, (float)f->phase) * horror_torch_strength(g, f->x, f->y));
+  }
+  for (int i = 0; i < lv->horror.haven_count; i++) {
+    const Haven *v = &lv->horror.havens[i];
+    float dist = hypotf(x - v->x - .5f, y - v->y - .5f);
+    light = maxf(light, 1.1f * maxf(0, 1 - dist / (v->radius + 1.6f)));
   }
   return light;
 }
@@ -102,12 +108,18 @@ static void tint_add(Tint *t, float r, float g, float b, float a) {
 
 static Tint surface_tint(const Game *g, float x, float y, float dist) {
   Tint t = {1, 0, 0, 0};
-  float light = torch_light(g->level, x, y, g->time);
+  float light = torch_light(g, x, y, g->time);
   if (light > 0.015f) tint_add(&t, 255, 132, 32, minf(0.16f, light * 0.14f));
   float glow = key_light(g, x, y);
   if (glow > 0.02f) tint_add(&t, 255, 214, 92, minf(0.1f, glow * 0.1f));
   float fog = maxf(0, fog_amount(dist) - light * 0.42f - glow * 0.3f);
   if (fog > 0.02f) tint_add(&t, FOG.r, FOG.g, FOG.b, fog);
+  if (g->level->horror.chapter) {
+    // Local contrast, a cool unlit distance and a readable area at the feet.
+    float brightness = clampf(.59f + light * .39f + maxf(0, 1 - dist / 2) * .2f, .59f, 1);
+    t.k *= brightness; t.r *= brightness; t.g *= brightness; t.b *= brightness;
+    tint_add(&t, 8, 17, 24, minf(.16f, dist * .018f) * maxf(0, 1 - light));
+  }
   return t;
 }
 
@@ -581,7 +593,7 @@ static void render_sectors(Renderer *r, Image *fb, const Game *g) {
 // Cast pits and shallow water into the floor plane. These surfaces never
 // write the column z-buffer: sight and arrows pass above them.
 static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
-  if (!g->level->pit_count && !g->level->water_count) return;
+  if (!g->level->pit_count && !g->level->water_count && !g->level->horror.trace_count) return;
   const Player *p = &g->player;
   const Image *stone = r->assets->walls[WT_STONE];
   int frame = (int)fmodf(g->time * 8, WATER_FRAMES);
@@ -591,6 +603,7 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
     float rx = p->dir_x + p->plane_x * camera_x;
     float ry = p->dir_y + p->plane_y * camera_x;
     int last_cell = -1;
+    int trace = -1;
     int flow_x = 0, flow_y = 0, banks = 0;
     float light = 0;
     Tint tint = {1, 0, 0, 0};
@@ -602,9 +615,13 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
       int cx = (int)floorf(wx), cy = (int)floorf(wy);
       char kind = game_cell(g, cx, cy);
       bool water = level_is_water(kind);
-      if (kind != '!' && !water) continue;
       int cell = cy * g->level->w + cx;
       if (cell != last_cell) {
+        trace = -1;
+        for (int i = 0; i < g->level->horror.trace_count; i++)
+          if (g->level->horror.traces[i].x == cx && g->level->horror.traces[i].y == cy) trace = i;
+        last_cell = cell;
+        if (kind != '!' && !water && trace < 0) continue;
         float depth = (cx + 0.5f - p->x) * p->dir_x + (cy + 0.5f - p->y) * p->dir_y;
         tint = surface_tint(g, cx + 0.5f, cy + 0.5f, maxf(0, depth));
         if (water) {
@@ -613,11 +630,22 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
                   (!level_is_water(game_cell(g, cx + 1, cy)) ? 2 : 0) |
                   (!level_is_water(game_cell(g, cx, cy - 1)) ? 4 : 0) |
                   (!level_is_water(game_cell(g, cx, cy + 1)) ? 8 : 0);
-          light = torch_light(g->level, cx + .5f, cy + .5f, g->time);
+          light = torch_light(g, cx + .5f, cy + .5f, g->time);
         }
         last_cell = cell;
       }
+      if (kind != '!' && !water && trace < 0) continue;
       float u = wx - cx, v = wy - cy;
+      if (trace >= 0) {
+        const Image *tex = r->assets->horror_traces[g->level->horror.traces[trace].kind];
+        uint32_t c = tex->px[tex_column(v) * TEX + tex_column(u)];
+        if (c >> 24) {
+          float a = (c >> 24) / 255.0f;
+          px_blend(&fb->px[(size_t)y * fb->w + x], ((c >> 16) & 255) / a * tint.k + tint.r,
+                   ((c >> 8) & 255) / a * tint.k + tint.g, (c & 255) / a * tint.k + tint.b, a);
+        }
+        continue;
+      }
       float edge = minf(minf(u, 1 - u), minf(v, 1 - v));
       uint32_t color;
       if (water) {
@@ -884,7 +912,7 @@ static void render_wall_hangings(Renderer *r, Image *fb, const Game *g) {
     }
     if (!img) continue;
     int bucket = shade_bucket(hypotf(fx - p->x, fy - p->y));
-    float light = torch_light(lv, fx, fy, g->time);
+    float light = torch_light(g, fx, fy, g->time);
     if (light > 0.5f)
       bucket = maxi(0, bucket - 2);
     else if (light > 0.15f)
@@ -943,6 +971,29 @@ static void collect_sprites(Renderer *r, const Game *g) {
   const Player *p = &g->player;
   const Level *lv = g->level;
   sprite_count = 0;
+  const HorrorLayout *h = &lv->horror;
+  for (int i = 0; i < h->note_count; i++) {
+    Sprite *s = add_sprite(h->notes[i].x + .5f, h->notes[i].y + .5f, as->horror_note, .28f);
+    s->has_z = true; s->z_center = .11f;
+  }
+  for (int i = 0; i < h->haven_count; i++)
+    add_sprite(h->havens[i].x + .5f, h->havens[i].y + .5f, as->white_candles, .43f)->fullbright = true;
+  for (int i = 0; i < h->scene_count; i++) {
+    float x, y, alpha;
+    if (!horror_scene_visible(g, i, &x, &y, &alpha)) continue;
+    HauntKind kind = h->scenes[i].kind;
+    const Image *im = kind == HAUNT_CELL ? as->prisoner : kind == HAUNT_ARMOR ? as->decor[DECO_ARMOR] : as->haunt_shadow;
+    Sprite *s = add_sprite(x, y, im, kind == HAUNT_ARMOR ? .8f : .94f);
+    s->alpha = alpha;
+  }
+  const Warden *warden = &g->horror.warden;
+  if (h->chapter && warden->state != WARDEN_DORMANT) {
+    int frame = warden->state == WARDEN_HUNT ? 1 + ((int)(g->time * 2.4f) & 1) : 0;
+    if (warden->attack_timer > .55f || warden->state == WARDEN_STAGGER) frame = 3;
+    Sprite *s = add_sprite(warden->x, warden->y, as->warden[frame], .97f);
+    if (warden->state == WARDEN_WARNING) s->alpha = clampf(1 - warden->state_timer / WARDEN_WARNING_TIME, .15f, 1);
+    if (warden->state == WARDEN_FADING) s->alpha = warden->state_timer / 2;
+  }
   for (int i = 0; i < lv->w * lv->h; i++) {
     if (lv->grid[i] != '8' || g->wall_health[i]) continue;
     float x = i % lv->w + 0.5f, y = i / lv->w + 0.5f;
@@ -1068,6 +1119,7 @@ static void collect_sprites(Renderer *r, const Game *g) {
     s->has_z = true;
     s->z_center = 0.58f;
     s->fullbright = true;
+    s->alpha = horror_torch_strength(g, t->x, t->y);
   }
   for (int i = 0; i < sprite_count; i++) sprites[i].dist = sq(p->x - sprites[i].x) + sq(p->y - sprites[i].y);
   qsort(sprites, (size_t)sprite_count, sizeof(Sprite), cmp_sprite);
@@ -1151,7 +1203,7 @@ static void render_sprites(Renderer *r, Image *fb, const Game *g) {
     int bucket = 0;
     if (!s->fullbright) {
       bucket = shade_bucket(transform_y);
-      float light = torch_light(g->level, s->x, s->y, g->time);
+      float light = torch_light(g, s->x, s->y, g->time);
       if (light > 0.5f)
         bucket = maxi(0, bucket - 2);
       else if (light > 0.15f)
@@ -1247,6 +1299,13 @@ static GradientStop stop(float pos, float r, float g, float b, float a) {
 static void render_glows(Renderer *r, Image *fb, const Game *g) {
   const Player *p = &g->player;
   const Level *lv = g->level;
+  for (int i = 0; i < lv->horror.haven_count; i++) {
+    const Haven *v = &lv->horror.havens[i];
+    GlowSpec gs = {v->x + .5f, v->y + .5f, .26f, 170, 10, 120, .65f,
+                   {stop(0, 255, 244, 199, .23f), stop(.35f, 255, 212, 148, .09f), stop(1, 255, 190, 100, 0)}};
+    gs.height += level_floor(lv, gs.x, gs.y);
+    draw_glow(r, fb, p, &gs);
+  }
   for (int i = 0; i < g->barrel_count; i++) {
     const Barrel *b = &g->barrels[i];
     float heat = maxf(0, b->blast_timer / BARREL_EXPLOSION_TIME * 2 - 1);
@@ -1259,7 +1318,7 @@ static void render_glows(Renderer *r, Image *fb, const Game *g) {
   }
   for (int i = 0; i < lv->torch_count; i++) {
     const Torch *t = &lv->torches[i];
-    float flicker = torch_flicker(g->time, (float)t->phase);
+    float flicker = torch_flicker(g->time, (float)t->phase) * horror_torch_strength(g, t->x, t->y);
     GlowSpec gs = {(float)t->x, (float)t->y, 0.72f, 180, 16, 150, 0.62f,
                    {stop(0, 255, 174, 55, 0.2f * flicker), stop(0.28f, 255, 112, 22, 0.1f * flicker),
                     stop(1, 255, 80, 0, 0)}};
@@ -1337,6 +1396,52 @@ static void render_flashes(Image *fb, const Game *g) {
   }
 }
 
+static void render_horror_text(Image *fb, const Game *g) {
+  int index = g->horror.reading;
+  if (index < 0) {
+    if (horror_near_note(g) >= 0 && !g->player_dead) {
+      gfx_fill_rect(fb, 142, VIEW_H - 31, 356, 22, rgba(7, 10, 13, .85f));
+      font_draw(fb, "USE - READ THE PRISONER'S NOTE", W / 2, VIEW_H - 16, 11, FONT_BOLD, ALIGN_CENTER, rgb(226, 210, 171));
+    }
+    return;
+  }
+  gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(2, 5, 8, .78f));
+  gfx_fill_rect(fb, 61, 36, 520, 250, rgba(0, 0, 0, .6f));
+  gfx_fill_rect(fb, 58, 32, 520, 250, rgb(187, 166, 126));
+  gfx_fill_rect(fb, 63, 37, 510, 240, rgb(213, 194, 153));
+  gfx_fill_rect(fb, 80, 79, 472, 1, rgb(135, 109, 76));
+  font_draw(fb, "WORDS LEFT BEHIND", W / 2, 64, 18, FONT_BOLD, ALIGN_CENTER, rgb(92, 44, 34));
+  // Word-wrap the short handwritten fragments; | starts a new paragraph.
+  const char *text = g->level->horror.notes[index].text;
+  char line[224] = {0};
+  size_t len = 0;
+  float y = 105;
+  for (const char *p = text;;) {
+    while (*p == ' ') p++;
+    const char *end = p;
+    while (*end && *end != ' ' && *end != '|') end++;
+    size_t word = (size_t)(end - p);
+    char candidate[224];
+    snprintf(candidate, sizeof candidate, "%s%s%.*s", line, len ? " " : "", (int)word, p);
+    if (len && font_measure(candidate, 14, FONT_REGULAR) > 466) {
+      font_draw(fb, line, 85, y, 14, FONT_REGULAR, ALIGN_LEFT, rgb(49, 40, 33));
+      y += 20;
+      len = 0; line[0] = 0;
+    }
+    if (word) {
+      if (len) line[len++] = ' ';
+      memcpy(line + len, p, word); len += word; line[len] = 0;
+    }
+    if (!*end || *end == '|') {
+      font_draw(fb, line, 85, y, 14, FONT_REGULAR, ALIGN_LEFT, rgb(49, 40, 33));
+      y += 26; len = 0; line[0] = 0;
+      if (!*end) break;
+    }
+    p = end + 1;
+  }
+  font_draw(fb, "USE - FOLD THE NOTE", W / 2, 263, 10, FONT_BOLD, ALIGN_CENTER, rgb(112, 72, 50));
+}
+
 // ------------------------------------------------------------------ 3D view
 
 void render_view(Renderer *r, Image *fb, const Game *g) {
@@ -1381,6 +1486,10 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
   render_glows(r, fb, g);
   render_sprites(r, fb, g);
   gfx_blit(fb, r->vignette, 0, 0, W, VIEW_H, 0, 0, W, VIEW_H, 1);
+  if (g->horror.tension > .01f) {
+    GradientStop stops[] = {stop(0, 0, 0, 0, 0), stop(.65f, 0, 0, 0, 0), stop(1, 2, 4, 7, g->horror.tension * .25f)};
+    gfx_radial(fb, 0, 0, W, VIEW_H, W / 2, VIEW_H / 2, 0, W / 2, stops, 3, BLEND_OVER);
+  }
   if (g->pit_fall <= 0) render_weapon(r, fb, g);
 
   // camera shake: jitter the whole view, slightly overscanned so the
@@ -1411,6 +1520,7 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(0, 0, 0, fall * fall));
   }
   render_flashes(fb, g);
+  render_horror_text(fb, g);
   image_reset_clip(fb);
 }
 

@@ -84,6 +84,8 @@ typedef struct BoxTextures {
 } BoxTextures;
 
 typedef struct Assets {
+  Image *warden[4], *haunt_shadow, *prisoner, *horror_note, *white_candles;
+  Image *horror_traces[3];
   Image *walls[WT_COUNT];
   Image *walls_dark[WT_COUNT]; // faces along the y axis
   Image *floors[SURFACE_THEME_COUNT][SURFACE_MIPS];

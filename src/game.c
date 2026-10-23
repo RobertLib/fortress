@@ -153,6 +153,7 @@ Game *game_create(const Level *level, int level_index, Session *session, const P
   g->total_enemies = level->enemy_count;
   g->total_treasure = level->treasure_count;
   g->total_secrets = level->secret_count;
+  horror_init(g);
 
   // let positional audio muffle sounds that come from behind walls
   game_activate(g);
@@ -163,6 +164,7 @@ void game_activate(Game *g) { audio_set_occlusion(g ? sound_occlusion : NULL, g)
 
 void game_destroy(Game *g) {
   if (!g) return;
+  horror_free(g);
   audio_set_occlusion(NULL, NULL);
   free(g->items);
   free(g->enemies);
@@ -297,6 +299,11 @@ bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self
     float d = hypotf(g->player.x - x, g->player.y - y);
     if (d < r + g->player.radius + 0.15f && d <= hypotf(g->player.x - from_x, g->player.y - from_y)) return true;
   }
+  if (!self && horror_warden_solid(g)) {
+    const Warden *w = &g->horror.warden;
+    float d = hypotf(w->x - x, w->y - y);
+    if (d < r + WARDEN_RADIUS && d <= hypotf(w->x - from_x, w->y - from_y)) return true;
+  }
   return false;
 }
 
@@ -349,6 +356,7 @@ void game_open_door(Game *g, Door *door, bool by_player) {
 static bool doorway_occupied(const Game *g, const Door *d) {
 #define IN_CELL(ex, ey, r) ((ex) + (r) > d->x && (ex) - (r) < d->x + 1 && (ey) + (r) > d->y && (ey) - (r) < d->y + 1)
   if (IN_CELL(g->player.x, g->player.y, g->player.radius + 0.1f)) return true;
+  if (horror_warden_solid(g) && IN_CELL(g->horror.warden.x, g->horror.warden.y, WARDEN_RADIUS + .1f)) return true;
   for (int i = 0; i < g->enemy_count; i++) {
     const Enemy *e = &g->enemies[i];
     if (!enemy_dead(e) && IN_CELL(e->x, e->y, e->radius + 0.1f)) return true;
@@ -368,7 +376,7 @@ static void update_doors(Game *g, float dt) {
         d->timer = 4;
       }
     } else if (d->state == DOOR_OPEN) {
-      if (d->kind == 'Z') continue; // a revealed passage never seals again
+      if (d->kind == 'Z' || horror_holds_door(g, i)) continue; // revealed passages and haunted doors stay open
       d->timer -= dt;
       if (d->timer <= 0) {
         if (doorway_occupied(g, d)) {
@@ -472,6 +480,7 @@ static void pull_lever(Game *g, int x, int y) {
 }
 
 static void use_action(Game *g) {
+  if (horror_use_note(g)) return;
   const Player *p = &g->player;
   static const float reach[3] = {0.6f, 1.1f, 1.6f};
   for (int i = 0; i < 3; i++) {
@@ -596,6 +605,11 @@ static void update_player(Game *g, float dt, Input *in) {
     if (wet && hypotf(p->x - start_x, p->y - start_y) > .001f &&
         floorf(before / (float)M_PI) != floorf(p->bob_phase / (float)M_PI))
       audio_play(SND_SPLASH, .4f, 1 + .08f * sinf(p->bob_phase));
+    if (hypotf(p->x - start_x, p->y - start_y) > .001f &&
+        floorf(before / (float)M_PI) != floorf(p->bob_phase / (float)M_PI)) {
+      if (!wet) audio_play(SND_STEP, in->run ? .65f : .3f, 1);
+      if (in->run || wet) horror_noise(g, p->x, p->y, .7f);
+    }
     p->bob_amount = minf(1, p->bob_amount + dt * 6);
   } else {
     p->speed_now = 0;
@@ -718,6 +732,8 @@ void game_hit_barrel(Game *g, int index) {
     }
   }
   audio_play_at(SND_EXPLOSION, b->x, b->y, &l, 1.6f, 0.9f + (float)frand() * 0.2f);
+  horror_noise(g, b->x, b->y, 2);
+  if (horror_warden_solid(g) && blast_damage(g, b, g->horror.warden.x, g->horror.warden.y)) horror_hit_warden(g, WARDEN_STAGGER_TIME);
   alert_nearby(g, b->x, b->y, 12);
   for (int i = 0; i < g->enemy_count; i++) {
     Enemy *e = &g->enemies[i];
@@ -760,6 +776,7 @@ static void update_weapon(Game *g, float dt, const Input *in) {
   g->weapon_anim_timer = 0.16f;
   if (spec->uses_ammo) p->ammo--;
   audio_play(spec->sound, 0.9f, 1);
+  if (spec->uses_ammo) horror_noise(g, p->x, p->y, 1.5f);
   alert_nearby(g, p->x, p->y, 9);
 
   // hitscan: nearest live enemy or barrel close enough to the view axis
@@ -793,6 +810,8 @@ static void update_weapon(Game *g, float dt, const Input *in) {
     best = NULL;
     best_dist = dist;
   }
+  bool at_warden = horror_warden_aim(g, best_dist) < best_dist;
+  if (at_warden) { best = NULL; barrel = -1; }
   int dmg = 0;
   if (best) {
     float falloff = best_dist < 4 ? 1 : best_dist < 10 ? 0.75f : 0.55f;
@@ -802,12 +821,16 @@ static void update_weapon(Game *g, float dt, const Input *in) {
   // the dagger strikes home at once; a crossbow looses a bolt that carries
   // the hit to its mark, or flies on along the view into the wall
   if (p->weapon == WEAPON_DAGGER) {
-    if (best) enemy_hit(best, g, dmg);
+    if (at_warden) horror_hit_warden(g, WARDEN_DAGGER_STAGGER);
+    else if (best) enemy_hit(best, g, dmg);
     else if (barrel < 0) {
       int x, y;
       if (weapon_wall(g, p->x, p->y, p->dir_x, p->dir_y, spec->range, &x, &y) <= spec->range)
         game_hit_wall(g, x, y, (int)round_half_up(spec->dmg_lo + frand() * (spec->dmg_hi - spec->dmg_lo)));
     }
+  } else if (at_warden) {
+    const Warden *w = &g->horror.warden;
+    game_loose_bolt(g, p->x, p->y, w->x - p->x, w->y - p->y, SHOT_AT_WARDEN, NULL, 0);
   } else if (barrel >= 0) {
     const Barrel *b = &g->barrels[barrel];
     if (g->projectile_count == MAX_PROJECTILES)
@@ -933,6 +956,8 @@ static void land_bolt(Game *g, const Projectile *a) {
     game_hurt_player(g, a->dmg);
   else if (a->kind == SHOT_AT_ENEMY)
     enemy_hit(a->target, g, a->dmg);
+  else if (a->kind == SHOT_AT_WARDEN)
+    horror_hit_warden(g, WARDEN_STAGGER_TIME);
 }
 
 void game_loose_bolt(Game *g, float x, float y, float aim_x, float aim_y, ShotKind kind, Enemy *target, int dmg) {
@@ -954,10 +979,11 @@ void game_loose_bolt(Game *g, float x, float y, float aim_x, float aim_y, ShotKi
 static bool home_bolt(Game *g, Projectile *a, float step) {
   const Player *p = &g->player;
   bool at_player = a->kind == SHOT_AT_PLAYER;
-  float tx = at_player ? p->x : a->target->x;
-  float ty = at_player ? p->y : a->target->y;
-  float tz = level_floor(g->level, tx, ty) + (!at_player && a->target->flying ? a->target->fly_height : SHOT_Z);
-  float reach = at_player ? p->radius : a->target->radius;
+  bool at_warden = a->kind == SHOT_AT_WARDEN;
+  float tx = at_player ? p->x : at_warden ? g->horror.warden.x : a->target->x;
+  float ty = at_player ? p->y : at_warden ? g->horror.warden.y : a->target->y;
+  float tz = level_floor(g->level, tx, ty) + (!at_player && !at_warden && a->target->flying ? a->target->fly_height : SHOT_Z);
+  float reach = at_player ? p->radius : at_warden ? WARDEN_RADIUS : a->target->radius;
   float d = hypotf(tx - a->x, ty - a->y);
   if (d <= step + reach) {
     if (game_line_of_sight_3d(g, a->x, a->y, a->z, tx, ty, tz)) land_bolt(g, a);
@@ -981,7 +1007,8 @@ static void update_projectiles(Game *g, float dt) {
     for (int s = 0; s < steps && !dead; s++) {
       // another shot felled the mark first: the bolt flies on past
       if (a->kind == SHOT_AT_ENEMY && enemy_dead(a->target)) a->kind = SHOT_MISS;
-      if ((a->kind == SHOT_AT_PLAYER || a->kind == SHOT_AT_ENEMY) && home_bolt(g, a, step)) {
+      if (a->kind == SHOT_AT_WARDEN && !horror_warden_solid(g)) a->kind = SHOT_MISS;
+      if ((a->kind == SHOT_AT_PLAYER || a->kind == SHOT_AT_ENEMY || a->kind == SHOT_AT_WARDEN) && home_bolt(g, a, step)) {
         dead = true;
         break;
       }
@@ -1162,6 +1189,10 @@ static void update_water_audio(Game *g, float dt) {
 }
 
 void game_update(Game *g, float dt, Input *input) {
+  if (g->horror.reading >= 0 && !g->player_dead && !g->completed) {
+    if (input->use) { input->use = false; g->horror.reading = -1; }
+    return; // Reading pauses the world, including venom and the pursuer.
+  }
   if (g->player_dead || g->completed) {
     if (g->pit_fall > 0) g->pit_fall = minf(PIT_FALL_TIME, g->pit_fall + dt);
     decay_fx(g, dt);
@@ -1170,6 +1201,7 @@ void game_update(Game *g, float dt, Input *input) {
   g->time += dt;
   update_doors(g, dt);
   update_player(g, dt, input);
+  if (g->horror.reading >= 0) return;
   if (g->player_dead || g->completed) {
     mark_visited(g);
     decay_fx(g, dt);
@@ -1182,6 +1214,7 @@ void game_update(Game *g, float dt, Input *input) {
   update_traps(g, dt);
   for (int i = 0; i < g->enemy_count; i++) enemy_update(&g->enemies[i], g, dt);
   update_projectiles(g, dt);
+  horror_update(g, dt);
   mark_visited(g);
   decay_fx(g, dt);
 }
