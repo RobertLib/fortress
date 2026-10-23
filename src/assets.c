@@ -6,6 +6,7 @@
 #include "assets.h"
 #include "level.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
@@ -89,6 +90,148 @@ static Image *mirrored(Image *src) {
   Image *m = image_mirror(src);
   image_free(src);
   return m;
+}
+
+// ------------------------------------------------------------------ floors and ceilings
+
+// Seamless material tiles. Values are centred around 128; the renderer
+// applies the level's @floor / @ceil palette before lighting them.
+static Image *surface_texture(SurfaceTheme theme, bool ceiling) {
+  Image *img = image_new(TEX, TEX);
+  Lcg rng = lcg(4100 + theme * 37 + ceiling * 701);
+  for (int y = 0; y < TEX; y++) {
+    for (int x = 0; x < TEX; x++) {
+      float noise = (float)lcg_next(&rng) * 9 - 4.5f;
+      float mottling = sinf(x * (float)M_PI / 8) * sinf(y * (float)M_PI / 16) * 5;
+      float value = 128, red = 1, green = 1, blue = 1;
+      int bx = x % 32, by = y % 32;
+      int edge = mini(mini(bx, 31 - bx), mini(by, 31 - by));
+      if (!ceiling) {
+        switch (theme) {
+        case SURFACE_GUARDHOUSE: {
+          // Broad, worn flagstones, staggered by half a slab.
+          bx = (x + (y / 32) * 16) % 32;
+          edge = mini(mini(bx, 31 - bx), mini(by, 31 - by));
+          int slab = ((x + (y / 32) * 16) / 32 + y / 32 * 3) % 4;
+          value = edge == 0 ? 48 : edge == 1 ? 104 : 128 + slab * 7;
+          if (edge == 2) value += 12;
+          // A small chipped corner and a hairline crack in one stone.
+          if (slab == 1 && bx > 21 && by > 18 && abs(bx - by - 2) < 1) value *= .65f;
+          break;
+        }
+        case SURFACE_CELLARS: {
+          by = y % 16;
+          bx = (x + (y / 16) * 16) % 32;
+          edge = mini(mini(bx, 31 - bx), mini(by, 15 - by));
+          value = edge < 2 ? 49 : edge == 2 ? 103 : 118 + ((x / 32 + y / 16 * 3) % 4) * 6;
+          float damp = maxf(0, sinf(x * (float)M_PI / 16 + sinf(y * (float)M_PI / 8)));
+          if (edge < 5 && damp > .25f) {
+            red = .72f; green = .91f; blue = .65f;
+            value += damp * 16;
+          }
+          break;
+        }
+        case SURFACE_BARRACKS: {
+          bx = x % 16;
+          by = (y + (x / 16 % 2) * 32) % 64;
+          float grain = sinf(x * 2.7f + sinf(y * (float)M_PI / 32) * .8f);
+          value = bx == 0 || by == 0 ? 40 : 116 + (x / 16 % 3) * 13 + grain * 10;
+          if (bx == 1) value += 24;
+          if ((bx == 3 || bx == 12) && (by == 3 || by == 60)) value = 43;
+          red = 1.08f; green = .93f; blue = .75f;
+          break;
+        }
+        case SURFACE_VAULT: {
+          // Cool slate squares with restrained metal inlay.
+          value = edge == 0 ? 46 : edge == 1 ? 157 : ((x / 32 + y / 32) % 2 ? 101 : 139);
+          red = .88f; green = .97f; blue = 1.08f;
+          int diamond = abs(bx - 16) + abs(by - 16);
+          if (diamond == 7 || edge == 1) {
+            value = 154; red = 1.12f; green = 1; blue = .64f;
+          }
+          break;
+        }
+        case SURFACE_KEEP: {
+          value = edge == 0 ? 52 : edge < 3 ? 158 : ((x / 32 + y / 32) % 2 ? 119 : 146);
+          red = 1.05f; green = .97f; blue = .85f;
+          int diamond = abs(bx - 16) + abs(by - 16);
+          if (diamond >= 9 && diamond <= 11) {
+            value = 83; red = 1.14f; green = .77f; blue = .55f;
+          } else if (diamond <= 3) {
+            value = 165; red = 1.1f; green = .98f; blue = .64f;
+          }
+          break;
+        }
+        default: break;
+        }
+      } else {
+        switch (theme) {
+        case SURFACE_GUARDHOUSE:
+          // Heavy crossbeams over rough lime plaster.
+          value = 155 + mottling;
+          if (x < 7 || y < 6) {
+            value = 74 + sinf((x < 7 ? x : y) * 2.8f) * 11;
+            red = 1.12f; green = .9f; blue = .67f;
+            if (x == 6 || y == 5) value += 25;
+          }
+          break;
+        case SURFACE_CELLARS:
+          bx = (x + (y / 16) * 16) % 32;
+          by = y % 16;
+          value = bx < 2 || by < 2 ? 51 : 123 + (y / 16 % 2) * 13;
+          // Raised transverse masonry ribs.
+          if (x < 6) value = x == 5 ? 174 : x == 0 ? 72 : 148;
+          red = .95f; green = .98f; blue = .87f;
+          break;
+        case SURFACE_BARRACKS:
+          value = x % 8 == 0 ? 66 : 137 + sinf(x * 3 + sinf(y * (float)M_PI / 32)) * 12;
+          if (y < 9) value = y == 8 ? 127 : 76 + sinf(y * 2.4f) * 12;
+          if ((x == 4 || x == 59) && y == 4) value = 39;
+          red = 1.1f; green = .93f; blue = .72f;
+          break;
+        case SURFACE_VAULT:
+          // Recessed dressed-stone coffers.
+          value = edge < 2 ? 72 : edge < 4 ? 175 : edge < 6 ? 135 : 106;
+          if (edge >= 6) value += mottling;
+          red = .9f; green = .98f; blue = 1.07f;
+          break;
+        case SURFACE_KEEP:
+          value = edge < 3 ? 67 : edge == 3 ? 170 : edge < 6 ? 118 : 128;
+          value += sinf(x * 2.5f + sinf(y * (float)M_PI / 16)) * 8;
+          red = 1.12f; green = .88f; blue = .66f;
+          if (abs(bx - 16) + abs(by - 16) < 3) {
+            value = 190; red = 1.15f; green = 1.05f; blue = .68f;
+          }
+          break;
+        default: break;
+        }
+      }
+      value += noise + mottling;
+      img->px[y * TEX + x] = pack_argb(255, clampf(value * red, 0, 255),
+                                          clampf(value * green, 0, 255), clampf(value * blue, 0, 255));
+    }
+  }
+  return img;
+}
+
+static void surface_mips(Image **mips, Image *base) {
+  mips[0] = base;
+  for (int i = 1; i < SURFACE_MIPS; i++) {
+    const Image *src = mips[i - 1];
+    Image *dst = mips[i] = image_new(src->w / 2, src->h / 2);
+    for (int y = 0; y < dst->h; y++) {
+      for (int x = 0; x < dst->w; x++) {
+        int red = 0, green = 0, blue = 0;
+        for (int dy = 0; dy < 2; dy++) {
+          for (int dx = 0; dx < 2; dx++) {
+            uint32_t p = src->px[(y * 2 + dy) * src->w + x * 2 + dx];
+            red += (p >> 16) & 255; green += (p >> 8) & 255; blue += p & 255;
+          }
+        }
+        dst->px[y * dst->w + x] = pack_argb(255, red * .25f, green * .25f, blue * .25f);
+      }
+    }
+  }
 }
 
 // ------------------------------------------------------------------ walls
@@ -2622,6 +2765,11 @@ static Image *crest_sprite(CrestState state) {
 
 void assets_build(Assets *a) {
   memset(a, 0, sizeof(*a));
+
+  for (int theme = 0; theme < SURFACE_THEME_COUNT; theme++) {
+    surface_mips(a->floors[theme], surface_texture((SurfaceTheme)theme, false));
+    surface_mips(a->ceilings[theme], surface_texture((SurfaceTheme)theme, true));
+  }
 
   a->walls[WT_STONE] = stone_texture(11, STONE_BASE, false);
   a->walls[WT_MOSS] = stone_texture(22, STONE_BASE, true);

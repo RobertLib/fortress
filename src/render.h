@@ -19,14 +19,18 @@ typedef struct Overlay {
   float wall_x;
 } Overlay;
 
+typedef struct SurfaceTint {
+  float k, r, g, b;
+} SurfaceTint;
+
 typedef struct Renderer {
   const Assets *assets;
   float zbuffer[SCREEN_W];
   Overlay overlays[SCREEN_W][MAX_OVERLAYS];
   int overlay_count[SCREEN_W];
   Image *vignette;
-  const Level *sky_level; // level the ceiling/floor rows were built for
-  uint32_t sky_rows[VIEW_H];
+  SurfaceTint *plane_tints; // smoothly interpolated light at map-grid corners
+  size_t plane_tint_count;
   uint32_t *shake_buf;
 } Renderer;
 

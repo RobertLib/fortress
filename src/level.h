@@ -89,6 +89,7 @@ typedef struct Hanging {
 typedef struct Level {
   char name[64];
   Color floor_color, ceil_color;
+  SurfaceTheme surface_theme;
   int w, h;
   char *grid; // one character per cell, see level.c
   Item *items;

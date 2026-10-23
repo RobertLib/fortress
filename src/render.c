@@ -91,9 +91,7 @@ static float key_light(const Game *g, float x, float y) {
 
 // The torchlight, key shimmer and fog laid over a surface column, folded
 // into one per-channel scale and offset.
-typedef struct {
-  float k, r, g, b;
-} Tint;
+typedef SurfaceTint Tint;
 
 static void tint_add(Tint *t, float r, float g, float b, float a) {
   t->k *= 1 - a;
@@ -262,27 +260,82 @@ void renderer_init(Renderer *r, const Assets *assets) {
 void renderer_free(Renderer *r) {
   image_free(r->vignette);
   free(r->shake_buf);
+  free(r->plane_tints);
   r->vignette = NULL;
   r->shake_buf = NULL;
+  r->plane_tints = NULL;
+  r->plane_tint_count = 0;
 }
 
-// ceiling and floor sink into darkness at the horizon
-static void build_sky(Renderer *r, const Level *lv) {
-  r->sky_level = lv;
-  for (int y = 0; y < VIEW_H; y++) {
-    Color a, b;
-    float t;
-    if (y < VIEW_H / 2) {
-      a = lv->ceil_color;
-      b = FOG;
-      t = ((float)y + 0.5f) / (VIEW_H / 2.0f);
-    } else {
-      float f = ((float)y + 0.5f - VIEW_H / 2.0f) / (VIEW_H / 2.0f);
-      a = FOG;
-      b = lv->floor_color;
-      t = minf(1, f / 0.25f);
+// Calculate illumination once per map corner, then interpolate it across
+// the planes. No per-pixel searches through the torches or keys.
+static void build_plane_tints(Renderer *r, const Game *g) {
+  const Level *lv = g->level;
+  size_t count = (size_t)(lv->w + 1) * (lv->h + 1);
+  if (count > r->plane_tint_count) {
+    r->plane_tints = realloc(r->plane_tints, count * sizeof *r->plane_tints);
+    r->plane_tint_count = count;
+  }
+  for (int y = 0; y <= lv->h; y++) {
+    for (int x = 0; x <= lv->w; x++) {
+      float dist = (x - g->player.x) * g->player.dir_x + (y - g->player.y) * g->player.dir_y;
+      r->plane_tints[y * (lv->w + 1) + x] = surface_tint(g, x, y, maxf(0, dist));
     }
-    r->sky_rows[y] = pack_argb(255, a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t);
+  }
+}
+
+static Tint plane_tint(const Renderer *r, int stride, int x, int y, float u, float v) {
+  const Tint *a = &r->plane_tints[y * stride + x], *b = a + stride;
+  float aa = (1 - u) * (1 - v), ab = u * (1 - v), ba = (1 - u) * v, bb = u * v;
+  return (Tint){a[0].k * aa + a[1].k * ab + b[0].k * ba + b[1].k * bb,
+                a[0].r * aa + a[1].r * ab + b[0].r * ba + b[1].r * bb,
+                a[0].g * aa + a[1].g * ab + b[0].g * ba + b[1].g * bb,
+                a[0].b * aa + a[1].b * ab + b[0].b * ba + b[1].b * bb};
+}
+
+static uint32_t plane_color(uint32_t texel, Color palette, const Tint *tint) {
+  return pack_argb(255, minf(255, ((texel >> 16) & 255) * palette.r * tint->k + tint->r),
+                        minf(255, ((texel >> 8) & 255) * palette.g * tint->k + tint->g),
+                        minf(255, (texel & 255) * palette.b * tint->k + tint->b));
+}
+
+// Row-wise floor casting: the ceiling is the mirrored plane at z=1.
+// Texture coordinates stay fixed in the world when moving or turning.
+static void render_planes(Renderer *r, Image *fb, const Game *g) {
+  const Level *lv = g->level;
+  const Player *p = &g->player;
+  build_plane_tints(r, g);
+  Color floor_palette = rgb(lv->floor_color.r * (1.3f / 128), lv->floor_color.g * (1.3f / 128),
+                            lv->floor_color.b * (1.3f / 128));
+  Color ceil_palette = rgb(lv->ceil_color.r * (2.1f / 128), lv->ceil_color.g * (2.1f / 128),
+                           lv->ceil_color.b * (2.1f / 128));
+  float plane_length = hypotf(p->plane_x, p->plane_y);
+  float ray_length = maxf(hypotf(p->dir_x - p->plane_x, p->dir_y - p->plane_y),
+                          hypotf(p->dir_x + p->plane_x, p->dir_y + p->plane_y));
+  for (int y = VIEW_H / 2; y < VIEW_H; y++) {
+    float offset = (float)y + .5f - VIEW_H / 2.0f;
+    float dist = VIEW_H * .5f / offset;
+    float step_x = 2 * p->plane_x * dist / W, step_y = 2 * p->plane_y * dist / W;
+    float wx = p->x + (p->dir_x - p->plane_x) * dist;
+    float wy = p->y + (p->dir_y - p->plane_y) * dist;
+    float footprint = TEX * maxf(dist * ray_length / offset, 2 * plane_length * dist / W);
+    int mip = clampi((int)log2f(maxf(1, footprint)), 0, SURFACE_MIPS - 1);
+    const Image *floor_tex = r->assets->floors[lv->surface_theme][mip];
+    const Image *ceil_tex = r->assets->ceilings[lv->surface_theme][mip];
+    uint32_t *floor_row = fb->px + (size_t)y * fb->w;
+    uint32_t *ceil_row = fb->px + (size_t)(VIEW_H - 1 - y) * fb->w;
+    for (int x = 0; x < W; x++, wx += step_x, wy += step_y) {
+      // Keep the walls and closed doors already painted in this column.
+      if (dist >= r->zbuffer[x]) continue;
+      int cx = (int)floorf(wx), cy = (int)floorf(wy);
+      if (cx < 0 || cy < 0 || cx >= lv->w || cy >= lv->h) continue;
+      float u = wx - cx, v = wy - cy;
+      int tx = mini(floor_tex->w - 1, (int)(u * floor_tex->w));
+      int ty = mini(floor_tex->h - 1, (int)(v * floor_tex->h));
+      Tint tint = plane_tint(r, lv->w + 1, cx, cy, u, v);
+      floor_row[x] = plane_color(floor_tex->px[ty * floor_tex->w + tx], floor_palette, &tint);
+      ceil_row[x] = plane_color(ceil_tex->px[ty * ceil_tex->w + tx], ceil_palette, &tint);
+    }
   }
 }
 
@@ -1141,15 +1194,13 @@ static void render_flashes(Image *fb, const Game *g) {
 // ------------------------------------------------------------------ 3D view
 
 void render_view(Renderer *r, Image *fb, const Game *g) {
-  const Level *lv = g->level;
   const Player *p = &g->player;
   const Assets *as = r->assets;
   image_set_clip(fb, 0, 0, W, VIEW_H);
 
-  if (r->sky_level != lv) build_sky(r, lv);
   for (int y = 0; y < VIEW_H; y++) {
     uint32_t *row = fb->px + (size_t)y * fb->w;
-    uint32_t c = r->sky_rows[y];
+    uint32_t c = pack_argb(255, FOG.r, FOG.g, FOG.b);
     for (int x = 0; x < W; x++) row[x] = c;
   }
 
@@ -1166,6 +1217,7 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     draw_column(fb, tex, tex_column(hit.wall_x), x, VIEW_H / 2.0f - line_h / 2, line_h, &tint);
   }
 
+  render_planes(r, fb, g);
   render_floor_features(r, fb, g);
 
   // Wall boxes (wardrobes, chests) are opaque geometry: drawn right after

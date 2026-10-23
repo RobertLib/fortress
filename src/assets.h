@@ -16,6 +16,7 @@
 #define EXPLOSION_FRAMES 8
 #define WALL_DUST_FRAMES 6
 #define WATER_FRAMES 16
+#define SURFACE_MIPS 7 // 64x64 down to 1x1, to soften distant floor detail
 
 typedef enum {
   WT_STONE, // "1" rough masonry
@@ -85,6 +86,8 @@ typedef struct BoxTextures {
 typedef struct Assets {
   Image *walls[WT_COUNT];
   Image *walls_dark[WT_COUNT]; // faces along the y axis
+  Image *floors[SURFACE_THEME_COUNT][SURFACE_MIPS];
+  Image *ceilings[SURFACE_THEME_COUNT][SURFACE_MIPS];
   EnemySprites enemies[ENEMY_TYPE_COUNT];
   Image *items[ITEM_KIND_COUNT]; // ITEM_BOLTS_DROP shares the quiver sprite
   Image *sparkle;

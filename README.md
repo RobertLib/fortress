@@ -265,15 +265,29 @@ Torches, furniture, fountains, fireplaces, candelabra, wall hangings,
 portraits, cobwebs, cracks and niches are placed automatically, in a
 stable layout derived from the map.
 
+Floors and ceilings use perspective-correct, world-anchored textures with
+torchlight, key glow and distance fog. Distant detail is filtered to reduce
+shimmer. Each floor has its own materials:
+
+| Floor | Ground | Ceiling |
+|---|---|---|
+| Guardhouse | Worn stone flagstones | Plaster with heavy timber beams |
+| The Cellars | Damp, moss-edged paving | Masonry with stone ribs |
+| Barracks | Oak planks with iron nails | Boards and timber joists |
+| The Vault | Slate tiles with metal inlay | Recessed stone coffers |
+| Warlord's Keep | Decorative stone with diamond inlays | Carved timber panels with metal bosses |
+
 The `@name`, `@floor`, `@ceil` and `@start` headers set the floor name,
-floor/ceiling colors and the initial view direction. Lines starting
+floor/ceiling colors and the initial view direction. `@surfaces` selects
+the material theme: `guardhouse` (the default), `cellars`, `barracks`,
+`vault` or `keep`. Colors tint the chosen materials. Lines starting
 with `;` are comments. The number of levels is set by `LEVEL_COUNT`
 in [src/common.h](src/common.h).
 
 ## Under the Hood
 
 - **Raycasting** (grid DDA) into a 640×400 software framebuffer with
-  textured walls, side shading, sliding doors and fog — the world sinks
+  textured walls, floors and ceilings, side shading, sliding doors and fog — the world sinks
   into darkness with distance, as if lit by torches; SDL scales the frame
   to the window ([src/render.c](src/render.c))
 - **Sprites** (enemies, items) as billboards clipped by the z-buffer,

@@ -7,6 +7,7 @@
 ; & east-west pendulum, % north-south pendulum: time your crossing
 ; = shallow pool, >/< east/west stream, }/{ south/north stream
 @name THE CELLARS
+@surfaces cellars
 @floor #453a2c
 @ceil #1a140e
 @start S

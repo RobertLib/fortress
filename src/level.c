@@ -1,6 +1,7 @@
 // Text-file level format:
 //   Lines starting with ";" are comments.
 //   Lines starting with "@" are properties: @name, @floor, @ceil (colors),
+//   @surfaces (material theme),
 //   @start (initial facing: N/S/E/W, default E).
 //   Everything else is the map grid, one character per cell:
 //     1-6    walls (texture variants), # = 1
@@ -235,6 +236,7 @@ typedef struct {
   char floor[32];
   char ceil[32];
   char start[8];
+  char surfaces[32];
 } Props;
 
 static void copy_trimmed(char *dst, size_t size, const char *src, size_t len) {
@@ -266,6 +268,8 @@ static void parse_prop(Props *props, const char *line, size_t len) {
     copy_trimmed(props->ceil, sizeof props->ceil, value, value_len);
   else if (key_len == 5 && !strncmp(key, "start", 5))
     copy_trimmed(props->start, sizeof props->start, value, value_len);
+  else if (key_len == 8 && !strncmp(key, "surfaces", 8))
+    copy_trimmed(props->surfaces, sizeof props->surfaces, value, value_len);
 }
 
 static bool blank(const char *s, size_t len) {
@@ -281,7 +285,7 @@ typedef struct {
 
 bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   memset(lv, 0, sizeof *lv);
-  Props props = {"FLOOR", "#707070", "#383838", "E"};
+  Props props = {"FLOOR", "#707070", "#383838", "E", "guardhouse"};
 
   // split into lines, collecting the map rows
   size_t text_len = strlen(text);
@@ -315,6 +319,16 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
     free(rows);
     return false;
   }
+
+  static const char *const themes[SURFACE_THEME_COUNT] = {"guardhouse", "cellars", "barracks", "vault", "keep"};
+  int theme = 0;
+  while (theme < SURFACE_THEME_COUNT && strcmp(props.surfaces, themes[theme])) theme++;
+  if (theme == SURFACE_THEME_COUNT) {
+    snprintf(err, err_size, "Unknown surface theme: %s", props.surfaces);
+    free(rows);
+    return false;
+  }
+  lv->surface_theme = (SurfaceTheme)theme;
 
   const int cells = w * h;
   lv->w = w;

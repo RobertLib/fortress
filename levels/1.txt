@@ -7,6 +7,7 @@
 ; & east-west pendulum, % north-south pendulum: time your crossing
 ; = shallow pool, >/< east/west stream, }/{ south/north stream
 @name GUARDHOUSE
+@surfaces guardhouse
 @floor #4a4038
 @ceil #1e1914
 @start E
