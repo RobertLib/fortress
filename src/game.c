@@ -356,7 +356,7 @@ void game_open_door(Game *g, Door *door, bool by_player) {
 static bool doorway_occupied(const Game *g, const Door *d) {
 #define IN_CELL(ex, ey, r) ((ex) + (r) > d->x && (ex) - (r) < d->x + 1 && (ey) + (r) > d->y && (ey) - (r) < d->y + 1)
   if (IN_CELL(g->player.x, g->player.y, g->player.radius + 0.1f)) return true;
-  if (horror_warden_solid(g) && IN_CELL(g->horror.warden.x, g->horror.warden.y, WARDEN_RADIUS + .1f)) return true;
+  if (horror_warden_targetable(g) && IN_CELL(g->horror.warden.x, g->horror.warden.y, WARDEN_RADIUS + .1f)) return true;
   for (int i = 0; i < g->enemy_count; i++) {
     const Enemy *e = &g->enemies[i];
     if (!enemy_dead(e) && IN_CELL(e->x, e->y, e->radius + 0.1f)) return true;
@@ -733,7 +733,7 @@ void game_hit_barrel(Game *g, int index) {
   }
   audio_play_at(SND_EXPLOSION, b->x, b->y, &l, 1.6f, 0.9f + (float)frand() * 0.2f);
   horror_noise(g, b->x, b->y, 2);
-  if (horror_warden_solid(g) && blast_damage(g, b, g->horror.warden.x, g->horror.warden.y)) horror_hit_warden(g, WARDEN_STAGGER_TIME);
+  if (horror_warden_targetable(g) && blast_damage(g, b, g->horror.warden.x, g->horror.warden.y)) horror_hit_warden(g, WARDEN_STAGGER_TIME);
   alert_nearby(g, b->x, b->y, 12);
   for (int i = 0; i < g->enemy_count; i++) {
     Enemy *e = &g->enemies[i];
@@ -1007,7 +1007,7 @@ static void update_projectiles(Game *g, float dt) {
     for (int s = 0; s < steps && !dead; s++) {
       // another shot felled the mark first: the bolt flies on past
       if (a->kind == SHOT_AT_ENEMY && enemy_dead(a->target)) a->kind = SHOT_MISS;
-      if (a->kind == SHOT_AT_WARDEN && !horror_warden_solid(g)) a->kind = SHOT_MISS;
+      if (a->kind == SHOT_AT_WARDEN && !horror_warden_targetable(g)) a->kind = SHOT_MISS;
       if ((a->kind == SHOT_AT_PLAYER || a->kind == SHOT_AT_ENEMY || a->kind == SHOT_AT_WARDEN) && home_bolt(g, a, step)) {
         dead = true;
         break;

@@ -246,13 +246,19 @@ with several seconds of warning before he can hunt. Each key permits one
 encounter, separated by a quiet interval. He follows sight and the noise of
 running, splashing, crossbow fire and explosions, searches your last known
 position, opens ordinary doors and uses stairs. He avoids pits, solid obstacles
-and white-candle refuges. A closed door buys time; losing his sight and hearing
+and white-candle refuges, and routes around soldiers and furniture. He walks
+slower than you but keeps closing in while you linger. If a changing obstacle
+leaves him unable to advance for three seconds, he fades and clears the passage.
+A closed door buys time; losing his sight and hearing
 or reaching the candles lets the pursuit end. His swing has a visible windup
 and can be dodged.
 
 He cannot be killed. A crossbow bolt or powder blast staggers him for 2.4
 seconds; the dagger buys only 0.75 seconds. He gives no score or ammunition and
-does not count toward the kill statistics. The white candles protect against
+does not count toward the kill statistics. While staggered he turns translucent
+and you can slip through him, even in a narrow corridor. A message marks this
+escape window. Chains and a message announce his arrival before the hunt begins.
+The white candles protect against
 the Jailer; other enemies and traps can still hurt you there.
 
 ### Barrels

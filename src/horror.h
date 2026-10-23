@@ -42,6 +42,7 @@ typedef struct Warden {
   float state_timer, remaining, lost_timer, attack_timer, step_timer, path_timer;
   float next_x, next_y;
   bool has_target;
+  float stuck_timer; // transient movement watchdog; reset after loading
 } Warden;
 typedef struct HorrorState {
   uint32_t scenes_fired, scenes_changed, notes_read;
@@ -72,6 +73,7 @@ void horror_noise(struct Game *g, float x, float y, float seconds);
 float horror_warden_aim(const struct Game *g, float range);
 bool horror_hit_warden(struct Game *g, float stagger);
 bool horror_warden_solid(const struct Game *g);
+bool horror_warden_targetable(const struct Game *g);
 bool horror_scene_visible(const struct Game *g, int index, float *x, float *y, float *alpha);
 
 #endif

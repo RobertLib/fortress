@@ -1009,10 +1009,11 @@ static void collect_sprites(Renderer *r, const Game *g) {
   const Warden *warden = &g->horror.warden;
   if (h->chapter && warden->state != WARDEN_DORMANT) {
     int frame = warden->state == WARDEN_HUNT ? 1 + ((int)(g->time * 2.4f) & 1) : 0;
-    if (warden->attack_timer > .55f || warden->state == WARDEN_STAGGER) frame = 3;
+    if (warden->attack_timer > .55f) frame = 3;
     Sprite *s = add_sprite(warden->x, warden->y, as->warden[frame], .97f);
     if (warden->state == WARDEN_WARNING) s->alpha = clampf(1 - warden->state_timer / WARDEN_WARNING_TIME, .15f, 1);
     if (warden->state == WARDEN_FADING) s->alpha = warden->state_timer / 2;
+    if (warden->state == WARDEN_STAGGER) s->alpha = .45f;
   }
   for (int i = 0; i < lv->w * lv->h; i++) {
     if (lv->grid[i] != '8' || g->wall_health[i]) continue;

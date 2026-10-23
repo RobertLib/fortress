@@ -198,11 +198,15 @@ void horror_noise(Game *g, float x, float y, float seconds) {
 }
 
 bool horror_warden_solid(const Game *g) {
+  return g->horror.warden.state == WARDEN_HUNT;
+}
+
+bool horror_warden_targetable(const Game *g) {
   return g->horror.warden.state == WARDEN_HUNT || g->horror.warden.state == WARDEN_STAGGER;
 }
 
 float horror_warden_aim(const Game *g, float range) {
-  if (!horror_warden_solid(g)) return INFINITY;
+  if (!horror_warden_targetable(g)) return INFINITY;
   const Player *p = &g->player;
   const Warden *w = &g->horror.warden;
   float dx = w->x - p->x, dy = w->y - p->y, dist = hypotf(dx, dy);
@@ -214,13 +218,42 @@ float horror_warden_aim(const Game *g, float range) {
 }
 
 bool horror_hit_warden(Game *g, float stagger) {
-  if (!horror_warden_solid(g)) return false;
+  if (!horror_warden_targetable(g)) return false;
   Warden *w = &g->horror.warden;
   w->state = WARDEN_STAGGER;
   w->state_timer = stagger;
   w->attack_timer = 0;
+  w->stuck_timer = 0;
   Listener l = game_listener(g);
   audio_play_at(SND_WARDEN_CHAIN, w->x, w->y, &l, 1, .65f);
+  game_say(g, "JAILER STAGGERED — SLIP PAST!", minf(stagger, 2));
+  return true;
+}
+
+static bool segment_hits(float ax, float ay, float bx, float by, float x, float y, float radius) {
+  float dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+  float t = len2 > 0 ? clampf(((x - ax) * dx + (y - ay) * dy) / len2, 0, 1) : 0;
+  return hypotf(ax + t * dx - x, ay + t * dy - y) < radius + WARDEN_RADIUS;
+}
+
+// Test the whole tread, not just its endpoints: an off-centre barrel or
+// soldier can obstruct the passage between two otherwise clear tile centres.
+static bool clear_tread(const Game *g, float ax, float ay, float bx, float by) {
+  for (int i = 0; i < g->barrel_count; i++) {
+    const Barrel *b = &g->barrels[i];
+    if (!b->destroyed && segment_hits(ax, ay, bx, by, b->x, b->y, BARREL_RADIUS)) return false;
+  }
+  for (int i = 0; i < g->level->decoration_count; i++) {
+    const Decoration *d = &g->level->decorations[i];
+    if (d->radius && segment_hits(ax, ay, bx, by, d->x, d->y, d->radius)) return false;
+  }
+  for (int i = 0; i < g->enemy_count; i++) {
+    const Enemy *e = &g->enemies[i];
+    if (enemy_dead(e) || e->stats->swarm || e->stats->underfoot || e->flying) continue;
+    // An enemy may have walked into the Jailer; permit him to move apart.
+    if (hypotf(e->x - g->horror.warden.x, e->y - g->horror.warden.y) < e->radius + WARDEN_RADIUS) continue;
+    if (segment_hits(ax, ay, bx, by, e->x, e->y, e->radius)) return false;
+  }
   return true;
 }
 
@@ -230,19 +263,31 @@ static bool walkable(const Game *g, int x, int y) {
   if (c != '.' && !level_is_water(c) && c != 'D' && c != 'R') return false;
   float px = x + .5f, py = y + .5f;
   if (horror_in_haven(g, px, py)) return false;
-  for (int i = 0; i < g->barrel_count; i++)
-    if (!g->barrels[i].destroyed && hypotf(g->barrels[i].x - px, g->barrels[i].y - py) < BARREL_RADIUS + WARDEN_RADIUS) return false;
-  for (int i = 0; i < g->level->decoration_count; i++) {
-    const Decoration *d = &g->level->decorations[i];
-    if (d->radius && hypotf(d->x - px, d->y - py) < d->radius + WARDEN_RADIUS) return false;
-  }
-  return true;
+  return clear_tread(g, px, py, px, py);
 }
 
-static bool distances(Game *g, int x, int y) {
+static bool distances(Game *g, float tx, float ty) {
   HorrorState *h = &g->horror;
   const Level *lv = g->level;
-  if (!h->distance || !h->queue || !walkable(g, x, y)) return false;
+  int x = (int)tx, y = (int)ty;
+  if (!h->distance || !h->queue) return false;
+  if (!walkable(g, x, y)) {
+    // The player can stand beside furniture within a tile whose centre
+    // is obstructed. Route to a nearby approach instead of abandoning him.
+    int best_x = -1, best_y = -1;
+    float best_dist = 1.5f;
+    for (int ny = y - 1; ny <= y + 1; ny++) {
+      for (int nx = x - 1; nx <= x + 1; nx++) {
+        float px = nx + .5f, py = ny + .5f, dist = hypotf(px - tx, py - ty);
+        if (dist >= best_dist || !walkable(g, nx, ny) ||
+            fabsf(level_floor_at(lv, nx, ny) - level_floor(lv, tx, ty)) > LEVEL_STEP + .001f ||
+            !game_line_of_sight(g, px, py, tx, ty) || !clear_tread(g, px, py, tx, ty)) continue;
+        best_x = nx; best_y = ny; best_dist = dist;
+      }
+    }
+    if (best_x < 0) return false;
+    x = best_x; y = best_y;
+  }
   for (int i = 0; i < lv->w * lv->h; i++) h->distance[i] = -1;
   int head = 0, tail = 0, start = y * lv->w + x;
   h->distance[start] = 0;
@@ -252,9 +297,11 @@ static bool distances(Game *g, int x, int y) {
     int cell = h->queue[head++], cx = cell % lv->w, cy = cell / lv->w;
     for (int k = 0; k < 4; k++) {
       int nx = cx + dx[k], ny = cy + dy[k];
-      if (!walkable(g, nx, ny) || fabsf(level_floor_at(lv, nx, ny) - level_floor_at(lv, cx, cy)) > LEVEL_STEP + .001f) continue;
+      if (nx < 0 || ny < 0 || nx >= lv->w || ny >= lv->h) continue;
       int next = ny * lv->w + nx;
       if (h->distance[next] >= 0) continue;
+      if (!walkable(g, nx, ny) || fabsf(level_floor_at(lv, nx, ny) - level_floor_at(lv, cx, cy)) > LEVEL_STEP + .001f ||
+          !clear_tread(g, cx + .5f, cy + .5f, nx + .5f, ny + .5f)) continue;
       h->distance[next] = h->distance[cell] + 1;
       h->queue[tail++] = next;
     }
@@ -269,7 +316,7 @@ static void sound_at(Game *g, SoundId id, float x, float y, float volume, float 
 
 static bool begin_warning(Game *g) {
   const Player *p = &g->player;
-  if (horror_in_haven(g, p->x, p->y) || !distances(g, (int)p->x, (int)p->y)) return false;
+  if (horror_in_haven(g, p->x, p->y) || !distances(g, p->x, p->y)) return false;
   HorrorState *h = &g->horror;
   int best = -1;
   float best_score = -1000;
@@ -293,6 +340,7 @@ static bool begin_warning(Game *g) {
   w->has_target = true;
   sound_at(g, SND_WARDEN_CHAIN, w->x, w->y, 1.4f, .72f);
   sound_at(g, SND_WARDEN_STEP, w->x, w->y, 1.3f, .8f);
+  game_say(g, "CHAINS IN THE DARK — THE JAILER IS COMING", 3);
   return true;
 }
 
@@ -307,11 +355,11 @@ static void fade_warden(Game *g) {
 static void next_waypoint(Game *g) {
   Warden *w = &g->horror.warden;
   w->next_x = w->x; w->next_y = w->y;
-  if (!w->has_target || !distances(g, (int)w->target_x, (int)w->target_y)) return;
+  if (!w->has_target || !distances(g, w->target_x, w->target_y)) return;
   int x = (int)w->x, y = (int)w->y, cell = y * g->level->w + x;
   if (x < 0 || y < 0 || x >= g->level->w || y >= g->level->h || g->horror.distance[cell] < 0) return;
   // Finish the current tread before turning, so corners cannot be cut.
-  if (hypotf(w->x - x - .5f, w->y - y - .5f) > .08f) {
+  if (hypotf(w->x - x - .5f, w->y - y - .5f) > .01f) {
     w->next_x = x + .5f; w->next_y = y + .5f;
     return;
   }
@@ -320,11 +368,13 @@ static void next_waypoint(Game *g) {
   for (int k = 0; k < 4; k++) {
     int nx = x + dx[k], ny = y + dy[k], i = ny * g->level->w + nx;
     if (nx < 0 || ny < 0 || nx >= g->level->w || ny >= g->level->h ||
-        fabsf(level_floor_at(g->level, nx, ny) - level_floor_at(g->level, x, y)) > LEVEL_STEP + .001f) continue;
+        fabsf(level_floor_at(g->level, nx, ny) - level_floor_at(g->level, x, y)) > LEVEL_STEP + .001f ||
+        !clear_tread(g, x + .5f, y + .5f, nx + .5f, ny + .5f)) continue;
     if (g->horror.distance[i] >= 0 && g->horror.distance[i] < g->horror.distance[best]) best = i;
   }
   w->next_x = best % g->level->w + .5f;
   w->next_y = best / g->level->w + .5f;
+  if (best == cell) { w->next_x = w->target_x; w->next_y = w->target_y; }
 }
 
 static void update_warden(Game *g, float dt) {
@@ -371,14 +421,15 @@ static void update_warden(Game *g, float dt) {
       fabsf(level_floor(g->level, w->x, w->y) - level_floor(g->level, p->x, p->y)) <= .25f)
     game_hurt_player(g, 28);
   if (g->player_dead) return;
-  if (sees && dist < 1 && w->attack_timer <= 0) {
+  if (sees && dist < 1 && w->attack_timer <= 0 &&
+      fabsf(level_floor(g->level, w->x, w->y) - level_floor(g->level, p->x, p->y)) <= .25f) {
     w->attack_timer = 1.5f;
     sound_at(g, SND_WARDEN_CHAIN, w->x, w->y, .95f, 1.1f);
   }
-  if (w->attack_timer > .55f) return;
+  if (w->attack_timer > .55f) { w->stuck_timer = 0; return; }
 
   w->path_timer -= dt;
-  if (hypotf(w->next_x - w->x, w->next_y - w->y) < .06f && w->path_timer <= 0) {
+  if (hypotf(w->next_x - w->x, w->next_y - w->y) < .001f && w->path_timer <= 0) {
     next_waypoint(g);
     w->path_timer = .2f;
   }
@@ -388,10 +439,11 @@ static void update_warden(Game *g, float dt) {
     return;
   }
   float dx = w->next_x - w->x, dy = w->next_y - w->y, len = hypotf(dx, dy);
-  float step = minf(len, dt * (1.0f + g->level->horror.chapter * .035f));
-  if (level_is_water(game_cell(g, (int)w->x, (int)w->y))) step *= WATER_SPEED;
+  float speed = 1.65f + g->level->horror.chapter * .06f;
+  if (level_is_water(game_cell(g, (int)w->x, (int)w->y))) speed *= WATER_SPEED;
+  float step = minf(len, dt * speed);
   bool moved = false;
-  if (len > .01f) {
+  if (len > .0001f) {
     static const EnemyStats body = {.radius = WARDEN_RADIUS};
     Enemy proxy = {.x = w->x, .y = w->y, .radius = WARDEN_RADIUS, .stats = &body};
     int steps = maxi(1, (int)ceilf(step / .07f));
@@ -403,6 +455,10 @@ static void update_warden(Game *g, float dt) {
     }
   }
   if (!moved && w->path_timer < -.8f) { w->next_x = w->x; w->next_y = w->y; }
+  w->stuck_timer = moved ? 0 : w->stuck_timer + dt;
+  // A changed or unreachable route must never leave an immortal roadblock.
+  // Replanning gets a chance first; then the encounter ends without collision.
+  if (w->stuck_timer > 3) { fade_warden(g); return; }
   w->step_timer -= dt;
   if (moved && w->step_timer <= 0) {
     w->step_timer = .85f;

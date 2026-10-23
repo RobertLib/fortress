@@ -255,7 +255,7 @@ static void test_path_doors_and_cover(void) {
   Warden *w = hunt(g, 8.5f, 7.5f);
   Door *d = game_door_at(g, 7, 4);
   CHECK(d && !game_line_of_sight(g, w->x, w->y, g->player.x, g->player.y));
-  for (int i = 0; i < 640 && w->y > 3.5f; i++) {
+  for (int i = 0; i < 640 && w->y >= 3.5f; i++) {
     horror_noise(g, g->player.x, g->player.y, 1);
     tick(g, .025f);
   }
@@ -280,6 +280,101 @@ static void test_path_doors_and_cover(void) {
   teardown(&f);
 }
 
+static void test_pursuit_obstacles(void) {
+  for (int obstacle = 0; obstacle < 3; obstacle++) {
+    Fixture f; setup(&f); Game *g = f.game;
+    aim(g, 5.76f, 7.76f, 1, 0);
+    if (obstacle == 0) {
+      g->enemies = realloc(g->enemies, sizeof *g->enemies); CHECK(g->enemies);
+      enemy_init(&g->enemies[0], &(EnemySpawn){.x = 8.5f, .y = 7.5f, .type = ENEMY_GUARD, .master = -1});
+      g->enemy_count = 1;
+    } else {
+      g->barrels = realloc(g->barrels, sizeof *g->barrels); CHECK(g->barrels);
+      // The first barrel lies between two clear tile centres; the second
+      // occupies the player's tile centre while leaving the player room.
+      g->barrels[0] = (Barrel){.x = obstacle == 1 ? 8 : 5.3f, .y = obstacle == 1 ? 7.5f : 7.3f};
+      g->barrel_count = 1;
+    }
+    Warden *w = hunt(g, obstacle == 1 ? 8.5f : 10.5f, 7.5f);
+    for (int i = 0; i < 400 && g->player.health == 100; i++) {
+      horror_update(g, .025f); // the guard stands still: the Jailer must go around
+      for (int j = 0; j < g->barrel_count; j++)
+        CHECK(hypotf(w->x - g->barrels[j].x, w->y - g->barrels[j].y) >= WARDEN_RADIUS + BARREL_RADIUS);
+    }
+    CHECK(g->player.health == 72 && w->state == WARDEN_HUNT);
+    teardown(&f);
+  }
+}
+
+static void test_pursuit_replans_and_descends(void) {
+  for (int stairs = 0; stairs < 2; stairs++) {
+    Fixture f; setup(&f); Game *g = f.game;
+    aim(g, 5.76f, 7.5f, 1, 0);
+    Warden *w;
+    if (stairs) {
+      f.level.has_heights = true;
+      f.level.heights[7 * f.level.w + 6] = .375f;
+      f.level.heights[6 * f.level.w + 6] = .25f;
+      f.level.heights[5 * f.level.w + 6] = .125f;
+      w = hunt(g, 6.5f, 7.5f);
+      CHECK(game_line_of_sight(g, w->x, w->y, g->player.x, g->player.y));
+      // The player is close but below the ledge. Use the stairs before swinging.
+      horror_update(g, .025f);
+      CHECK(w->attack_timer == 0);
+    } else {
+      w = hunt(g, 10.5f, 7.5f);
+      horror_update(g, .025f);
+      // A guard enters the chosen route after the hunt has already started.
+      g->enemies = realloc(g->enemies, sizeof *g->enemies); CHECK(g->enemies);
+      enemy_init(&g->enemies[0], &(EnemySpawn){.x = 9.5f, .y = 7.5f, .type = ENEMY_GUARD, .master = -1});
+      g->enemy_count = 1;
+    }
+    for (int i = 0; i < 400 && g->player.health == 100; i++) horror_update(g, .025f);
+    CHECK(g->player.health == 72 && w->state == WARDEN_HUNT);
+    teardown(&f);
+  }
+}
+
+static void narrow_hall(Fixture *f) {
+  for (int x = 1; x < f->level.w - 1; x++) {
+    f->level.grid[6 * f->level.w + x] = '1';
+    f->level.grid[8 * f->level.w + x] = '1';
+  }
+}
+
+static void test_stagger_opens_escape(void) {
+  for (int dagger = 0; dagger < 2; dagger++) {
+  Fixture f; setup(&f); Game *g = f.game;
+  narrow_hall(&f);
+  aim(g, dagger ? 6.2f : 5.5f, 7.5f, 1, 0);
+  Warden *w = hunt(g, 7.5f, 7.5f);
+  CHECK(game_is_blocked(g, 7.25f, 7.5f, g->player.radius, NULL));
+  CHECK(horror_hit_warden(g, dagger ? WARDEN_DAGGER_STAGGER : WARDEN_STAGGER_TIME));
+  CHECK(isfinite(horror_warden_aim(g, 24)));
+  Input forward = {.weapon = -1, .forward = true};
+  for (int i = 0; i < 40; i++) game_update(g, .025f, &forward);
+  CHECK(g->player.x > w->x + .6f && g->player.health == 100);
+  CHECK(w->state == (dagger ? WARDEN_HUNT : WARDEN_STAGGER) && g->kills == 0 && g->session->score == 0);
+  run_horror(g, 1.5f);
+  CHECK(w->state == WARDEN_HUNT);
+  teardown(&f);
+  }
+}
+
+static void test_blocked_hunt_releases_hall(void) {
+  Fixture f; setup(&f); Game *g = f.game;
+  narrow_hall(&f);
+  aim(g, 5.5f, 7.5f, 1, 0);
+  g->barrels = realloc(g->barrels, sizeof *g->barrels); CHECK(g->barrels);
+  g->barrels[0] = (Barrel){.x = 8.5f, .y = 7.5f}; g->barrel_count = 1;
+  Warden *w = hunt(g, 10.5f, 7.5f);
+  run_horror(g, 5);
+  CHECK(w->state == WARDEN_FADING || w->state == WARDEN_DORMANT);
+  CHECK(!game_is_blocked(g, w->x, w->y, g->player.radius, NULL));
+  CHECK(g->player.health == 100);
+  teardown(&f);
+}
+
 static void test_save_roundtrip(void) {
   Fixture f; setup(&f); Game *g = f.game;
   aim(g, 3.5f, 1.5f, -1, 0);
@@ -289,6 +384,7 @@ static void test_save_roundtrip(void) {
   g->horror.reading = 0;
   Warden *w = hunt(g, 9.5f, 7.5f);
   w->state = WARDEN_STAGGER; w->state_timer = 1.23f;
+  w->stuck_timer = 2.9f;
   game_loose_bolt(g, g->player.x, g->player.y, 1, 0, SHOT_AT_WARDEN, NULL, 0);
   HorrorState snapshot = g->horror;
   char path[1024]; snprintf(path, sizeof path, "%stest-horror.dat", SDL_GetBasePath());
@@ -299,6 +395,7 @@ static void test_save_roundtrip(void) {
   CHECK(g->horror.scenes_fired == snapshot.scenes_fired && g->horror.scenes_changed == snapshot.scenes_changed);
   CHECK(g->horror.keys_seen == 1 && g->horror.pending_hunts == 1 && g->horror.blackout == 8);
   CHECK(g->horror.notes_read == 1 && g->horror.reading == 0 && g->horror.warden.state_timer == 1.23f);
+  CHECK(g->horror.warden.stuck_timer == 0); // navigation restarts without changing the save format
   CHECK(g->projectile_count == 1 && g->projectiles[0].kind == SHOT_AT_WARDEN && !g->projectiles[0].target);
   g->horror.reading = -1;
   horror_update(g, .025f);
@@ -334,6 +431,11 @@ static void test_rendering(bool screenshots) {
   render_view(&r, other, g);
   CHECK(differences(fb, other) > 500);
   if (screenshots) { render_hud(&r, fb, g); screenshot(fb, "build/horror-jailer.bmp"); }
+  hunt(g, 7.5f, 7.5f);
+  CHECK(horror_hit_warden(g, WARDEN_STAGGER_TIME));
+  render_view(&r, other, g);
+  CHECK(differences(fb, other) > 500);
+  if (screenshots) { render_hud(&r, other, g); screenshot(other, "build/horror-jailer-stagger.bmp"); }
   aim(g, 7.5f, 3.5f, 0, 1); // closed door hides the whole figure
   hunt(g, 7.5f, 5.5f);
   render_view(&r, fb, g);
@@ -383,6 +485,10 @@ int main(int argc, char **argv) {
   test_spawn_and_warning();
   test_warden_combat_and_escape();
   test_path_doors_and_cover();
+  test_pursuit_obstacles();
+  test_pursuit_replans_and_descends();
+  test_stagger_opens_escape();
+  test_blocked_hunt_releases_hall();
   test_save_roundtrip();
   test_rendering(argc > 1 && !strcmp(argv[1], "--screenshots"));
   SDL_Quit();
