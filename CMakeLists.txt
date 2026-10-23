@@ -22,14 +22,15 @@ set(GAME_SOURCES
   src/savegame.c
 )
 
-add_executable(fortress
-  src/main.c
+set(VISUAL_SOURCES
   src/render.c
   src/assets.c
   src/weapons.c
   src/font.c
-  ${GAME_SOURCES}
+  src/comic.c
 )
+
+add_executable(fortress src/main.c ${VISUAL_SOURCES} ${GAME_SOURCES})
 
 target_link_libraries(fortress PRIVATE SDL3::SDL3)
 target_compile_definitions(fortress PRIVATE FORTRESS_DEBUG_TOOLS=$<BOOL:${FORTRESS_DEBUG_TOOLS}>)
@@ -51,14 +52,15 @@ if(BUILD_TESTING)
   add_executable(barrel_tests tests/barrels.c ${GAME_SOURCES})
   add_executable(difficulty_tests tests/difficulty.c ${GAME_SOURCES})
   add_executable(savegame_tests tests/savegame.c ${GAME_SOURCES})
-  add_executable(savegame_ui_tests tests/savegame_ui.c src/render.c src/assets.c src/weapons.c src/font.c ${GAME_SOURCES})
-  add_executable(gamepad_tests tests/gamepad.c src/render.c src/assets.c src/weapons.c src/font.c ${GAME_SOURCES})
-  add_executable(wall_tests tests/walls.c src/render.c src/assets.c src/weapons.c src/font.c ${GAME_SOURCES})
-  add_executable(pit_tests tests/pits.c src/render.c src/assets.c src/weapons.c src/font.c ${GAME_SOURCES})
-  add_executable(pendulum_tests tests/pendulums.c src/render.c src/assets.c src/weapons.c src/font.c ${GAME_SOURCES})
-  add_executable(water_tests tests/water.c src/render.c src/assets.c src/weapons.c src/font.c ${GAME_SOURCES})
-  add_executable(surface_tests tests/surfaces.c src/render.c src/assets.c src/weapons.c src/font.c ${GAME_SOURCES})
-  foreach(test_target barrel_tests difficulty_tests savegame_tests savegame_ui_tests gamepad_tests wall_tests pit_tests pendulum_tests water_tests surface_tests)
+  add_executable(savegame_ui_tests tests/savegame_ui.c ${VISUAL_SOURCES} ${GAME_SOURCES})
+  add_executable(gamepad_tests tests/gamepad.c ${VISUAL_SOURCES} ${GAME_SOURCES})
+  add_executable(comic_tests tests/comic.c ${VISUAL_SOURCES} ${GAME_SOURCES})
+  add_executable(wall_tests tests/walls.c ${VISUAL_SOURCES} ${GAME_SOURCES})
+  add_executable(pit_tests tests/pits.c ${VISUAL_SOURCES} ${GAME_SOURCES})
+  add_executable(pendulum_tests tests/pendulums.c ${VISUAL_SOURCES} ${GAME_SOURCES})
+  add_executable(water_tests tests/water.c ${VISUAL_SOURCES} ${GAME_SOURCES})
+  add_executable(surface_tests tests/surfaces.c ${VISUAL_SOURCES} ${GAME_SOURCES})
+  foreach(test_target barrel_tests difficulty_tests savegame_tests savegame_ui_tests gamepad_tests comic_tests wall_tests pit_tests pendulum_tests water_tests surface_tests)
     target_include_directories(${test_target} PRIVATE src)
     target_link_libraries(${test_target} PRIVATE SDL3::SDL3)
     target_compile_definitions(${test_target} PRIVATE FORTRESS_DEBUG_TOOLS=$<BOOL:${FORTRESS_DEBUG_TOOLS}>)
@@ -74,11 +76,13 @@ if(BUILD_TESTING)
   add_test(NAME savegame COMMAND savegame_tests)
   add_test(NAME savegame_ui COMMAND savegame_ui_tests)
   add_test(NAME gamepad COMMAND gamepad_tests)
+  add_test(NAME comic_story COMMAND comic_tests)
   add_test(NAME destructible_walls COMMAND wall_tests)
   add_test(NAME pit_traps COMMAND pit_tests)
   add_test(NAME pendulum_traps COMMAND pendulum_tests)
   add_test(NAME shallow_water COMMAND water_tests)
   add_test(NAME floor_and_ceiling COMMAND surface_tests)
+  set_tests_properties(savegame_ui gamepad comic_story PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(barrel_combat PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(destructible_walls PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(pit_traps PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})

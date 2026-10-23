@@ -10,6 +10,7 @@
 
 #include "assets.h"
 #include "audio.h"
+#include "comic.h"
 #include "font.h"
 #include "game.h"
 #include "gfx.h"
@@ -25,6 +26,8 @@ typedef enum {
   ST_INTRO,
   ST_MENU,
   ST_DIFFICULTY,
+  ST_STORY_INTRO,
+  ST_STORY_OUTRO,
   ST_CONTROLS,
   ST_QUIT,
   ST_LEVEL_START,
@@ -45,6 +48,8 @@ static Image *fb;
 
 static Assets assets;
 static Renderer renderer;
+static ComicArt comic_art;
+static Comic comic;
 static Level levels[LEVEL_COUNT];
 static int levels_loaded;
 static char error_msg[256];
@@ -98,7 +103,31 @@ static void set_state(State s) {
   clear_input();
   notice_timer = 0;
   // once the run has ended there is nothing left to continue
-  if (s == ST_GAME_OVER || s == ST_VICTORY) resumable = false;
+  if (s == ST_GAME_OVER || s == ST_STORY_OUTRO || s == ST_VICTORY) resumable = false;
+}
+
+static bool story_state(void) { return state == ST_STORY_INTRO || state == ST_STORY_OUTRO; }
+
+static void story_sound(void) {
+  static const SoundId sounds[COMIC_KIND_COUNT][COMIC_PANELS] = {
+      {SND_DOOR, SND_LEVER, SND_PICKUP_WEAPON}, {SND_EXIT_OPEN, SND_STEP, SND_VICTORY}};
+  audio_play(sounds[comic.kind][comic.panel], .65f, 1);
+}
+
+static void begin_story(ComicKind kind) {
+  comic_start(&comic, kind);
+  set_state(kind == COMIC_INTRO ? ST_STORY_INTRO : ST_STORY_OUTRO);
+  capture_mouse(false);
+  story_sound();
+}
+
+static void finish_story(void) {
+  set_state(comic.kind == COMIC_INTRO ? ST_LEVEL_START : ST_VICTORY);
+}
+
+static void advance_story(void) {
+  if (comic_next(&comic)) finish_story();
+  else story_sound();
 }
 
 static void start_level(int index, const Persist *persist) {
@@ -143,8 +172,7 @@ static void next_level(void) {
   session.max_secrets += game->total_secrets;
   session.total_time += game->time;
   if (game->level_index + 1 >= LEVEL_COUNT) {
-    audio_play(SND_VICTORY, 1, 1);
-    set_state(ST_VICTORY);
+    begin_story(COMIC_OUTRO);
   } else {
     Persist persist = {p->health, p->ammo, p->weapon, p->has_arbalest};
     start_level(game->level_index + 1, &persist);
@@ -241,6 +269,7 @@ static void act_new_game(void) {
 static void start_difficulty(Difficulty difficulty) {
   audio_play(SND_START, 1, 1);
   new_game(pending_start_index, difficulty);
+  if (pending_start_index == 0) begin_story(COMIC_INTRO);
 }
 
 static void act_easy(void) { start_difficulty(DIFFICULTY_EASY); }
@@ -373,6 +402,8 @@ static int menu_hit_test(Menu m, MenuSpan span, float x, float y) {
 static bool click_state(State s) {
   switch (s) {
   case ST_INTRO:
+  case ST_STORY_INTRO:
+  case ST_STORY_OUTRO:
   case ST_CONTROLS:
   case ST_QUIT:
   case ST_LEVEL_START:
@@ -395,6 +426,13 @@ static int menu_nav(SDL_Scancode sc, int count, int index) {
 static void handle_state_key(SDL_Scancode sc) {
   bool enter = sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER;
   bool esc = sc == SDL_SCANCODE_ESCAPE;
+
+  if (story_state()) {
+    if (!input_focused) return;
+    if (esc) finish_story();
+    else if (enter || sc == SDL_SCANCODE_SPACE || sc == SDL_SCANCODE_RIGHT) advance_story();
+    return;
+  }
 
   switch (state) {
   case ST_INTRO:
@@ -492,7 +530,11 @@ static void handle_state_key(SDL_Scancode sc) {
 }
 
 static void handle_state_click(float x, float y) {
-  if (state == ST_MENU) {
+  if (story_state()) {
+    if (!input_focused) return;
+    if (x >= 520 && x <= 627 && y >= 368 && y <= 394) finish_story();
+    else advance_story();
+  } else if (state == ST_MENU) {
     Menu m = main_menu();
     int i = menu_hit_test(m, MAIN_MENU_SPAN, x, y);
     if (i >= 0) {
@@ -792,6 +834,12 @@ static void handle_event(const SDL_Event *e) {
 
 static void update(float dt) {
   notice_timer = maxf(0, notice_timer - dt);
+  if (story_state() && input_focused) {
+    int previous = comic.panel;
+    if (comic_update(&comic, dt)) finish_story();
+    else if (comic.panel != previous) story_sound();
+    return;
+  }
   if (state == ST_LEVEL_START && state_timer > 3 && input_focused) begin_level();
   update_gamepad(dt);
   if (state != ST_PLAYING) return;
@@ -920,21 +968,30 @@ static void draw_error(void) {
 }
 
 static void draw_intro(void) {
-  fill("#140e08");
+  comic_draw_cover(&comic_art, fb, clock_time);
   torch_glow(105, 280);
   title_text("F O R T R E S S", W / 2.0f, 110, 52, "#e9c93c");
   rule(W / 2.0f, 130, 150);
   text("A MEDIEVAL RAYCASTING ADVENTURE", W / 2.0f, 158, 11, "#a89878");
 
-  static const char *story[] = {
-      "Betrayed and thrown into the fortress dungeons,",
-      "you have slipped your chains. Five floors of the",
-      "garrison stand between you and the night. Find the",
-      "3 KEYS on each floor, unlock the GATE, and escape.",
-  };
-  for (int i = 0; i < 4; i++) text(story[i], W / 2.0f, 205.0f + i * 20, 12, "#d8cbaa");
+  text("BETRAYED. IMPRISONED. NOT DEFEATED.", W / 2.0f, 226, 14, "#d8cbaa");
+  text("Five floors between you and freedom.", W / 2.0f, 253, 12, "#a89878");
 
   if (blink()) control_hint("PRESS ENTER", "PRESS %s", 335, 18, "#ead9b0");
+}
+
+static void draw_story(void) {
+  comic_draw(&comic_art, fb, &comic);
+  bool last = comic.panel == COMIC_PANELS - 1;
+  const char *next = !last ? "ENTER / SPACE / CLICK — NEXT" :
+                     comic.kind == COMIC_INTRO ? "ENTER / CLICK — BEGIN" : "ENTER / CLICK — RESULTS";
+  const char *pad = !last ? "%s — NEXT    %s — SKIP" :
+                    comic.kind == COMIC_INTRO ? "%s — BEGIN    %s — SKIP" : "%s — RESULTS    %s — SKIP";
+  if (gamepad && gamepad_active) control_hint("", pad, 385, 11, "#d8cbaa");
+  else {
+    text_align(next, 18, 385, 11, "#d8cbaa", ALIGN_LEFT);
+    text_align("ESC / SKIP >>", 622, 385, 11, "#d6b570", ALIGN_RIGHT);
+  }
 }
 
 static void draw_main_menu(void) {
@@ -1136,6 +1193,8 @@ static void render(void) {
   case ST_LOADING: draw_center_screen("#101018", "LOADING..."); break;
   case ST_ERROR: draw_error(); break;
   case ST_INTRO: draw_intro(); break;
+  case ST_STORY_INTRO:
+  case ST_STORY_OUTRO: draw_story(); break;
   case ST_MENU: draw_main_menu(); break;
   case ST_DIFFICULTY: draw_difficulty(); break;
   case ST_CONTROLS: draw_controls(); break;
@@ -1248,6 +1307,7 @@ int main(int argc, char **argv) {
   present();
   audio_init();
   assets_build(&assets);
+  comic_art_build(&comic_art);
   renderer_init(&renderer, &assets);
 
   if (!load_levels()) {
@@ -1280,6 +1340,7 @@ int main(int argc, char **argv) {
   free(save_path);
   for (int i = 0; i < levels_loaded; i++) level_free(&levels[i]);
   renderer_free(&renderer);
+  comic_art_free(&comic_art);
   font_shutdown();
   audio_shutdown();
   image_free(fb);

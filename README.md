@@ -78,6 +78,23 @@ The choice lasts for the whole run, including retries and later floors;
 it appears on the floor introduction and pause screen. Cancelling the
 selection leaves any run available through **CONTINUE** intact.
 
+### Story comics
+
+Starting a new game plays a three-panel animated prologue: betrayal,
+broken chains and a stolen crossbow. Clearing the final floor plays an
+epilogue of the last gate opening and the escape into the night, followed
+by the final statistics. The illustrated title screen shares the same
+procedural comic art.
+
+Panels reveal automatically and the active frame expands, with slow camera
+movement, rain, drifting dust, flickering torches and scene-specific
+animation. **Enter**, **Space**,
+the **right arrow** or a **click** advances a panel; **Esc** or clicking
+**SKIP** skips the sequence. On a gamepad use the bottom face button to
+advance and the right face button to skip. Playback pauses when the window
+loses focus. Continuing, loading a save, retrying a floor and debug level
+warps go directly to the game without replaying the prologue.
+
 ### Save / Load
 
 Press **F5** during play to save, and **F9** to load the saved position.

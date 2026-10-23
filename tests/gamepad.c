@@ -78,6 +78,10 @@ static void test_menus(SDL_Joystick *joystick) {
   update_gamepad(.01f);
   CHECK(difficulty_menu_index == 0);
   tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
+  CHECK(state == ST_STORY_INTRO && comic.panel == 0);
+  tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
+  CHECK(state == ST_STORY_INTRO && comic.panel == 1);
+  tap(joystick, SDL_GAMEPAD_BUTTON_EAST);
   CHECK(state == ST_LEVEL_START && session.difficulty == DIFFICULTY_EASY);
   axis(joystick, SDL_GAMEPAD_AXIS_LEFTY, 0);
   tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
@@ -129,6 +133,11 @@ static void test_menus(SDL_Joystick *joystick) {
   set_state(ST_VICTORY);
   tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
   CHECK(state == ST_INTRO);
+  begin_story(COMIC_OUTRO);
+  tap(joystick, SDL_GAMEPAD_BUTTON_START);
+  CHECK(state == ST_STORY_OUTRO && comic.panel == 1);
+  tap(joystick, SDL_GAMEPAD_BUTTON_EAST);
+  CHECK(state == ST_VICTORY);
 }
 
 static void test_actions(SDL_Joystick *joystick) {
@@ -326,6 +335,9 @@ int main(void) {
   // Exercise gamepad hints as well as switching back to keyboard hints.
   fb = image_new(W, H);
   draw_intro();
+  begin_story(COMIC_INTRO);
+  draw_story();
+  set_state(ST_PLAYING);
   draw_main_menu();
   draw_difficulty();
   draw_controls();

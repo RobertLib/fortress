@@ -65,6 +65,7 @@ int main(void) {
   session.score = 1234;
   on_key_down(SDL_SCANCODE_F5);
   CHECK(state == ST_PLAYING && !strcmp(notice, "GAME SAVED"));
+  begin_story(COMIC_INTRO); // Loading also exits a story directly into the saved run.
   game->player.health = 17;
   session.score = 999;
   input.forward = input.fire = input.use = true;
