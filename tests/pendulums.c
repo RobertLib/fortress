@@ -220,10 +220,10 @@ static void test_rendering(bool screenshots) {
 
   // The automap reveals blades only in explored cells.
   image_fill(fb, 0xff000000u);
-  render_map(&renderer, fb, g);
+  render_map(&renderer, fb, g, NULL);
   g->visited[4 * f.level.w + 4] = 1;
   image_fill(other, 0xff000000u);
-  render_map(&renderer, other, g);
+  render_map(&renderer, other, g, NULL);
   int x = SCREEN_W / 2 - f.level.w * 4 + 4 * 8 + 4;
   int y = (VIEW_H - f.level.h * 8) / 2 + 4 * 8 + 4;
   CHECK(fb->px[y * SCREEN_W + x] != other->px[y * SCREEN_W + x]);

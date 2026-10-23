@@ -197,7 +197,7 @@ static void test_rendering(bool screenshots) {
   CHECK(!memcmp(floor->px, fb->px, sizeof(uint32_t) * SCREEN_W * VIEW_H)); // hidden behind masonry
   f.level.grid[2 * f.level.w + 3] = '.';
   f.game->visited[2 * f.level.w + 4] = 1;
-  render_map(&renderer, fb, f.game);
+  render_map(&renderer, fb, f.game, NULL);
   int cs = 8;
   int mx = SCREEN_W / 2 - f.level.w * cs / 2 + 4 * cs + cs / 2;
   int my = (VIEW_H - f.level.h * cs) / 2 + 2 * cs + cs / 2;

@@ -63,6 +63,12 @@ static Input input = {.weapon = -1};
 static char *save_path;
 static char notice[96];
 static float notice_timer;
+static SDL_Gamepad *gamepad;
+static SDL_JoystickID gamepad_id;
+static bool input_focused = true, gamepad_active;
+static bool gamepad_fire_ready, gamepad_menu_blocked;
+static int gamepad_menu_direction;
+static float gamepad_menu_timer;
 
 // ------------------------------------------------------------------ helpers
 
@@ -77,11 +83,11 @@ static void capture_mouse(bool on) { SDL_SetWindowRelativeMouseMode(window, on);
 static void blip(void) { audio_play(SND_BLIP, 1, 1); }
 
 static void clear_input(void) {
-  input.forward = input.back = input.strafe_left = input.strafe_right = false;
-  input.turn_left = input.turn_right = input.run = input.strafe_mod = false;
-  input.fire = input.use = false;
-  input.weapon = -1;
-  input.mouse_dx = 0;
+  input = (Input){.weapon = -1};
+  gamepad_fire_ready = false;
+  gamepad_menu_blocked = true;
+  gamepad_menu_direction = 0;
+  gamepad_menu_timer = 0;
 }
 
 // ------------------------------------------------------------------ flow
@@ -538,6 +544,134 @@ static void handle_state_hover(float x, float y) {
 
 // ------------------------------------------------------------------ input
 
+static void find_gamepad(void) {
+  if (gamepad) return;
+  int count = 0;
+  SDL_JoystickID *ids = SDL_GetGamepads(&count);
+  for (int i = 0; i < count; i++) {
+    gamepad = SDL_OpenGamepad(ids[i]);
+    if (gamepad) {
+      gamepad_id = ids[i];
+      gamepad_active = true;
+      gamepad_fire_ready = false;
+      gamepad_menu_blocked = true;
+      break;
+    }
+  }
+  SDL_free(ids);
+}
+
+static void remove_gamepad(SDL_JoystickID id) {
+  if (!gamepad || id != gamepad_id) return;
+  SDL_CloseGamepad(gamepad);
+  gamepad = NULL;
+  gamepad_id = 0;
+  gamepad_active = false;
+  clear_input();
+  if (state == ST_PLAYING) {
+    handle_state_key(SDL_SCANCODE_ESCAPE);
+    snprintf(notice, sizeof notice, "GAMEPAD DISCONNECTED");
+    notice_timer = 4;
+  }
+  find_gamepad();
+}
+
+static float gamepad_axis(SDL_GamepadAxis axis) {
+  Sint16 value = SDL_GetGamepadAxis(gamepad, axis);
+  return value / (value < 0 ? 32768.0f : 32767.0f);
+}
+
+// A radial dead zone preserves the stick's direction and scales its remaining
+// travel smoothly from walking speed to full speed, including the diagonals.
+static void gamepad_move(float *x, float *y) {
+  *x = gamepad_axis(SDL_GAMEPAD_AXIS_LEFTX);
+  *y = gamepad_axis(SDL_GAMEPAD_AXIS_LEFTY);
+  float length = hypotf(*x, *y);
+  float amount = clampf((length - 0.24f) / 0.76f, 0, 1);
+  float scale = length > 0 ? amount / length : 0;
+  *x *= scale;
+  *y *= scale;
+}
+
+static bool gamepad_firing(void) {
+  return SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 8000;
+}
+
+static void cycle_weapon(int direction) {
+  int weapon = input.weapon >= 0 ? input.weapon : (int)game->player.weapon;
+  do {
+    weapon = (weapon + direction + WEAPON_COUNT) % WEAPON_COUNT;
+  } while (weapon == WEAPON_ARBALEST && !game->player.has_arbalest);
+  input.weapon = weapon;
+}
+
+static void on_gamepad_button(SDL_GamepadButton button) {
+  gamepad_active = true;
+  if (button == SDL_GAMEPAD_BUTTON_START) {
+    handle_state_key(state == ST_PLAYING || state == ST_PAUSED ? SDL_SCANCODE_ESCAPE : SDL_SCANCODE_RETURN);
+  } else if (state != ST_PLAYING) {
+    if (button == SDL_GAMEPAD_BUTTON_SOUTH) handle_state_key(SDL_SCANCODE_RETURN);
+    if (button == SDL_GAMEPAD_BUTTON_EAST) handle_state_key(SDL_SCANCODE_ESCAPE);
+    if ((state == ST_MENU || state == ST_DIFFICULTY || state == ST_PAUSED) &&
+        (button == SDL_GAMEPAD_BUTTON_DPAD_UP || button == SDL_GAMEPAD_BUTTON_DPAD_DOWN)) {
+      // Handle the press immediately so a following confirm in the same frame
+      // selects the new item. Polling below supplies only the held repeats.
+      gamepad_menu_direction = button == SDL_GAMEPAD_BUTTON_DPAD_UP ? -1 : 1;
+      gamepad_menu_timer = 0.4f;
+      gamepad_menu_blocked = false;
+      handle_state_key(gamepad_menu_direction < 0 ? SDL_SCANCODE_UP : SDL_SCANCODE_DOWN);
+    }
+  } else {
+    switch (button) {
+    case SDL_GAMEPAD_BUTTON_SOUTH: input.use = true; break;
+    case SDL_GAMEPAD_BUTTON_NORTH:
+    case SDL_GAMEPAD_BUTTON_BACK:
+    case SDL_GAMEPAD_BUTTON_TOUCHPAD: game->show_map = !game->show_map; break;
+    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: cycle_weapon(-1); break;
+    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: cycle_weapon(1); break;
+    default: break;
+    }
+  }
+}
+
+static void update_gamepad(float dt) {
+  if (!gamepad || !input_focused) return;
+  // A held trigger must be released after a pause, load or state change.
+  if (!gamepad_firing()) gamepad_fire_ready = true;
+  if (state != ST_MENU && state != ST_DIFFICULTY && state != ST_PAUSED) return;
+  float y = gamepad_axis(SDL_GAMEPAD_AXIS_LEFTY);
+  bool up = y < -0.55f || SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP);
+  bool down = y > 0.55f || SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+  int direction = (int)down - (int)up;
+  if (!direction) {
+    gamepad_menu_blocked = false;
+    gamepad_menu_direction = 0;
+    gamepad_menu_timer = 0;
+    return;
+  }
+  if (gamepad_menu_blocked) return;
+  gamepad_menu_timer -= dt;
+  if (direction != gamepad_menu_direction || gamepad_menu_timer <= 0) {
+    gamepad_active = true;
+    handle_state_key(direction < 0 ? SDL_SCANCODE_UP : SDL_SCANCODE_DOWN);
+    gamepad_menu_timer = direction != gamepad_menu_direction ? 0.4f : 0.12f;
+    gamepad_menu_direction = direction;
+  }
+}
+
+static void apply_gamepad(Input *frame) {
+  if (!gamepad || !input_focused) return;
+  float x, y;
+  gamepad_move(&x, &y);
+  frame->analog_strafe = x;
+  frame->analog_forward = -y;
+  float turn = gamepad_axis(SDL_GAMEPAD_AXIS_RIGHTX);
+  frame->analog_turn = signf(turn) * maxf(0, (fabsf(turn) - 0.24f) / 0.76f);
+  frame->run |= SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_LEFT_STICK) ||
+                SDL_GetGamepadAxis(gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 8000;
+  frame->fire |= gamepad_fire_ready && gamepad_firing();
+}
+
 static bool *key_binding(SDL_Scancode sc) {
   switch (sc) {
   case SDL_SCANCODE_W:
@@ -560,6 +694,7 @@ static bool *key_binding(SDL_Scancode sc) {
 }
 
 static void on_key_down(SDL_Scancode sc) {
+  gamepad_active = false;
   if (sc == SDL_SCANCODE_F5 && (state == ST_PLAYING || state == ST_PAUSED)) {
     act_save_game();
     return;
@@ -599,7 +734,23 @@ static void event_pos(const SDL_Event *e, float *x, float *y) {
 static void handle_event(const SDL_Event *e) {
   switch (e->type) {
   case SDL_EVENT_QUIT: running = false; break;
-  case SDL_EVENT_WINDOW_FOCUS_LOST: clear_input(); break;
+  case SDL_EVENT_GAMEPAD_ADDED: find_gamepad(); break;
+  case SDL_EVENT_GAMEPAD_REMOVED: remove_gamepad(e->gdevice.which); break;
+  case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+    if (e->gbutton.which == gamepad_id && gamepad && input_focused)
+      on_gamepad_button((SDL_GamepadButton)e->gbutton.button);
+    break;
+  case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+    if (e->gaxis.which == gamepad_id && gamepad && input_focused && abs(e->gaxis.value) > 8000)
+      gamepad_active = true;
+    break;
+  case SDL_EVENT_WINDOW_FOCUS_GAINED: input_focused = true; break;
+  case SDL_EVENT_WINDOW_FOCUS_LOST:
+    input_focused = false;
+    clear_input();
+    if (state == ST_PLAYING) handle_state_key(SDL_SCANCODE_ESCAPE);
+    capture_mouse(false);
+    break;
   case SDL_EVENT_KEY_DOWN:
     if (!e->key.repeat) on_key_down(e->key.scancode);
     break;
@@ -610,6 +761,7 @@ static void handle_event(const SDL_Event *e) {
   }
   case SDL_EVENT_MOUSE_BUTTON_DOWN:
     if (e->button.button != SDL_BUTTON_LEFT) break;
+    gamepad_active = false;
     if (state == ST_PLAYING) {
       if (!mouse_captured()) capture_mouse(true);
       input.fire = true;
@@ -623,6 +775,7 @@ static void handle_event(const SDL_Event *e) {
     if (e->button.button == SDL_BUTTON_LEFT) input.fire = false;
     break;
   case SDL_EVENT_MOUSE_MOTION:
+    if (e->motion.xrel || e->motion.yrel) gamepad_active = false;
     if (mouse_captured()) {
       if (state == ST_PLAYING) input.mouse_dx += e->motion.xrel;
     } else {
@@ -639,9 +792,15 @@ static void handle_event(const SDL_Event *e) {
 
 static void update(float dt) {
   notice_timer = maxf(0, notice_timer - dt);
-  if (state == ST_LEVEL_START && state_timer > 3) begin_level();
+  if (state == ST_LEVEL_START && state_timer > 3 && input_focused) begin_level();
+  update_gamepad(dt);
   if (state != ST_PLAYING) return;
-  game_update(game, dt, &input);
+  Input frame = input;
+  apply_gamepad(&frame);
+  game_update(game, dt, &frame);
+  input.use = frame.use;
+  input.weapon = frame.weapon;
+  input.mouse_dx = frame.mouse_dx;
 
   if (game->player_dead) {
     death_delay += dt;
@@ -680,6 +839,33 @@ static void text_align(const char *str, float x, float y, float size, const char
 
 static void text(const char *str, float x, float y, float size, const char *color) {
   text_align(str, x, y, size, color, ALIGN_CENTER);
+}
+
+static const char *gamepad_button_name(SDL_GamepadButton button) {
+  switch (SDL_GetGamepadButtonLabel(gamepad, button)) {
+  case SDL_GAMEPAD_BUTTON_LABEL_A: return "A";
+  case SDL_GAMEPAD_BUTTON_LABEL_B: return "B";
+  case SDL_GAMEPAD_BUTTON_LABEL_X: return "X";
+  case SDL_GAMEPAD_BUTTON_LABEL_Y: return "Y";
+  case SDL_GAMEPAD_BUTTON_LABEL_CROSS: return "CROSS";
+  case SDL_GAMEPAD_BUTTON_LABEL_CIRCLE: return "CIRCLE";
+  case SDL_GAMEPAD_BUTTON_LABEL_SQUARE: return "SQUARE";
+  case SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE: return "TRIANGLE";
+  default:
+    return button == SDL_GAMEPAD_BUTTON_SOUTH ? "SOUTH" :
+           button == SDL_GAMEPAD_BUTTON_EAST ? "EAST" : "NORTH";
+  }
+}
+
+static void control_hint(const char *keyboard, const char *pad, float y, float size, const char *color) {
+  char buf[160];
+  if (gamepad && gamepad_active) {
+    snprintf(buf, sizeof buf, pad, gamepad_button_name(SDL_GAMEPAD_BUTTON_SOUTH),
+             gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST));
+    text(buf, W / 2.0f, y, size, color);
+  } else {
+    text(keyboard, W / 2.0f, y, size, color);
+  }
 }
 
 static void title_text(const char *str, float x, float y, float size, const char *color) {
@@ -748,7 +934,7 @@ static void draw_intro(void) {
   };
   for (int i = 0; i < 4; i++) text(story[i], W / 2.0f, 205.0f + i * 20, 12, "#d8cbaa");
 
-  if (blink()) title_text("PRESS ENTER", W / 2.0f, 335, 18, "#ead9b0");
+  if (blink()) control_hint("PRESS ENTER", "PRESS %s", 335, 18, "#ead9b0");
 }
 
 static void draw_main_menu(void) {
@@ -759,7 +945,8 @@ static void draw_main_menu(void) {
   // the block lives between the heading rule (~y100) and the hint line (~y360)
   draw_menu(main_menu(), main_menu_index, MAIN_MENU_SPAN);
   if (notice_timer > 0) text(notice, W / 2.0f, 350, 12, "#ead9b0");
-  text("ARROWS / MOUSE — SELECT      ENTER / CLICK — CONFIRM      ESC — BACK", W / 2.0f, 370, 10, "#786850");
+  control_hint("ARROWS / MOUSE — SELECT      ENTER / CLICK — CONFIRM      ESC — BACK",
+               "D-PAD / STICK — SELECT      %s — CONFIRM      %s — BACK", 370, 10, "#786850");
 }
 
 static void draw_difficulty(void) {
@@ -783,14 +970,15 @@ static void draw_difficulty(void) {
              (int)round_half_up(16 * settings->ammo));
     text(buf, W / 2.0f, 335, 11, "#a89878");
   }
-  text("ARROWS / MOUSE — SELECT      ENTER / CLICK — START      ESC — BACK", W / 2.0f, 370, 10, "#786850");
+  control_hint("ARROWS / MOUSE — SELECT      ENTER / CLICK — START      ESC — BACK",
+               "D-PAD / STICK — SELECT      %s — START      %s — BACK", 370, 10, "#786850");
 }
 
 static void draw_controls(void) {
   fill("#140e08");
   title_text("CONTROLS", W / 2.0f, 70, 36, "#e9c93c");
   rule(W / 2.0f, 88, 120);
-  static const char *controls[][2] = {
+  static const char *keyboard_controls[][2] = {
       {"W A S D / ARROWS", "move & turn"},
       {"MOUSE (CLICK VIEW)", "turn & shoot"},
       {"CTRL / J", "shoot"},
@@ -801,20 +989,39 @@ static void draw_controls(void) {
       {"F5 / F9", "save / load game"},
       {"ESC", "pause menu"},
   };
-  for (int i = 0; i < (int)(sizeof controls / sizeof controls[0]); i++) {
+  char use[32], map[48];
+  if (gamepad) {
+    snprintf(use, sizeof use, "%s", gamepad_button_name(SDL_GAMEPAD_BUTTON_SOUTH));
+    snprintf(map, sizeof map, "%s / VIEW", gamepad_button_name(SDL_GAMEPAD_BUTTON_NORTH));
+  }
+  const char *pad_controls[][2] = {
+      {"LEFT STICK", "move & strafe"},
+      {"RIGHT STICK", "turn"},
+      {"RT / R2", "shoot"},
+      {use, "open doors, pull levers, use the gate"},
+      {"LB / RB (L1 / R1)", "previous / next weapon"},
+      {"LT / L2 / L3", "run (hold)"},
+      {map, "map"},
+      {"START / OPTIONS", "pause, save & load"},
+      {"D-PAD / LEFT STICK", "select menu item"},
+  };
+  const char *(*controls)[2] = gamepad && gamepad_active ? pad_controls : keyboard_controls;
+  for (int i = 0; i < (int)(sizeof keyboard_controls / sizeof keyboard_controls[0]); i++) {
     float y = 130.0f + i * 24;
     text_align(controls[i][0], W / 2.0f - 12, y, 13, "#c9a24a", ALIGN_RIGHT);
     text_align(controls[i][1], W / 2.0f + 2, y, 13, "#d8cbaa", ALIGN_LEFT);
   }
-  if (blink()) text("ESC / ENTER — BACK", W / 2.0f, 350, 13, "#ead9b0");
+  if (blink()) control_hint("ESC / ENTER — BACK", "%s / %s — BACK", 350, 13, "#ead9b0");
 }
 
 static void draw_quit(void) {
+  char back[64];
+  snprintf(back, sizeof back, "%s — STAY AND FIGHT", gamepad ? gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST) : "ESC");
   fill("#140e08");
   title_text("FLEEING ALREADY?", W / 2.0f, 140, 32, "#e9c93c");
   text("The fortress will be waiting for your return.", W / 2.0f, 185, 14, "#d8cbaa");
-  if (blink()) text("ENTER — LEAVE THE FORTRESS", W / 2.0f, 250, 15, "#e9c93c");
-  text("ESC — STAY AND FIGHT", W / 2.0f, 278, 13, "#d8cbaa");
+  if (blink()) control_hint("ENTER — LEAVE THE FORTRESS", "%s — LEAVE THE FORTRESS", 250, 15, "#e9c93c");
+  text(gamepad && gamepad_active ? back : "ESC — STAY AND FIGHT", W / 2.0f, 278, 13, "#d8cbaa");
 }
 
 static void draw_level_start(void) {
@@ -828,7 +1035,7 @@ static void draw_level_start(void) {
   text(buf, W / 2.0f, 262, 13, "#a89878");
   snprintf(buf, sizeof buf, "DIFFICULTY: %s", game_difficulty_settings(session.difficulty)->name);
   text(buf, W / 2.0f, 286, 12, "#c9a24a");
-  if (blink()) text("PRESS ENTER", W / 2.0f, 320, 16, "#ead9b0");
+  if (blink()) control_hint("PRESS ENTER", "PRESS %s", 320, 16, "#ead9b0");
 }
 
 static void draw_pause_overlay(void) {
@@ -839,6 +1046,8 @@ static void draw_pause_overlay(void) {
   char buf[32];
   snprintf(buf, sizeof buf, "DIFFICULTY: %s", game_difficulty_settings(session.difficulty)->name);
   text(buf, W / 2.0f, 304, 11, "#c9a24a");
+  if (gamepad && gamepad_active)
+    control_hint("", "%s — CONFIRM    %s / START — RESUME", 316, 9, "#a89878");
 }
 
 static void draw_death_fade(void) {
@@ -851,7 +1060,7 @@ static void draw_died_overlay(void) {
   title_text("YOU HAVE FALLEN", W / 2.0f, 130, 36, "#e05050");
   snprintf(buf, sizeof buf, "LIVES LEFT: %d", session.lives);
   text(buf, W / 2.0f, 175, 16, "#ead9b0");
-  if (blink()) text("PRESS ENTER TO TRY THIS FLOOR AGAIN", W / 2.0f, 220, 14, "#e9c93c");
+  if (blink()) control_hint("PRESS ENTER TO TRY THIS FLOOR AGAIN", "PRESS %s TO TRY THIS FLOOR AGAIN", 220, 14, "#e9c93c");
 }
 
 static void stat_rows(const char *rows[][2], int n, float y0, float step, float size) {
@@ -883,7 +1092,8 @@ static void draw_level_complete(void) {
   stat_rows(rows, 6, 145, 28, 15);
 
   bool last = game->level_index + 1 >= LEVEL_COUNT;
-  if (blink()) text(last ? "PRESS ENTER" : "PRESS ENTER FOR THE NEXT FLOOR", W / 2.0f, 330, 15, "#e9c93c");
+  if (blink()) control_hint(last ? "PRESS ENTER" : "PRESS ENTER FOR THE NEXT FLOOR",
+                            last ? "PRESS %s" : "PRESS %s FOR THE NEXT FLOOR", 330, 15, "#e9c93c");
 }
 
 static void draw_game_over(void) {
@@ -894,8 +1104,9 @@ static void draw_game_over(void) {
   text(buf, W / 2.0f, 205, 18, "#ead9b0");
   snprintf(buf, sizeof buf, "KILLS: %d", session.total_kills);
   text(buf, W / 2.0f, 235, 13, "#a89878");
-  if (blink()) text("ENTER — PLAY AGAIN", W / 2.0f, 290, 15, "#e9c93c");
-  text("ESC — TITLE SCREEN", W / 2.0f, 318, 13, "#d8cbaa");
+  if (blink()) control_hint("ENTER — PLAY AGAIN", "%s — PLAY AGAIN", 290, 15, "#e9c93c");
+  snprintf(buf, sizeof buf, "%s — TITLE SCREEN", gamepad ? gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST) : "ESC");
+  text(gamepad && gamepad_active ? buf : "ESC — TITLE SCREEN", W / 2.0f, 318, 13, "#d8cbaa");
 }
 
 static void draw_victory(void) {
@@ -917,7 +1128,7 @@ static void draw_victory(void) {
                            {"SECRETS", secrets}, {"LIVES LEFT", lives}, {"FINAL SCORE", score}};
   stat_rows(rows, 6, 190, 25, 14);
 
-  if (blink()) text("PRESS ENTER FOR THE TITLE SCREEN", W / 2.0f, 350, 14, "#e9c93c");
+  if (blink()) control_hint("PRESS ENTER FOR THE TITLE SCREEN", "PRESS %s FOR THE TITLE SCREEN", 350, 14, "#e9c93c");
 }
 
 static void render(void) {
@@ -934,7 +1145,8 @@ static void render(void) {
   case ST_PAUSED:
   case ST_DIED:
     render_view(&renderer, fb, game);
-    if (game->show_map && state == ST_PLAYING) render_map(&renderer, fb, game);
+    if (game->show_map && state == ST_PLAYING)
+      render_map(&renderer, fb, game, gamepad && gamepad_active ? gamepad_button_name(SDL_GAMEPAD_BUTTON_NORTH) : NULL);
     render_hud(&renderer, fb, game);
     if (state == ST_PAUSED) draw_pause_overlay();
     if (state == ST_DIED) draw_died_overlay();
@@ -1003,10 +1215,11 @@ static int warp_arg(int argc, char **argv) {
 #endif
 
 int main(int argc, char **argv) {
-  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
     SDL_Log("SDL_Init failed: %s", SDL_GetError());
     return 1;
   }
+  find_gamepad();
   if (!SDL_CreateWindowAndRenderer("Fortress", W * 2, H * 2, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY,
                                    &window, &sdl_renderer)) {
     SDL_Log("Cannot create the window: %s", SDL_GetError());
@@ -1075,6 +1288,7 @@ int main(int argc, char **argv) {
   SDL_DestroyTexture(screen_tex);
   SDL_DestroyRenderer(sdl_renderer);
   SDL_DestroyWindow(window);
+  if (gamepad) SDL_CloseGamepad(gamepad);
   SDL_Quit();
   return 0;
 }

@@ -117,6 +117,33 @@ map-incompatible saves display a message and leave the current run intact.
 | `F5` / `F9` | save / load game |
 | `Esc` | pause |
 
+### Gamepad
+
+SDL-compatible gamepads work alongside the keyboard and mouse. Connect one
+before starting or plug it in while the game is running. Menus and the
+controls screen show gamepad hints when you use the controller, with face
+button labels matched to its layout.
+
+| Xbox / PlayStation control | Action |
+|---|---|
+| Left stick | move forward/back and strafe; tilt gently to walk slowly |
+| Right stick | turn |
+| `RT` / `R2` | shoot |
+| `A` / Cross (bottom face button) | use doors, levers and the gate; confirm menus |
+| `B` / Circle (right face button) | back in menus; resume from pause |
+| `LB` / `RB` or `L1` / `R1` | previous / next weapon (skips weapons you do not own) |
+| Hold `LT` / `L2` or press and hold the left stick | run |
+| `Y` / Triangle, View / Back or the touchpad button | toggle map |
+| Start / Menu / Options | pause / resume |
+| D-pad up/down or left stick | select menu items |
+
+Use **SAVE GAME** and **LOAD GAME** in the pause menu to save and load
+without a keyboard. Both sticks have a dead zone to prevent drift; holding
+a menu direction scrolls through the options. Disconnecting the active
+gamepad or switching away from the window pauses play. Reconnect and resume
+with the controller, or continue with the keyboard and mouse. Release the
+fire trigger after a pause or load before shooting again.
+
 ### Debug
 
 Development builds (`FORTRESS_DEBUG_TOOLS=ON`, the default) offer three

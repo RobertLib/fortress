@@ -172,7 +172,7 @@ static void test_rendering(const Assets *assets, bool screenshots) {
   // Only explored water appears on the automap.
   f.level.grid[2 * f.level.w + 6] = '=';
   g->visited[2 * f.level.w + 6] = 1;
-  render_map(&renderer, fb, g);
+  render_map(&renderer, fb, g, NULL);
   int mx = SCREEN_W / 2 - f.level.w * 4 + 6 * 8 + 4;
   int my = (VIEW_H - f.level.h * 8) / 2 + 2 * 8 + 4;
   CHECK(fb->px[my * SCREEN_W + mx] == 0xff28535bu);

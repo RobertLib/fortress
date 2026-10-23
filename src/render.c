@@ -1264,7 +1264,7 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
 
 // ------------------------------------------------------------------ automap
 
-void render_map(Renderer *r, Image *fb, const Game *g) {
+void render_map(Renderer *r, Image *fb, const Game *g, const char *close_button) {
   const Level *lv = g->level;
   int cs = mini(8, (VIEW_H - 40) / lv->h);
   float mw = (float)(lv->w * cs), mh = (float)(lv->h * cs);
@@ -1340,7 +1340,9 @@ void render_map(Renderer *r, Image *fb, const Game *g) {
     pts[i * 2 + 1] = cy + local[i][0] * s + local[i][1] * c;
   }
   gfx_fill_poly(fb, pts, 3, color_parse("#ffd23c"));
-  font_draw(fb, "MAP — TAB TO CLOSE", W / 2.0f, oy + mh + 6, 10, FONT_REGULAR, ALIGN_CENTER, color_parse("#a89878"));
+  char hint[64];
+  snprintf(hint, sizeof hint, "MAP — %s TO CLOSE", close_button ? close_button : "TAB");
+  font_draw(fb, hint, W / 2.0f, oy + mh + 6, 10, FONT_REGULAR, ALIGN_CENTER, color_parse("#a89878"));
 }
 
 // ------------------------------------------------------------------ HUD bar

@@ -58,6 +58,7 @@ typedef struct Input {
   bool run, strafe_mod, fire, use;
   int weapon; // WeaponKind to switch to, or -1
   float mouse_dx;
+  float analog_forward, analog_strafe, analog_turn; // -1 .. 1, added to keyboard input
 } Input;
 
 typedef struct Player {

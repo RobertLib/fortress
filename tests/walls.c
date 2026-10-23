@@ -259,7 +259,7 @@ static void test_rendering(bool screenshots) {
       screenshot(fb, name);
     }
     f.game->visited[f.level.w + 4] = 1;
-    render_map(&renderer, fb, f.game);
+    render_map(&renderer, fb, f.game, NULL);
     int cs = mini(8, (VIEW_H - 40) / f.level.h);
     int mx = SCREEN_W / 2 - f.level.w * cs / 2 + 4 * cs + cs / 2;
     int my = (VIEW_H - f.level.h * cs) / 2 + cs + cs / 2;

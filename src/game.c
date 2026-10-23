@@ -524,12 +524,14 @@ static void update_player(Game *g, float dt, Input *in) {
 
   if (in->turn_left && !in->strafe_mod) rotate_player(p, -rot_speed);
   if (in->turn_right && !in->strafe_mod) rotate_player(p, rot_speed);
+  if (in->analog_turn) rotate_player(p, clampf(in->analog_turn, -1, 1) * rot_speed);
   if (in->mouse_dx) {
     rotate_player(p, in->mouse_dx * 0.0026f);
     in->mouse_dx = 0;
   }
 
-  float mx = 0, my = 0;
+  float mx = p->dir_x * in->analog_forward - p->dir_y * in->analog_strafe;
+  float my = p->dir_y * in->analog_forward + p->dir_x * in->analog_strafe;
   if (in->forward) {
     mx += p->dir_x;
     my += p->dir_y;
@@ -547,10 +549,11 @@ static void update_player(Game *g, float dt, Input *in) {
     my += p->dir_x;
   }
   float len = hypotf(mx, my);
-  if (len > 0.001f) {
+  if (len > 1) {
     mx /= len;
     my /= len;
   }
+  len = minf(len, 1);
   // Sample both movement and the moving blades: neither a sprint nor a long
   // frame may jump across a trap. Idle players still meet the swinging blade.
   int steps = maxi(1, (int)ceilf(speed / 0.1f));
@@ -577,7 +580,7 @@ static void update_player(Game *g, float dt, Input *in) {
     float drag = wet ? WATER_SPEED : 1;
     p->speed_now = (int)(3.4f * run * len * drag);
     float before = p->bob_phase;
-    p->bob_phase += dt * 9 * run * drag;
+    p->bob_phase += dt * 9 * run * drag * len;
     if (wet && hypotf(p->x - start_x, p->y - start_y) > .001f &&
         floorf(before / (float)M_PI) != floorf(p->bob_phase / (float)M_PI))
       audio_play(SND_SPLASH, .4f, 1 + .08f * sinf(p->bob_phase));
@@ -736,7 +739,7 @@ static void update_weapon(Game *g, float dt, const Input *in) {
   if (spec->uses_ammo && p->ammo <= 0) {
     audio_play(SND_EMPTY, 1, 1);
     g->fire_timer = 0.3f;
-    if (p->has_arbalest || p->weapon == WEAPON_CROSSBOW) game_say(g, "OUT OF BOLTS — DAGGER! (KEY 1)", 2.2f);
+    if (p->has_arbalest || p->weapon == WEAPON_CROSSBOW) game_say(g, "OUT OF BOLTS — SWITCH TO DAGGER!", 2.2f);
     return;
   }
 
