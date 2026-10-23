@@ -51,6 +51,7 @@ static inline Color color_alpha(Color c, float a) {
 }
 
 Image *image_new(int w, int h); // fully transparent
+Image *image_load_art(const char *name); // assets beside executable, then working directory
 void image_free(Image *img);
 Image *image_clone(const Image *src);
 Image *image_mirror(const Image *src); // flipped left to right

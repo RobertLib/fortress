@@ -18,16 +18,23 @@ static void click_item(Menu menu, MenuSpan span, const char *label) {
   int index = find_item(menu, label);
   MenuLayout layout = menu_layout(menu, span);
   float y = layout.cy + index * layout.line_h - layout.size * 0.3f;
-  CHECK(menu_hit_test(menu, span, W / 2, y) == index);
-  handle_state_hover(W / 2, y);
-  handle_state_click(W / 2, y);
+  CHECK(menu_hit_test(menu, span, layout.cx, y) == index);
+  handle_state_hover(layout.cx, y);
+  handle_state_click(layout.cx, y);
 }
 
 static void check_layout(Menu menu, MenuSpan span) {
   MenuLayout l = menu_layout(menu, span);
   CHECK(l.cy - l.size * 0.9f > span.top);
   CHECK(l.cy + (menu.count - 1) * l.line_h + l.size * 0.35f < span.bottom);
-  for (int i = 0; i < menu.count; i++) CHECK(font_measure(menu.items[i].label(), l.size, FONT_BOLD) < W - 60);
+  for (int i = 0; i < menu.count; i++) {
+    CHECK(font_measure(menu.items[i].label(), l.size, FONT_BOLD) < span.width - 60);
+    float y = l.cy + i * l.line_h - l.size * .3f;
+    CHECK(menu_hit_test(menu, span, span.x + 2, y) == i);
+    CHECK(menu_hit_test(menu, span, span.x + span.width - 2, y) == i);
+    CHECK(menu_hit_test(menu, span, span.x - 1, y) == -1);
+    CHECK(menu_hit_test(menu, span, span.x + span.width + 1, y) == -1);
+  }
 }
 
 int main(void) {
@@ -56,6 +63,7 @@ int main(void) {
   CHECK(state == ST_MENU);
 
   check_layout(main_menu(), MAIN_MENU_SPAN);
+  check_layout(difficulty_menu(), DIFFICULTY_MENU_SPAN);
   click_item(main_menu(), MAIN_MENU_SPAN, "LOAD GAME");
   CHECK(state == ST_MENU && !game && notice_timer > 0);
 

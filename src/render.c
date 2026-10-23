@@ -9,13 +9,14 @@
 #include <string.h>
 
 #include "font.h"
+#include "ui.h"
 
 #define W SCREEN_W
 #define H SCREEN_H
 #define MAX_STEPS 96
 #define NEAR_PLANE 0.05f
 
-static const Color FOG = {10, 8, 6, 1}; // the darkness everything sinks into
+static const Color FOG = {9, 15, 21, 1}; // the darkness everything sinks into
 
 static float fog_amount(float dist) { return minf(0.88f, maxf(0, (dist - 1.4f) / 13)); }
 
@@ -109,16 +110,16 @@ static void tint_add(Tint *t, float r, float g, float b, float a) {
 static Tint surface_tint(const Game *g, float x, float y, float dist) {
   Tint t = {1, 0, 0, 0};
   float light = torch_light(g, x, y, g->time);
-  if (light > 0.015f) tint_add(&t, 255, 132, 32, minf(0.16f, light * 0.14f));
+  if (light > 0.015f) tint_add(&t, 255, 161, 69, minf(0.25f, light * 0.25f));
   float glow = key_light(g, x, y);
   if (glow > 0.02f) tint_add(&t, 255, 214, 92, minf(0.1f, glow * 0.1f));
   float fog = maxf(0, fog_amount(dist) - light * 0.42f - glow * 0.3f);
   if (fog > 0.02f) tint_add(&t, FOG.r, FOG.g, FOG.b, fog);
   if (g->level->horror.chapter) {
     // Local contrast, a cool unlit distance and a readable area at the feet.
-    float brightness = clampf(.59f + light * .39f + maxf(0, 1 - dist / 2) * .2f, .59f, 1);
+    float brightness = clampf(.54f + light * .52f + maxf(0, 1 - dist / 2) * .19f, .54f, 1);
     t.k *= brightness; t.r *= brightness; t.g *= brightness; t.b *= brightness;
-    tint_add(&t, 8, 17, 24, minf(.16f, dist * .018f) * maxf(0, 1 - light));
+    tint_add(&t, 8, 17, 24, minf(.22f, dist * .024f) * maxf(0, 1 - light));
   }
   return t;
 }
@@ -187,15 +188,16 @@ static void draw_column(Renderer *r, Image *fb, const Image *tex, int tex_x, int
     if (write_depth) { r->depth[index] = dist; r->floor_mask[index] = 0; }
     if (tint) {
       uint32_t v = *d;
-      *d = pack_argb(255, (float)((v >> 16) & 255) * tint->k + tint->r, (float)((v >> 8) & 255) * tint->k + tint->g,
-                     (float)(v & 255) * tint->k + tint->b);
+      float uv = ((float)py + .5f - top) / height;
+      float ao = .78f + .22f * minf(1, minf(uv, 1 - uv) * 9);
+      *d = pack_argb(255, (float)((v >> 16) & 255) * tint->k * ao + tint->r,
+                     (float)((v >> 8) & 255) * tint->k * ao + tint->g, (float)(v & 255) * tint->k * ao + tint->b);
     }
   }
 }
 
-static int tex_column(float u) {
-  int t = (int)floorf(u * TEX);
-  return t < 0 ? 0 : t > TEX - 1 ? TEX - 1 : t;
+static int tex_column(const Image *tex, float u) {
+  return clampi((int)floorf(u * tex->w), 0, tex->w - 1);
 }
 
 // camera-space transform of a world point: x across the view, y depth
@@ -271,7 +273,7 @@ void renderer_init(Renderer *r, const Assets *assets) {
   r->floor_mask = calloc((size_t)W * VIEW_H, 1);
   // static vignette overlay for the 3D view
   r->vignette = image_new(W, VIEW_H);
-  GradientStop stops[2] = {{0, {0, 0, 0, 0}}, {1, {6, 4, 2, 0.5f}}};
+  GradientStop stops[2] = {{0, {0, 0, 0, 0}}, {1, {3, 8, 14, 0.48f}}};
   gfx_radial(r->vignette, 0, 0, W, VIEW_H, W / 2.0f, VIEW_H / 2.0f, VIEW_H * 0.45f, W * 0.62f, stops, 2, BLEND_OVER);
 }
 
@@ -547,7 +549,7 @@ static void sector_riser(Renderer *r, Image *fb, const Game *g, int x, float rx,
     float z = r->eye_z - (y + .5f - VIEW_H / 2.0f) / h;
     float v = top - z;
     v -= floorf(v);
-    uint32_t color = tex->px[tex_column(v) * tex->w + tex_column(along)];
+    uint32_t color = tex->px[tex_column(tex, v) * tex->w + tex_column(tex, along)];
     float bevel = top - z < .009f ? 1.16f : z - bottom < .012f ? .62f : .82f;
     fb->px[(size_t)y * fb->w + x] = pack_argb(255,
         minf(255, ((color >> 16) & 255) * bevel * tint.k + tint.r),
@@ -638,7 +640,7 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
       float u = wx - cx, v = wy - cy;
       if (trace >= 0) {
         const Image *tex = r->assets->horror_traces[g->level->horror.traces[trace].kind];
-        uint32_t c = tex->px[tex_column(v) * TEX + tex_column(u)];
+        uint32_t c = tex->px[tex_column(tex, v) * tex->w + tex_column(tex, u)];
         if (c >> 24) {
           float a = (c >> 24) / 255.0f;
           px_blend(&fb->px[(size_t)y * fb->w + x], ((c >> 16) & 255) / a * tint.k + tint.r,
@@ -657,7 +659,7 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
         if (banks & 4) bank = minf(bank, v);
         if (banks & 8) bank = minf(bank, 1 - v);
         if (bank < WATER_RIM) {
-          color = stone->px[tex_column(v) * stone->w + tex_column(u)];
+          color = stone->px[tex_column(stone, v) * stone->w + tex_column(stone, u)];
           float k = bank > WATER_RIM - .015f ? .52f : .9f;
           color = pack_argb(255, ((color >> 16) & 255) * k, ((color >> 8) & 255) * k, (color & 255) * k);
         } else {
@@ -670,7 +672,7 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
           tu -= floorf(tu);
           tv -= floorf(tv);
           const Image *tex = r->assets->water[flowing][frame];
-          color = tex->px[tex_column(tv) * tex->w + tex_column(tu)];
+          color = tex->px[tex_column(tex, tv) * tex->w + tex_column(tex, tu)];
           float red = (color >> 16) & 255, green = (color >> 8) & 255, blue = color & 255;
           // Pale shoals and broken warm glints under the wall torches.
           float shoal = maxf(0, 1 - (bank - WATER_RIM) / .14f);
@@ -680,7 +682,7 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
         }
       } else if (edge < PIT_RIM) {
         // The rim's lighter bevel makes the opening readable in the gloom.
-        color = stone->px[tex_column(v) * stone->w + tex_column(u)];
+        color = stone->px[tex_column(stone, v) * stone->w + tex_column(stone, u)];
         float k = edge > PIT_RIM - 0.016f ? 1.18f : edge < 0.012f ? 0.55f : 0.85f;
         color = pack_argb(255, minf(255, ((color >> 16) & 255) * k),
                           minf(255, ((color >> 8) & 255) * k), minf(255, (color & 255) * k));
@@ -693,7 +695,7 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
         float along = ex < ey ? p->y + ry * exit : p->x + rx * exit;
         along -= floorf(along);
         float tz = depth - floorf(depth);
-        color = stone->px[tex_column(tz) * stone->w + tex_column(along)];
+        color = stone->px[tex_column(stone, tz) * stone->w + tex_column(stone, along)];
         float shade = maxf(0.025f, 0.65f * expf(-depth * 3.2f));
         if (ex < ey) shade *= 0.78f;
         color = pack_argb(255, ((color >> 16) & 255) * shade,
@@ -717,7 +719,8 @@ static void render_transparent_walls(Renderer *r, Image *fb, int start_x, int en
       if (o->dist >= in_front_of || o->dist <= 0.0001f) continue;
       float line_h = VIEW_H / o->dist;
       const Image *tex = (o->side == 1 ? r->assets->walls_dark : r->assets->walls)[o->tex];
-      draw_column(r, fb, tex, tex_column(o->wall_x), x, VIEW_H / 2.0f + line_h * (r->eye_z - o->floor - 1), line_h, NULL, o->dist, false);
+      draw_column(r, fb, tex, tex_column(tex, o->wall_x), x, VIEW_H / 2.0f + line_h * (r->eye_z - o->floor - 1), line_h,
+                  NULL, o->dist, false);
     }
   }
 }
@@ -744,7 +747,7 @@ static void draw_box_face(Renderer *r, Image *fb, const Game *g, float x0, float
     float base = level_floor(g->level, (x0 + x1) * .5f + nx * .1f, (y0 + y1) * .5f + ny * .1f);
     float top = VIEW_H / 2.0f + line_h * (r->eye_z - base - height);
     Tint tint = surface_tint(g, x0 + (x1 - x0) * u, y0 + (y1 - y0) * u, dist);
-    draw_column(r, fb, tex, tex_column(u), x, top, line_h * height, &tint, dist, true);
+    draw_column(r, fb, tex, tex_column(tex, u), x, top, line_h * height, &tint, dist, true);
     if (!g->level->has_heights) r->zbuffer[x] = dist;
   }
 }
@@ -822,7 +825,7 @@ static void draw_box_lid(Renderer *r, Image *fb, const Game *g, const WallBox *w
     float s_mid = (s_near + s_far) / 2;
     float u = (pt + s_mid * rt + spec->half_w) / (spec->half_w * 2);
     Tint tint = surface_tint(g, p->x + rdx * s_mid, p->y + rdy * s_mid, s_mid);
-    draw_column(r, fb, tex, tex_column(u), x, y_top, y_bot - y_top, &tint, s_near, true);
+    draw_column(r, fb, tex, tex_column(tex, u), x, y_top, y_bot - y_top, &tint, s_near, true);
   }
 }
 
@@ -866,7 +869,7 @@ static void draw_hanging_quad(Renderer *r, Image *fb, const Game *g, float x0, f
     float line_h = VIEW_H / dist;
     float base = level_floor(g->level, (x0 + x1) * .5f, (y0 + y1) * .5f);
     float top = VIEW_H / 2.0f + line_h * (r->eye_z - base - spec->z_top);
-    draw_column(r, fb, tex, tex_column(u), x, top, line_h * (spec->z_top - spec->z_bot), NULL, dist, false);
+    draw_column(r, fb, tex, tex_column(tex, u), x, top, line_h * (spec->z_top - spec->z_bot), NULL, dist, false);
   }
 }
 
@@ -1136,7 +1139,8 @@ static void pendulum_quad(Renderer *r, Image *fb, const Game *g, const Image *te
     float h = VIEW_H / dist;
     const Image *img = shaded(tex, shade_bucket(dist));
     float base = level_floor(g->level, (x0 + x1) * .5f, (y0 + y1) * .5f);
-    draw_column(r, fb, img, tex_column(u), x, VIEW_H / 2.0f + h * (r->eye_z - base - top), h * (top - bottom), NULL, dist, false);
+    draw_column(r, fb, img, tex_column(img, u), x, VIEW_H / 2.0f + h * (r->eye_z - base - top), h * (top - bottom),
+                NULL, dist, false);
     render_transparent_walls(r, fb, x, x, dist);
   }
 }
@@ -1245,9 +1249,9 @@ static void render_sprites(Renderer *r, Image *fb, const Game *g) {
       bool visible = x <= x1 && transform_y < r->zbuffer[x];
       if (visible && run_start < 0) run_start = x;
       if (!visible && run_start >= 0) {
-        float tex_x0 = ((float)(run_start - start_x) / spr_w) * TEX;
-        float tex_x1 = ((float)(x - start_x) / spr_w) * TEX;
-        gfx_blit(fb, img, tex_x0, 0, maxf(0.01f, tex_x1 - tex_x0), TEX, (float)run_start, top,
+        float tex_x0 = ((float)(run_start - start_x) / spr_w) * img->w;
+        float tex_x1 = ((float)(x - start_x) / spr_w) * img->w;
+        gfx_blit(fb, img, tex_x0, 0, maxf(0.01f, tex_x1 - tex_x0), img->h, (float)run_start, top,
                  (float)(x - run_start), spr_h, s->alpha);
         render_transparent_walls(r, fb, run_start, x - 1, transform_y);
         run_start = -1;
@@ -1365,18 +1369,47 @@ static void render_glows(Renderer *r, Image *fb, const Game *g) {
   }
 }
 
+// Embers occupy world space and are tested against geometry, so sparks
+// disappear behind a portcullis or a ledge with their parent flame.
+static void render_embers(Renderer *r, Image *fb, const Game *g) {
+  const Player *p = &g->player;
+  for (int i = 0; i < g->level->torch_count; i++) {
+    const Torch *t = &g->level->torches[i];
+    float strength = horror_torch_strength(g, t->x, t->y);
+    if (strength < .1f) continue;
+    for (int j = 0; j < 3; j++) {
+      float age = fmodf(g->time * .32f + (float)t->phase + j * .33f, 1);
+      float wx = t->x + sinf(age * 8 + i + j) * .035f;
+      float wy = t->y + cosf(age * 7 + i) * .035f;
+      float sx = wx - p->x, sy = wy - p->y, k = inv_det(p);
+      float tx = k * (p->dir_y * sx - p->dir_x * sy);
+      float depth = k * (-p->plane_y * sx + p->plane_x * sy);
+      if (depth <= .15f || depth > 7) continue;
+      float x = W / 2.0f * (1 + tx / depth);
+      float z = level_floor(g->level, wx, wy) + .76f + age * .18f;
+      float y = VIEW_H / 2.0f + VIEW_H / depth * (r->eye_z - z);
+      int ix = (int)x, iy = (int)y;
+      if (ix < 0 || ix >= W || iy < 0 || iy >= VIEW_H || depth > r->depth[iy * W + ix] + .02f) continue;
+      float size = clampf(.9f / depth, .5f, 1.5f);
+      gfx_fill_rect(fb, x, y, size, size * 1.4f, rgba(245, 183, 96, (1 - age) * .65f * strength));
+    }
+  }
+}
+
 // ------------------------------------------------------------------ weapon
 
 static void render_weapon(Renderer *r, Image *fb, const Game *g) {
   const Player *p = &g->player;
   const Image *img = r->assets->weapons[p->weapon][clampi(p->weapon_frame, 0, 2)];
-  const float size = 300;
+  const float size = 258;
   float bob_x = sinf(p->bob_phase) * 10 * p->bob_amount;
   float bob_y = fabsf(cosf(p->bob_phase)) * 8 * p->bob_amount + 4;
   gfx_blit(fb, img, 0, 0, (float)img->w, (float)img->h, W / 2.0f - size / 2 + bob_x, VIEW_H - size + 28 + bob_y, size,
            size, 1);
   // crosshair
-  gfx_fill_rect(fb, W / 2.0f - 1, VIEW_H / 2.0f - 1, 2, 2, rgba(255, 255, 255, 0.6f));
+  gfx_fill_rect(fb, W / 2.0f - 1, VIEW_H / 2.0f - 1, 2, 2, rgba(234, 223, 195, .8f));
+  gfx_fill_rect(fb, W / 2.0f - 6, VIEW_H / 2.0f, 2, 1, rgba(0, 0, 0, .55f));
+  gfx_fill_rect(fb, W / 2.0f + 4, VIEW_H / 2.0f, 2, 1, rgba(0, 0, 0, .55f));
 }
 
 static void render_flashes(Image *fb, const Game *g) {
@@ -1396,7 +1429,7 @@ static void render_flashes(Image *fb, const Game *g) {
   }
 }
 
-static void render_horror_text(Image *fb, const Game *g) {
+static void render_horror_text(Renderer *r, Image *fb, const Game *g) {
   int index = g->horror.reading;
   if (index < 0) {
     if (horror_near_note(g) >= 0 && !g->player_dead) {
@@ -1407,8 +1440,7 @@ static void render_horror_text(Image *fb, const Game *g) {
   }
   gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(2, 5, 8, .78f));
   gfx_fill_rect(fb, 61, 36, 520, 250, rgba(0, 0, 0, .6f));
-  gfx_fill_rect(fb, 58, 32, 520, 250, rgb(187, 166, 126));
-  gfx_fill_rect(fb, 63, 37, 510, 240, rgb(213, 194, 153));
+  gfx_blit(fb, r->assets->note_page, 0, 0, TEX, TEX, 58, 32, 520, 250, 1);
   gfx_fill_rect(fb, 80, 79, 472, 1, rgb(135, 109, 76));
   font_draw(fb, "WORDS LEFT BEHIND", W / 2, 64, 18, FONT_BOLD, ALIGN_CENTER, rgb(92, 44, 34));
   // Word-wrap the short handwritten fragments; | starts a new paragraph.
@@ -1470,7 +1502,8 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     Tint tint = surface_tint(g, p->x + ray_x * hit.dist, p->y + ray_y * hit.dist, hit.dist);
     float near = maxf(0, hit.dist - .001f);
     float base = level_floor(g->level, p->x + ray_x * near, p->y + ray_y * near);
-    draw_column(r, fb, tex, tex_column(hit.wall_x), x, VIEW_H / 2.0f + line_h * (r->eye_z - base - 1), line_h, &tint, hit.dist, true);
+    draw_column(r, fb, tex, tex_column(tex, hit.wall_x), x, VIEW_H / 2.0f + line_h * (r->eye_z - base - 1), line_h,
+                &tint, hit.dist, true);
   }
 
   if (g->level->has_heights) render_sectors(r, fb, g);
@@ -1485,6 +1518,7 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
   render_transparent_walls(r, fb, 0, W - 1, INFINITY);
   render_glows(r, fb, g);
   render_sprites(r, fb, g);
+  render_embers(r, fb, g);
   gfx_blit(fb, r->vignette, 0, 0, W, VIEW_H, 0, 0, W, VIEW_H, 1);
   if (g->horror.tension > .01f) {
     GradientStop stops[] = {stop(0, 0, 0, 0, 0), stop(.65f, 0, 0, 0, 0), stop(1, 2, 4, 7, g->horror.tension * .25f)};
@@ -1520,7 +1554,7 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(0, 0, 0, fall * fall));
   }
   render_flashes(fb, g);
-  render_horror_text(fb, g);
+  render_horror_text(r, fb, g);
   image_reset_clip(fb);
 }
 
@@ -1531,18 +1565,19 @@ void render_map(Renderer *r, Image *fb, const Game *g, const char *close_button)
   int cs = mini(8, (VIEW_H - 40) / lv->h);
   float mw = (float)(lv->w * cs), mh = (float)(lv->h * cs);
   float ox = W / 2.0f - mw / 2, oy = (VIEW_H - mh) / 2;
-  gfx_fill_rect(fb, ox - 10, oy - 10, mw + 20, mh + 20, rgba(16, 10, 4, 0.8f));
-  Color gold = color_parse("#c9a24a");
-  gfx_fill_rect(fb, ox - 10, oy - 10, mw + 20, 1, gold);
-  gfx_fill_rect(fb, ox - 10, oy + mh + 9, mw + 20, 1, gold);
-  Color wall = color_parse("#655743"), door = color_parse("#8a5a28");
+  gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(3, 8, 13, .78f));
+  ui_panel(fb, ox - 14, oy - 18, mw + 28, mh + 40);
+  Color gold = color_parse("#c2a674");
+  Color wall = color_parse("#687479"), door = color_parse("#a18a65");
   for (int y = 0; y < lv->h; y++) {
     for (int x = 0; x < lv->w; x++) {
       if (!g->visited[y * lv->w + x]) continue;
       char cell = game_cell(g, x, y);
       Color c;
       switch (cell) {
-      case '.': c = color_parse("#241c12"); break;
+      case '.':
+        c = color_parse("#1d2a34");
+        break;
       case '!': c = color_parse("#8c4028"); break;
       case '=': c = color_parse("#28535b"); break;
       case '>': case '<': case '}': case '{': c = color_parse("#367681"); break;
@@ -1555,7 +1590,9 @@ void render_map(Renderer *r, Image *fb, const Game *g, const char *close_button)
       case 'Z': c = game_door_open_amount(g, x, y) > 0.05f ? door : wall; break;
       case 'L': c = game_lever_pulled(g, x, y) ? gold : wall; break;
       case '~': c = color_parse("#8a4fc0"); break;
-      case 'N': c = color_parse("#57493a"); break;
+      case 'N':
+        c = color_parse("#485a63");
+        break;
       case '8': c = color_parse("#a58a66"); break;
       default: c = wall; break;
       }
@@ -1627,75 +1664,73 @@ void render_map(Renderer *r, Image *fb, const Game *g, const char *close_button)
 
 // ------------------------------------------------------------------ HUD bar
 
-static void hud_frame(Image *fb, float x, float w) {
-  const float y0 = VIEW_H, hud_h = H - VIEW_H;
-  gfx_fill_rect(fb, x, y0 + 8, w, hud_h - 16, color_parse("#1a1208"));
-  gfx_fill_rect(fb, x, y0 + 8, w, 1, rgba(201, 162, 74, 0.35f));
-  gfx_fill_rect(fb, x, y0 + hud_h - 9, w, 1, rgba(201, 162, 74, 0.35f));
-}
-
-static void hud_label(Image *fb, float cx, const char *label) {
-  font_draw(fb, label, cx, VIEW_H + 22, 9, FONT_REGULAR, ALIGN_CENTER, color_parse("#b08c46"));
-}
-
-static void hud_panel(Image *fb, float x, float w, const char *label, const char *value, Color color) {
-  hud_frame(fb, x, w);
-  hud_label(fb, x + w / 2, label);
-  font_draw(fb, value, x + w / 2, VIEW_H + 52, 22, FONT_BOLD, ALIGN_CENTER, color);
+static void hud_text(Image *fb, const char *value, float x, float y, float size, Color color) {
+  font_draw(fb, value, x, y, size, FONT_BOLD, ALIGN_LEFT, color);
 }
 
 void render_hud(Renderer *r, Image *fb, const Game *g) {
-  const Assets *as = r->assets;
-  const float y0 = VIEW_H, hud_h = H - VIEW_H;
   const Player *p = &g->player;
-
-  // oak planks bound with iron
-  gfx_fill_rect(fb, 0, y0, W, hud_h, color_parse("#332412"));
-  for (int x = 40; x < W; x += 160) gfx_fill_rect(fb, (float)x, y0, 1, hud_h, rgba(0, 0, 0, 0.25f));
-  gfx_fill_rect(fb, 0, y0 + hud_h / 2, W, 1, rgba(90, 60, 26, 0.5f));
-  gfx_fill_rect(fb, 0, y0, W, 4, color_parse("#23262b")); // iron rim
-  gfx_fill_rect(fb, 0, H - 4, W, 4, color_parse("#23262b"));
-  gfx_fill_rect(fb, 0, y0, W, 1, color_parse("#565c66"));
-  for (int x = 14; x < W; x += 52) { // rivets
-    gfx_fill_rect(fb, (float)x, y0 + 1, 2, 2, color_parse("#7c828e"));
-    gfx_fill_rect(fb, (float)x, H - 3, 2, 2, color_parse("#7c828e"));
+  const float y = VIEW_H;
+  Color gold = rgb(194, 166, 116), cream = rgb(231, 224, 208), muted = rgb(138, 154, 162);
+  for (int row = 0; row < H - VIEW_H; row++) {
+    float k = 1 - row / (float)(H - VIEW_H);
+    gfx_fill_rect(fb, 0, y + row, W, 1, rgb(8 + k * 8, 13 + k * 8, 18 + k * 9));
   }
-
-  Color cream = color_parse("#ead9b0");
-  char buf[32];
-  snprintf(buf, sizeof buf, "%d", g->level_index + 1);
-  hud_panel(fb, 10, 70, "FLOOR", buf, cream);
-  snprintf(buf, sizeof buf, "%d", g->session->score);
-  hud_panel(fb, 88, 110, "SCORE", buf, cream);
-  snprintf(buf, sizeof buf, "%d", g->session->lives);
-  hud_panel(fb, 206, 62, "LIVES", buf, cream);
-
-  // heraldic crest that shatters as the player weakens
-  int hp = p->health;
-  CrestState crest = hp <= 0 ? CREST_DEAD : hp >= 75 ? CREST_HEALTHY : hp >= 50 ? CREST_OK : hp >= 25 ? CREST_HURT : CREST_BAD;
-  hud_frame(fb, 276, 62);
-  const Image *ci = as->crests[crest];
-  gfx_blit(fb, ci, 0, 0, (float)ci->w, (float)ci->h, 283, y0 + 12, 48, 48, 1);
-
-  snprintf(buf, sizeof buf, "%d%%", maxi(0, hp));
-  // the figure turns venom green while the poison is at work
-  Color hp_color = p->venom > 0 ? color_parse("#9ad04a") : hp > 25 ? cream : color_parse("#e05050");
-  hud_panel(fb, 346, 84, "HEALTH", buf, hp_color);
+  gfx_fill_rect(fb, 0, y, W, 1, rgb(91, 87, 72));
+  gfx_fill_rect(fb, 0, y + 1, W, 2, rgba(0, 0, 0, .75f));
+  ui_rule(fb, 12, y + 4, W - 24);
+  for (int i = 0; i < 4; i++) {
+    float x = (float[]){178, 288, 401, 493}[i];
+    gfx_fill_rect(fb, x, y + 19, 1, 42, rgba(153, 147, 123, .22f));
+    ui_diamond(fb, x + .5f, y + 13, 1.5f, rgba(194, 166, 116, .5f));
+  }
+  ui_emblem(fb, 32, y + 40, 34);
+  if (p->health <= 25) {
+    gfx_line(fb, 30, y + 28, 35, y + 37, 1, rgb(151, 66, 58));
+    gfx_line(fb, 35, y + 37, 29, y + 48, 1, rgb(151, 66, 58));
+  }
+  hud_text(fb, p->venom > 0 ? "VENOM" : "VITALITY", 61, y + 24, 8, muted);
+  char buf[40];
+  snprintf(buf, sizeof buf, "%d", maxi(0, p->health));
+  hud_text(fb, buf, 60, y + 49, 25, p->health <= 25 ? rgb(223, 123, 110) : cream);
+  hud_text(fb, "/ 100", 118, y + 48, 10, muted);
+  gfx_fill_rect(fb, 61, y + 57, 98, 5, rgb(3, 6, 8));
+  float health = clampf(p->health / 100.0f, 0, 1);
+  Color bar = p->venom > 0 ? rgb(118, 148, 77) : rgb(149, 59, 55);
+  gfx_fill_rect(fb, 62, y + 58, 96 * health, 3, bar);
+  gfx_fill_rect(fb, 62, y + 58, 96 * health, 1, color_shade(bar, 1.4f));
+  hud_text(fb, "LIVES", 61, y + 73, 8, muted);
+  for (int i = 0; i < mini(g->session->lives, 8); i++)
+    ui_diamond(fb, 101 + i * 7, y + 70, 2, gold);
+  hud_text(fb, "BOLTS", 195, y + 24, 8, muted);
   if (p->weapon == WEAPON_DAGGER)
-    snprintf(buf, sizeof buf, "-");
+    snprintf(buf, sizeof buf, "--");
   else
-    snprintf(buf, sizeof buf, "%d", p->ammo);
-  hud_panel(fb, 438, 70, "BOLTS", buf, cream);
-
-  // keys
-  hud_frame(fb, 516, 60);
-  hud_label(fb, 546, "KEYS");
-  for (int i = 0; i < 3; i++)
-    gfx_blit(fb, as->items[ITEM_KEY], 16, 16, 32, 40, 522.0f + i * 18, y0 + 26, 14, 22, i < p->keys ? 1 : 0.18f);
-
-  // weapon icon panel
-  hud_frame(fb, 584, 48);
-  hud_label(fb, 608, "ARMS");
-  const Image *icon = as->weapon_icons[p->weapon];
-  gfx_blit(fb, icon, 0, 0, (float)icon->w, (float)icon->h, 591, y0 + 24, 34, 34, 1);
+    snprintf(buf, sizeof buf, "%02d", p->ammo);
+  hud_text(fb, buf, 194, y + 50, 25, cream);
+  const Image *icon = r->assets->weapon_icons[p->weapon];
+  gfx_blit(fb, icon, 0, 0, icon->w, icon->h, 245, y + 28, 27, 27, .8f);
+  static const char *names[] = {"DAGGER", "CROSSBOW", "REPEATER"};
+  hud_text(fb, names[p->weapon], 195, y + 71, 8, gold);
+  hud_text(fb, "GATE KEYS", 309, y + 24, 8, muted);
+  for (int i = 0; i < 3; i++) {
+    float x = 318 + i * 25;
+    Color c = i < p->keys ? gold : rgb(56, 66, 71);
+    float ring[] = {x - 4, y + 36, x, y + 32, x + 4, y + 36, x, y + 40};
+    gfx_stroke_poly(fb, ring, 4, 1.4f, c);
+    gfx_line(fb, x, y + 40, x, y + 53, 1.5f, c);
+    gfx_line(fb, x, y + 49, x + 4, y + 49, 1.5f, c);
+    gfx_line(fb, x, y + 53, x + 4, y + 53, 1.5f, c);
+  }
+  snprintf(buf, sizeof buf, "%d / 3 COLLECTED", p->keys);
+  hud_text(fb, buf, 309, y + 71, 8, p->keys == 3 ? gold : muted);
+  hud_text(fb, "FLOOR", 420, y + 24, 8, muted);
+  snprintf(buf, sizeof buf, "%02d", g->level_index + 1);
+  hud_text(fb, buf, 418, y + 50, 25, cream);
+  snprintf(buf, sizeof buf, "OF %02d", LEVEL_COUNT);
+  hud_text(fb, buf, 420, y + 71, 8, gold);
+  hud_text(fb, "SCORE", 511, y + 24, 8, muted);
+  snprintf(buf, sizeof buf, "%06d", g->session->score);
+  hud_text(fb, buf, 510, y + 49, 20, cream);
+  hud_text(fb, "ESC  PAUSE", 511, y + 71, 8, muted);
 }

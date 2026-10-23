@@ -17,6 +17,7 @@
 #include "level.h"
 #include "render.h"
 #include "savegame.h"
+#include "ui.h"
 
 #define W SCREEN_W
 #define H SCREEN_H
@@ -359,24 +360,26 @@ static Menu difficulty_menu(void) {
   return m;
 }
 
-// vertical spans the fitted menus are drawn into: top, bottom, max line
-// height, max font size
+// Shared drawing/hit-test bounds: vertical fit, horizontal origin and width.
 typedef struct {
   float top, bottom, max_line_h, max_size;
+  float x, width;
 } MenuSpan;
 
-static const MenuSpan MAIN_MENU_SPAN = {100, 335, 42, 24};
-static const MenuSpan PAUSE_MENU_SPAN = {120, 275, 28, 17};
-static const MenuSpan DIFFICULTY_MENU_SPAN = {120, 285, 38, 24};
+static const MenuSpan MAIN_MENU_SPAN = {129, 341, 32, 18, 40, 252};
+static const MenuSpan PAUSE_MENU_SPAN = {110, 278, 27, 16, 190, 260};
+static const MenuSpan DIFFICULTY_MENU_SPAN = {134, 294, 36, 21, 40, 252};
 
 typedef struct {
   float cy, line_h, size;
+  float cx;
 } MenuLayout;
 
 // Fit a menu into its vertical span: full size while it fits,
 // proportionally smaller line height and font once items no longer do.
 static MenuLayout menu_layout(Menu m, MenuSpan span) {
   MenuLayout l;
+  l.cx = span.x + span.width / 2;
   l.line_h = minf(span.max_line_h, floorf((span.bottom - span.top) / (m.count + 1)));
   l.size = (float)round_half_up((span.max_size * l.line_h) / span.max_line_h);
   // centre the block in the span; baselines sit under the glyphs, so
@@ -391,9 +394,9 @@ static int menu_hit_test(Menu m, MenuSpan span, float x, float y) {
   MenuLayout l = menu_layout(m, span);
   for (int i = 0; i < m.count; i++) {
     float by = l.cy + i * l.line_h;
-    if (y < by - l.size * 0.9f || y > by + l.size * 0.35f) continue;
-    float half = font_measure(m.items[i].label(), l.size, FONT_BOLD) / 2 + 28;
-    if (fabsf(x - W / 2.0f) <= half) return i;
+    float top = by - l.size * .9f - 3;
+    if (y < top || y >= top + l.line_h - 3) continue;
+    if (x >= span.x && x <= span.x + span.width) return i;
   }
   return -1;
 }
@@ -879,8 +882,6 @@ static void update(float dt) {
 
 // ------------------------------------------------------------------ drawing
 
-static bool blink(void) { return (int)floorf(clock_time * 2) % 2 == 0; }
-
 static void fill(const char *color) { gfx_fill_rect(fb, 0, 0, W, H, color_parse(color)); }
 
 static void text_align(const char *str, float x, float y, float size, const char *color, TextAlign align) {
@@ -923,14 +924,6 @@ static void title_text(const char *str, float x, float y, float size, const char
   font_draw(fb, str, x, y, size, FONT_BOLD, ALIGN_CENTER, color_parse(color));
 }
 
-static void rule(float cx, float y, float half_w) { gfx_fill_rect(fb, cx - half_w, y, half_w * 2, 2, color_parse("#c9a24a")); }
-
-// torch glow behind a heading
-static void torch_glow(float cy, float radius) {
-  GradientStop stops[2] = {{0, {200, 120, 40, 0.22f}}, {1, {200, 120, 40, 0}}};
-  gfx_radial(fb, 0, 0, W, H, W / 2.0f, cy, 10, radius, stops, 2, BLEND_OVER);
-}
-
 static void format_time(char *buf, size_t size, float t) {
   int m = (int)floorf(t / 60);
   int s = (int)floorf(fmodf(t, 60));
@@ -941,45 +934,83 @@ static void draw_menu(Menu m, int index, MenuSpan span) {
   MenuLayout l = menu_layout(m, span);
   for (int i = 0; i < m.count; i++) {
     float y = l.cy + i * l.line_h;
-    const char *label = m.items[i].label();
-    if (i == index) {
-      title_text(label, W / 2.0f, y, l.size, blink() ? "#e9c93c" : "#ead9b0");
-      // a bolt-tip pointer beside the chosen line
-      float half = font_measure(label, l.size, FONT_BOLD) / 2;
-      float py = y - l.size * 0.34f;
-      float tri[6] = {W / 2.0f - half - 26, py - l.size * 0.3f, W / 2.0f - half - 26, py + l.size * 0.3f,
-                      W / 2.0f - half - 12, py};
-      gfx_fill_poly(fb, tri, 3, color_parse(blink() ? "#e9c93c" : "#c9a24a"));
-    } else {
-      text(label, W / 2.0f, y, l.size, "#a89878");
+    float top = y - l.size * .9f - 3;
+    bool selected = i == index;
+    if (selected) {
+      for (int x = 0; x < (int)span.width; x++)
+        gfx_fill_rect(fb, span.x + x, top, 1, l.line_h - 3, rgba(143, 116, 72, .24f * (1 - x / span.width)));
+      gfx_fill_rect(fb, span.x, top, 2, l.line_h - 3, rgb(205, 174, 119));
+      gfx_fill_rect(fb, span.x + 2, top, span.width - 2, .5f, rgba(190, 158, 102, .3f));
+      ui_diamond(fb, span.x + span.width - 14, y - l.size * .34f, 2.5f, rgb(205, 174, 119));
     }
+    char number[8];
+    snprintf(number, sizeof number, "%02d", i + 1);
+    text_align(number, span.x + 13, y - 1, 8, selected ? "#bda477" : "#6e777b", ALIGN_LEFT);
+    text_align(m.items[i].label(), span.x + 38, y, l.size, selected ? "#f1e4c8" : "#a9afb0", ALIGN_LEFT);
+  }
+}
+
+static void menu_background(void) {
+  comic_draw_cover(&comic_art, fb, clock_time);
+}
+
+static void menu_footer(const char *action) {
+  gfx_fill_rect(fb, 40, 357, 560, 1, rgba(180, 159, 119, .23f));
+  if (gamepad && gamepad_active) {
+    char hint[128];
+    snprintf(hint, sizeof hint, "D-PAD  SELECT     %s  %s     %s  BACK", gamepad_button_name(SDL_GAMEPAD_BUTTON_SOUTH),
+             action, gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST));
+    text_align(hint, 42, 378, 9, "#b4b6b1", ALIGN_LEFT);
+  } else {
+    char hint[128];
+    snprintf(hint, sizeof hint, "ARROWS / MOUSE  SELECT     ENTER / CLICK  %s     ESC  BACK", action);
+    text_align(hint, 42, 378, 9, "#b4b6b1", ALIGN_LEFT);
   }
 }
 
 static void draw_center_screen(const char *bg, const char *line) {
   fill(bg);
-  text(line, W / 2.0f, H / 2.0f, 16, "#e8e8e8");
+  for (int y = 0; y < H; y++)
+    gfx_fill_rect(fb, 0, y, W, 1, rgba(8, 19, 27, .4f * (1 - y / (float)H)));
+  ui_emblem(fb, W / 2, 135, 46);
+  text("FORTRESS", W / 2, 207, 35, "#e8ddc6");
+  ui_rule(fb, 205, 230, 230);
+  text(line, W / 2, 266, 12, "#acb7b8");
 }
 
 static void draw_error(void) {
-  fill("#180808");
-  text("FAILED TO LOAD LEVELS", W / 2.0f, 150, 22, "#e05050");
-  text(error_msg, W / 2.0f, 190, 12, "#c8c8c8");
-  text("The levels folder must sit next to the game", W / 2.0f, 240, 14, "#e8e8e8");
-  text("or in the directory it is started from.", W / 2.0f, 268, 14, "#e8e8e8");
+  draw_center_screen("#080f16", "");
+  ui_panel(fb, 40, 270, 560, 105);
+  text("UNABLE TO START", W / 2, 295, 14, "#d3aa87");
+  text(error_msg, W / 2, 320, 11, "#d6dedb");
+  text("Keep the complete assets and levels folders beside the game.", W / 2, 351, 11, "#9fadb2");
+}
+
+static void screen_card(const char *kicker, const char *title) {
+  menu_background();
+  gfx_fill_rect(fb, 0, 0, W, H, rgba(3, 8, 13, .76f));
+  ui_panel(fb, 110, 35, 420, 326);
+  text(kicker, W / 2, 61, 9, "#a5b0b3");
+  title_text(title, W / 2, 101, 27, "#e8dcc3");
+  ui_rule(fb, 150, 118, 340);
 }
 
 static void draw_intro(void) {
-  comic_draw_cover(&comic_art, fb, clock_time);
-  torch_glow(105, 280);
-  title_text("F O R T R E S S", W / 2.0f, 110, 52, "#e9c93c");
-  rule(W / 2.0f, 130, 150);
-  text("A MEDIEVAL RAYCASTING ADVENTURE", W / 2.0f, 158, 11, "#a89878");
-
-  text("BETRAYED. IMPRISONED. NOT DEFEATED.", W / 2.0f, 226, 14, "#d8cbaa");
-  text("Five floors between you and freedom.", W / 2.0f, 253, 12, "#a89878");
-
-  if (blink()) control_hint("PRESS ENTER", "PRESS %s", 335, 18, "#ead9b0");
+  menu_background();
+  ui_emblem(fb, 62, 78, 33);
+  text_align("A MEDIEVAL DARK FANTASY", 42, 120, 10, "#bba57e", ALIGN_LEFT);
+  font_draw(fb, "FORTRESS", 40, 172, 48, FONT_BOLD, ALIGN_LEFT, rgb(235, 224, 201));
+  ui_rule(fb, 42, 193, 246);
+  font_draw(fb, "Betrayed. Imprisoned. Still alive.", 42, 229, 13, FONT_REGULAR, ALIGN_LEFT, rgb(188, 194, 191));
+  font_draw(fb, "Five floors between you and freedom.", 42, 251, 12, FONT_REGULAR, ALIGN_LEFT, rgb(150, 162, 165));
+  float pulse = .8f + .2f * sinf(clock_time * 2);
+  gfx_fill_rect(fb, 42, 294, 225, 35, rgba(13, 20, 26, .82f));
+  gfx_fill_rect(fb, 42, 294, 2, 35, rgba(205, 174, 119, pulse));
+  char hint[64];
+  snprintf(hint, sizeof hint, "%s  BEGIN YOUR ESCAPE",
+           gamepad && gamepad_active ? gamepad_button_name(SDL_GAMEPAD_BUTTON_SOUTH) : "ENTER");
+  text_align(hint, 56, 316, 11, "#e5d4b2", ALIGN_LEFT);
+  text_align("FIVE FLOORS. THREE KEYS. ONE WAY OUT.", 42, 378, 8, "#8f9b9f", ALIGN_LEFT);
 }
 
 static void draw_story(void) {
@@ -997,46 +1028,47 @@ static void draw_story(void) {
 }
 
 static void draw_main_menu(void) {
-  fill("#140e08");
-  torch_glow(80, 240);
-  title_text("F O R T R E S S", W / 2.0f, 80, 34, "#e9c93c");
-  rule(W / 2.0f, 98, 120);
-  // the block lives between the heading rule (~y100) and the hint line (~y360)
+  menu_background();
+  ui_emblem(fb, 56, 46, 23);
+  text_align("FORTRESS", 40, 96, 35, "#ebe0c9", ALIGN_LEFT);
+  text_align("THE ROAD TO FREEDOM", 42, 117, 9, "#b5a07b", ALIGN_LEFT);
   draw_menu(main_menu(), main_menu_index, MAIN_MENU_SPAN);
-  if (notice_timer > 0) text(notice, W / 2.0f, 350, 12, "#ead9b0");
-  control_hint("ARROWS / MOUSE — SELECT      ENTER / CLICK — CONFIRM      ESC — BACK",
-               "D-PAD / STICK — SELECT      %s — CONFIRM      %s — BACK", 370, 10, "#786850");
+  if (notice_timer > 0) text_align(notice, 320, 342, 11, "#ecdbb7", ALIGN_LEFT);
+  menu_footer("CONFIRM");
 }
 
 static void draw_difficulty(void) {
-  fill("#140e08");
-  torch_glow(80, 240);
-  title_text("CHOOSE DIFFICULTY", W / 2.0f, 80, 32, "#e9c93c");
-  rule(W / 2.0f, 98, 120);
+  menu_background();
+  text_align("BEGIN YOUR ESCAPE", 42, 54, 9, "#b5a07b", ALIGN_LEFT);
+  text_align("Choose your fate", 40, 96, 30, "#ebe0c9", ALIGN_LEFT);
   draw_menu(difficulty_menu(), difficulty_menu_index, DIFFICULTY_MENU_SPAN);
-
+  ui_panel(fb, 325, 145, 275, 152);
   if (difficulty_menu_index < DIFFICULTY_COUNT) {
-    static const char *descriptions[] = {
-        "WEAKER FOES. HALF DAMAGE. MORE BOLTS.",
-        "THE ORIGINAL FORTRESS CHALLENGE.",
-        "TOUGHER FOES. MORE DAMAGE. FEWER BOLTS.",
-    };
-    char buf[64];
-    Difficulty difficulty = DIFFICULTY_CHOICES[difficulty_menu_index];
-    const DifficultySettings *settings = game_difficulty_settings(difficulty);
-    text(descriptions[difficulty_menu_index], W / 2.0f, 310, 13, "#d8cbaa");
-    snprintf(buf, sizeof buf, "START WITH %d BOLTS. CHOSEN FOR THE WHOLE RUN.",
-             (int)round_half_up(16 * settings->ammo));
-    text(buf, W / 2.0f, 335, 11, "#a89878");
+    static const char *titles[] = {"A glimmer of hope", "Steel your resolve", "No mercy within"};
+    static const char *lines[][2] = {{"Weaker foes. Half the damage.", "More bolts for the road ahead."},
+                                     {"The original Fortress challenge.", "Every bolt and every step count."},
+                                     {"Stronger foes. Deadlier encounters.", "Fewer bolts. Make each one count."}};
+    int i = difficulty_menu_index;
+    text_align(titles[i], 344, 177, 17, "#e4d2ae", ALIGN_LEFT);
+    ui_rule(fb, 344, 190, 235);
+    for (int j = 0; j < 2; j++)
+      font_draw(fb, lines[i][j], 344, 216 + j * 19, 11, FONT_REGULAR, ALIGN_LEFT, rgb(177, 186, 187));
+    char buf[80];
+    const DifficultySettings *settings = game_difficulty_settings(DIFFICULTY_CHOICES[i]);
+    snprintf(buf, sizeof buf, "%d STARTING BOLTS  /  THREE LIVES", (int)round_half_up(16 * settings->ammo));
+    text_align(buf, 344, 274, 9, "#b5a07b", ALIGN_LEFT);
+  } else {
+    text("RETURN TO THE MAIN MENU", 462, 223, 13, "#d5c7ac");
   }
-  control_hint("ARROWS / MOUSE — SELECT      ENTER / CLICK — START      ESC — BACK",
-               "D-PAD / STICK — SELECT      %s — START      %s — BACK", 370, 10, "#786850");
+  text_align("Your difficulty stays with you for the whole escape.", 42, 331, 11, "#9ba6a8", ALIGN_LEFT);
+  menu_footer("BEGIN");
 }
 
 static void draw_controls(void) {
-  fill("#140e08");
-  title_text("CONTROLS", W / 2.0f, 70, 36, "#e9c93c");
-  rule(W / 2.0f, 88, 120);
+  menu_background();
+  gfx_fill_rect(fb, 0, 0, W, H, rgba(3, 8, 13, .77f));
+  title_text("CONTROLS", W / 2.0f, 70, 36, "#d8bd87");
+  ui_panel(fb, 32, 95, 576, 242);
   static const char *keyboard_controls[][2] = {
       {"W A S D / ARROWS", "move & turn"},
       {"MOUSE (CLICK VIEW)", "turn & shoot"},
@@ -1066,40 +1098,55 @@ static void draw_controls(void) {
   };
   const char *(*controls)[2] = gamepad && gamepad_active ? pad_controls : keyboard_controls;
   for (int i = 0; i < (int)(sizeof keyboard_controls / sizeof keyboard_controls[0]); i++) {
-    float y = 130.0f + i * 24;
-    text_align(controls[i][0], W / 2.0f - 12, y, 13, "#c9a24a", ALIGN_RIGHT);
-    text_align(controls[i][1], W / 2.0f + 2, y, 13, "#d8cbaa", ALIGN_LEFT);
+    float y = 121.0f + i * 25;
+    if (i % 2 == 0) gfx_fill_rect(fb, 40, y - 17, 560, 24, rgba(102, 126, 141, .045f));
+    text_align(controls[i][0], 50, y, 10, "#c3ab80", ALIGN_LEFT);
+    font_draw(fb, controls[i][1], 249, y, 12, FONT_REGULAR, ALIGN_LEFT, rgb(196, 202, 199));
   }
-  if (blink()) control_hint("ESC / ENTER — BACK", "%s / %s — BACK", 350, 13, "#ead9b0");
+  control_hint("ESC / ENTER — BACK", "%s / %s — BACK", 369, 11, "#c7b694");
 }
 
 static void draw_quit(void) {
-  char back[64];
-  snprintf(back, sizeof back, "%s — STAY AND FIGHT", gamepad ? gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST) : "ESC");
-  fill("#140e08");
-  title_text("FLEEING ALREADY?", W / 2.0f, 140, 32, "#e9c93c");
-  text("The fortress will be waiting for your return.", W / 2.0f, 185, 14, "#d8cbaa");
-  if (blink()) control_hint("ENTER — LEAVE THE FORTRESS", "%s — LEAVE THE FORTRESS", 250, 15, "#e9c93c");
-  text(gamepad && gamepad_active ? back : "ESC — STAY AND FIGHT", W / 2.0f, 278, 13, "#d8cbaa");
+  screen_card("THE FORTRESS WILL REMEMBER", "Leave the fortress?");
+  ui_emblem(fb, W / 2, 174, 38);
+  font_draw(fb, "Your road will still be here.", W / 2, 225, 14, FONT_REGULAR, ALIGN_CENTER, rgb(178, 189, 191));
+  ui_rule(fb, 170, 251, 300);
+  control_hint("ENTER  /  LEAVE", "%s  /  LEAVE", 287, 13, "#e1c99d");
+  char hint[80];
+  snprintf(hint, sizeof hint, "%s  /  STAY AND FIGHT",
+           gamepad && gamepad_active ? gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST) : "ESC");
+  text(hint, W / 2, 322, 11, "#a5b2b6");
 }
 
 static void draw_level_start(void) {
-  char buf[64];
-  fill("#140e08");
-  snprintf(buf, sizeof buf, "FLOOR %d OF %d", game->level_index + 1, LEVEL_COUNT);
-  text(buf, W / 2.0f, 130, 16, "#a89878");
-  title_text(game->level->name, W / 2.0f, 180, 36, "#e9c93c");
-  text("FIND 3 KEYS AND REACH THE GATE", W / 2.0f, 230, 14, "#d8cbaa");
-  snprintf(buf, sizeof buf, "LIVES: %d    SCORE: %d", session.lives, session.score);
-  text(buf, W / 2.0f, 262, 13, "#a89878");
-  snprintf(buf, sizeof buf, "DIFFICULTY: %s", game_difficulty_settings(session.difficulty)->name);
-  text(buf, W / 2.0f, 286, 12, "#c9a24a");
-  if (blink()) control_hint("PRESS ENTER", "PRESS %s", 320, 16, "#ead9b0");
+  char buf[80];
+  menu_background();
+  gfx_fill_rect(fb, 0, 0, W, H, rgba(3, 8, 13, .79f));
+  ui_emblem(fb, W / 2, 68, 32);
+  snprintf(buf, sizeof buf, "CHAPTER %02d / %02d", game->level_index + 1, LEVEL_COUNT);
+  text(buf, W / 2, 117, 11, "#a7b2b5");
+  title_text(game->level->name, W / 2.0f, 165, 36, "#e8dcc4");
+  ui_rule(fb, 164, 187, 312);
+  font_draw(fb, "Find three keys. Open the gate. Keep moving.", W / 2, 222, 14, FONT_REGULAR, ALIGN_CENTER,
+            rgb(179, 190, 193));
+  snprintf(buf, sizeof buf, "%d LIVES    /    %06d SCORE    /    %s", session.lives, session.score,
+           game_difficulty_settings(session.difficulty)->name);
+  text(buf, W / 2, 258, 10, "#b5a17c");
+  ui_panel(fb, 219, 291, 202, 32);
+  control_hint("ENTER  /  BEGIN", "%s  /  BEGIN", 312, 12, "#eadcc1");
+  for (int i = 0; i < LEVEL_COUNT; i++) {
+    float x = W / 2 - 40 + i * 20;
+    if (i < LEVEL_COUNT - 1) gfx_line(fb, x + 3, 361, x + 17, 361, 1, rgba(181, 151, 101, .25f));
+    ui_diamond(fb, x, 361, i == game->level_index ? 3 : 2,
+               i <= game->level_index ? rgb(195, 167, 116) : rgb(60, 73, 80));
+  }
 }
 
 static void draw_pause_overlay(void) {
-  gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(0, 0, 0, 0.6f));
-  title_text("PAUSED", W / 2.0f, 110, 34, "#e9c93c");
+  gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(2, 6, 10, .72f));
+  ui_panel(fb, 174, 40, 292, 275);
+  text("A MOMENT OF RESPITE", W / 2.0f, 64, 9, "#a59b86");
+  title_text("PAUSED", W / 2.0f, 99, 29, "#e6d6b7");
   draw_menu(pause_menu(), pause_menu_index, PAUSE_MENU_SPAN);
   if (notice_timer > 0) text(notice, W / 2.0f, 284, 11, "#ead9b0");
   char buf[32];
@@ -1114,19 +1161,23 @@ static void draw_death_fade(void) {
 }
 
 static void draw_died_overlay(void) {
-  char buf[32];
-  gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(60, 0, 0, 0.7f));
-  title_text("YOU HAVE FALLEN", W / 2.0f, 130, 36, "#e05050");
-  snprintf(buf, sizeof buf, "LIVES LEFT: %d", session.lives);
-  text(buf, W / 2.0f, 175, 16, "#ead9b0");
-  if (blink()) control_hint("PRESS ENTER TO TRY THIS FLOOR AGAIN", "PRESS %s TO TRY THIS FLOOR AGAIN", 220, 14, "#e9c93c");
+  gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(9, 8, 12, .75f));
+  ui_panel(fb, 125, 65, 390, 189);
+  text("THE STONES CLAIM ANOTHER", W / 2, 92, 9, "#b29887");
+  title_text("YOU HAVE FALLEN", W / 2, 132, 28, "#ddc4a9");
+  ui_rule(fb, 175, 151, 290);
+  char lives[48];
+  snprintf(lives, sizeof lives, "%d LIVES REMAIN", session.lives);
+  text(lives, W / 2, 181, 12, "#a9b5b7");
+  control_hint("ENTER  /  TRY THIS FLOOR AGAIN", "%s  /  TRY THIS FLOOR AGAIN", 224, 12, "#d4bd96");
 }
 
 static void stat_rows(const char *rows[][2], int n, float y0, float step, float size) {
   for (int i = 0; i < n; i++) {
     float y = y0 + i * step;
-    text_align(rows[i][0], W / 2.0f - 30, y, size, "#a89878", ALIGN_RIGHT);
-    text_align(rows[i][1], W / 2.0f - 5, y, size, "#ead9b0", ALIGN_LEFT);
+    if (i % 2 == 0) gfx_fill_rect(fb, 140, y - size - 3, 360, step - 1, rgba(103, 124, 136, .065f));
+    text_align(rows[i][0], 153, y, size, "#a2b1b6", ALIGN_LEFT);
+    text_align(rows[i][1], 487, y, size, "#e6d7ba", ALIGN_RIGHT);
   }
 }
 
@@ -1134,9 +1185,8 @@ static int percent(int part, int whole) { return whole ? (int)round_half_up(100.
 
 static void draw_level_complete(void) {
   char title[48], time[16], kills[48], treasure[48], secrets[32], bonus[24], score[24];
-  fill("#140e08");
-  snprintf(title, sizeof title, "FLOOR %d CLEARED!", game->level_index + 1);
-  text(title, W / 2.0f, 90, 26, "#e9c93c");
+  snprintf(title, sizeof title, "FLOOR %02d CLEARED", game->level_index + 1);
+  screen_card("ONE GATE CLOSER TO FREEDOM", title);
 
   format_time(time, sizeof time, game->time);
   snprintf(kills, sizeof kills, "%d/%d  (%d%%)", game->kills, game->total_enemies,
@@ -1148,32 +1198,32 @@ static void draw_level_complete(void) {
   snprintf(score, sizeof score, "%d", session.score);
   const char *rows[][2] = {{"TIME", time},       {"KILLS", kills}, {"TREASURE", treasure},
                            {"SECRETS", secrets}, {"BONUS", bonus}, {"SCORE", score}};
-  stat_rows(rows, 6, 145, 28, 15);
+  stat_rows(rows, 6, 150, 26, 13);
 
   bool last = game->level_index + 1 >= LEVEL_COUNT;
-  if (blink()) control_hint(last ? "PRESS ENTER" : "PRESS ENTER FOR THE NEXT FLOOR",
-                            last ? "PRESS %s" : "PRESS %s FOR THE NEXT FLOOR", 330, 15, "#e9c93c");
+  control_hint(last ? "ENTER  /  CONTINUE" : "ENTER  /  THE NEXT FLOOR",
+               last ? "%s  /  CONTINUE" : "%s  /  THE NEXT FLOOR", 337, 12, "#d8c098");
 }
 
 static void draw_game_over(void) {
-  char buf[48];
-  fill("#180808");
-  title_text("GAME OVER", W / 2.0f, 150, 52, "#c02020");
-  snprintf(buf, sizeof buf, "FINAL SCORE: %d", session.score);
-  text(buf, W / 2.0f, 205, 18, "#ead9b0");
-  snprintf(buf, sizeof buf, "KILLS: %d", session.total_kills);
-  text(buf, W / 2.0f, 235, 13, "#a89878");
-  if (blink()) control_hint("ENTER — PLAY AGAIN", "%s — PLAY AGAIN", 290, 15, "#e9c93c");
-  snprintf(buf, sizeof buf, "%s — TITLE SCREEN", gamepad ? gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST) : "ESC");
-  text(gamepad && gamepad_active ? buf : "ESC — TITLE SCREEN", W / 2.0f, 318, 13, "#d8cbaa");
+  screen_card("YOUR ESCAPE ENDS HERE", "GAME OVER");
+  ui_emblem(fb, W / 2, 161, 37);
+  char buf[64];
+  snprintf(buf, sizeof buf, "%06d", session.score);
+  text("FINAL SCORE", W / 2, 212, 9, "#9caaaf");
+  text(buf, W / 2, 244, 28, "#e6d7ba");
+  snprintf(buf, sizeof buf, "%d ENEMIES DEFEATED", session.total_kills);
+  text(buf, W / 2, 271, 10, "#a1afb3");
+  control_hint("ENTER  /  PLAY AGAIN", "%s  /  PLAY AGAIN", 310, 12, "#d8c098");
+  snprintf(buf, sizeof buf, "%s  /  TITLE SCREEN",
+           gamepad && gamepad_active ? gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST) : "ESC");
+  text(buf, W / 2, 338, 10, "#9eafb5");
 }
 
 static void draw_victory(void) {
   char time[16], kills[48], treasure[48], secrets[32], lives[16], score[24];
-  fill("#100c14");
-  title_text("YOU ESCAPED THE FORTRESS!", W / 2.0f, 90, 30, "#e9c93c");
-  text("WELL FOUGHT — YOU ARE FREE.", W / 2.0f, 128, 14, "#d8cbaa");
-  text("Thanks for playing this little retro adventure.", W / 2.0f, 150, 12, "#a89878");
+  screen_card("THE LAST GATE IS BEHIND YOU", "BEYOND THE WALLS");
+  font_draw(fb, "You have earned the dawn.", W / 2, 141, 12, FONT_REGULAR, ALIGN_CENTER, rgb(182, 193, 194));
 
   format_time(time, sizeof time, session.total_time);
   snprintf(kills, sizeof kills, "%d/%d  (%d%%)", session.total_kills, session.total_enemies,
@@ -1185,9 +1235,9 @@ static void draw_victory(void) {
   snprintf(score, sizeof score, "%d", session.score);
   const char *rows[][2] = {{"TOTAL TIME", time},  {"KILLS", kills},      {"TREASURE", treasure},
                            {"SECRETS", secrets}, {"LIVES LEFT", lives}, {"FINAL SCORE", score}};
-  stat_rows(rows, 6, 190, 25, 14);
+  stat_rows(rows, 6, 176, 23, 12);
 
-  if (blink()) control_hint("PRESS ENTER FOR THE TITLE SCREEN", "PRESS %s FOR THE TITLE SCREEN", 350, 14, "#e9c93c");
+  control_hint("ENTER  /  TITLE SCREEN", "%s  /  TITLE SCREEN", 337, 12, "#d8c098");
 }
 
 static void render(void) {
@@ -1308,11 +1358,15 @@ int main(int argc, char **argv) {
   render();
   present();
   audio_init();
-  assets_build(&assets);
-  comic_art_build(&comic_art);
+  bool art_ready = assets_build(&assets);
+  bool story_ready = comic_art_build(&comic_art);
   renderer_init(&renderer, &assets);
 
-  if (!load_levels()) {
+  if (!art_ready || !story_ready) {
+    snprintf(error_msg, sizeof error_msg, "%s",
+             !art_ready ? assets_error() : "Missing or invalid title/story artwork in assets/");
+    set_state(ST_ERROR);
+  } else if (!load_levels()) {
     set_state(ST_ERROR);
   } else {
 #if FORTRESS_DEBUG_TOOLS
@@ -1342,6 +1396,7 @@ int main(int argc, char **argv) {
   free(save_path);
   for (int i = 0; i < levels_loaded; i++) level_free(&levels[i]);
   renderer_free(&renderer);
+  assets_free(&assets);
   comic_art_free(&comic_art);
   font_shutdown();
   audio_shutdown();

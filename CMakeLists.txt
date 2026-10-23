@@ -26,9 +26,11 @@ set(GAME_SOURCES
 set(VISUAL_SOURCES
   src/render.c
   src/assets.c
+  src/materials.c
   src/weapons.c
   src/font.c
   src/comic.c
+  src/ui.c
 )
 
 add_executable(fortress src/main.c ${VISUAL_SOURCES} ${GAME_SOURCES})
@@ -43,10 +45,19 @@ else()
   target_link_libraries(fortress PRIVATE m)
 endif()
 
-# the levels ship next to the executable
-add_custom_command(TARGET fortress POST_BUILD
+# Asset-only changes must reach every executable, including test targets.
+# Source PNGs and prompts stay in the repository; runtime art is BMP with alpha.
+file(GLOB FORTRESS_ART_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/*.bmp")
+set(FORTRESS_RUNTIME_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+if(CMAKE_CONFIGURATION_TYPES)
+  set(FORTRESS_RUNTIME_DIR "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>")
+endif()
+add_custom_target(fortress_data ALL
   COMMAND ${CMAKE_COMMAND} -E copy_directory
-          ${CMAKE_CURRENT_SOURCE_DIR}/levels $<TARGET_FILE_DIR:fortress>/levels)
+          ${CMAKE_CURRENT_SOURCE_DIR}/levels ${FORTRESS_RUNTIME_DIR}/levels
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${FORTRESS_RUNTIME_DIR}/assets
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FORTRESS_ART_FILES} ${FORTRESS_RUNTIME_DIR}/assets)
+add_dependencies(fortress fortress_data)
 
 include(CTest)
 if(BUILD_TESTING)
@@ -63,7 +74,9 @@ if(BUILD_TESTING)
   add_executable(stair_tests tests/stairs.c ${VISUAL_SOURCES} ${GAME_SOURCES})
   add_executable(surface_tests tests/surfaces.c ${VISUAL_SOURCES} ${GAME_SOURCES})
   add_executable(horror_tests tests/horror.c ${VISUAL_SOURCES} ${GAME_SOURCES})
-  foreach(test_target barrel_tests difficulty_tests savegame_tests savegame_ui_tests gamepad_tests comic_tests wall_tests pit_tests pendulum_tests water_tests surface_tests stair_tests horror_tests)
+  add_executable(visual_tests tests/visuals.c ${VISUAL_SOURCES} ${GAME_SOURCES})
+  foreach(test_target barrel_tests difficulty_tests savegame_tests savegame_ui_tests gamepad_tests comic_tests wall_tests pit_tests pendulum_tests water_tests surface_tests stair_tests horror_tests visual_tests)
+    add_dependencies(${test_target} fortress_data)
     target_include_directories(${test_target} PRIVATE src)
     target_link_libraries(${test_target} PRIVATE SDL3::SDL3)
     target_compile_definitions(${test_target} PRIVATE FORTRESS_DEBUG_TOOLS=$<BOOL:${FORTRESS_DEBUG_TOOLS}>)
@@ -87,6 +100,8 @@ if(BUILD_TESTING)
   add_test(NAME vertical_levels COMMAND stair_tests)
   set_tests_properties(vertical_levels PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   add_test(NAME floor_and_ceiling COMMAND surface_tests)
+  add_test(NAME complete_artwork COMMAND visual_tests)
+  set_tests_properties(complete_artwork PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   add_test(NAME horror_atmosphere COMMAND horror_tests)
   set_tests_properties(horror_atmosphere PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(savegame_ui gamepad comic_story PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})

@@ -1,11 +1,39 @@
 // Software raster primitives. See gfx.h.
 
 #include "gfx.h"
+#include <SDL3/SDL.h>
+#include <stdio.h>
 
 #include <ctype.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
+Image *image_load_art(const char *name) {
+  char path[1024];
+  const char *base = SDL_GetBasePath();
+  snprintf(path, sizeof path, "%sassets/%s", base ? base : "", name);
+  SDL_Surface *source = SDL_LoadBMP(path);
+  if (!source) {
+    snprintf(path, sizeof path, "assets/%s", name);
+    source = SDL_LoadBMP(path);
+  }
+  if (!source) return NULL;
+  SDL_Surface *converted = SDL_ConvertSurface(source, SDL_PIXELFORMAT_ARGB8888);
+  SDL_DestroySurface(source);
+  if (!converted) return NULL;
+  Image *result = image_new(converted->w, converted->h);
+  for (int y = 0; y < result->h; y++) {
+    const uint32_t *row = (const uint32_t *)((const uint8_t *)converted->pixels + y * converted->pitch);
+    for (int x = 0; x < result->w; x++) {
+      uint32_t p = row[x], a = p >> 24;
+      result->px[y * result->w + x] = (a << 24) | ((((p >> 16) & 255) * a / 255) << 16) |
+                                      ((((p >> 8) & 255) * a / 255) << 8) | ((p & 255) * a / 255);
+    }
+  }
+  SDL_DestroySurface(converted);
+  return result;
+}
 
 // ------------------------------------------------------------------ colors
 

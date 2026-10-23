@@ -265,7 +265,7 @@ static void test_rendering(bool screenshots) {
     int cs = mini(8, (VIEW_H - 40) / f.level.h);
     int mx = SCREEN_W / 2 - f.level.w * cs / 2 + 4 * cs + cs / 2;
     int my = (VIEW_H - f.level.h * cs) / 2 + cs + cs / 2;
-    CHECK(fb->px[my * fb->w + mx] == (stage < 3 ? 0xffa58a66u : 0xff241c12u));
+    CHECK(fb->px[my * fb->w + mx] == (stage < 3 ? 0xffa58a66u : 0xff1d2a34u));
     if (stage < 3) game_hit_wall(f.game, 4, 1, WALL_BOLT_DAMAGE);
   }
   tick(f.game, 100);

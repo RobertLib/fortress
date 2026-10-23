@@ -17,9 +17,10 @@ typedef struct Comic {
 typedef struct ComicArt {
   Image *scene[COMIC_KIND_COUNT][COMIC_PANELS];
   Image *scratch;
+  Image *cover;
 } ComicArt;
 
-void comic_art_build(ComicArt *art);
+bool comic_art_build(ComicArt *art);
 void comic_art_free(ComicArt *art);
 void comic_start(Comic *comic, ComicKind kind);
 // Return true after the final panel. The caller chooses the next game state.

@@ -1,9 +1,8 @@
 # Fortress
 
 A retro first-person action game set in a medieval fortress — a software
-raycasting engine written in C on top of SDL3, with no other dependencies
-and no asset files: all graphics, the font and the sounds are generated
-procedurally at startup. Torchlit stone corridors fade into darkness. Behind
+raycasting engine written in C on top of SDL3, with no other dependencies.
+It combines a complete painted art set with a custom vector font and synthesized sound. Torchlit stone corridors fade into darkness. Behind
 the remaining men-at-arms, something older drags its chains through the fortress.
 
 ## Building
@@ -23,7 +22,7 @@ make clean          # remove build directories
 
 `make release` builds an optimized CMake `Release` binary without debug
 tools or test executables. Run it with `./build/release/fortress`; its
-`levels/` folder is copied alongside it. The `--level` / `-l` arguments
+`levels/` and `assets/` folders are copied alongside it. The `--level` / `-l` arguments
 and title-screen number-key shortcuts are compiled out. Development builds
 from `make` and `make run` keep those shortcuts. The separate build folders
 let you switch between development and production without cleaning.
@@ -50,8 +49,36 @@ Run the regression checks with `ctest --test-dir build --output-on-failure`.
 On other platforms install SDL 3 through your package manager (or build it
 from source) and point CMake at it, e.g. `-DCMAKE_PREFIX_PATH=/path/to/SDL3`.
 
-The build copies the [levels/](levels/) folder next to the executable; the
-game also looks for `levels/` in the directory it is started from.
+The build copies [levels/](levels/) and [assets/](assets/) next to the executable;
+the game also looks for both folders in the directory it is started from.
+Keep both folders with the game when distributing it. Artwork is required: missing or
+invalid atlases show a clear installation error instead of loading mismatched fallback art.
+
+### Visual presentation
+
+The title and menus share a painted fortress, drifting motes, dark iron panels
+and restrained brass details. The same visual language carries through the
+difficulty selection, controls, chapter introduction, pause screen and HUD.
+Selection stays lit while navigating with a keyboard, mouse or gamepad.
+
+The classic 640 × 400 presentation is preserved. All world textures and sprite
+frames are prepared at 256 × 256, with supersampled 384 × 384 first-person
+weapon views. The complete set covers soldiers, four animal families, the
+Jailer, furniture, wall ornaments, pickups, traps, damaged masonry, explosions,
+water, and all five floor and ceiling themes. Animal locomotion has three
+painted poses from each of four directions; injury and death use dedicated art.
+Eight painted explosion stages replace the old geometric effects.
+
+Cool distance fog, warm torchlight, material shading and depth-tested embers
+connect the artwork to the rooms. The HUD, automap, notes and every menu/state
+screen use the same slate, iron and aged-brass palette. The story uses six
+painted cinematic scenes with readable captions and gentle camera movement.
+
+Run `./build/visual_tests --screenshots` from the repository root to render the
+complete presentation and contact sheets into `build/art-*.bmp`. The test
+checks all 525 asset slots, premultiplied alpha, distinct animation frames,
+material mips and asset ownership. See [the coverage and verification guide](docs/art-direction.md)
+and [artwork sources and reproduction](assets/README.md).
 
 ## The Game
 
@@ -83,12 +110,9 @@ selection leaves any run available through **CONTINUE** intact.
 Starting a new game plays a three-panel animated prologue: betrayal,
 broken chains and a stolen crossbow. Clearing the final floor plays an
 epilogue of the last gate opening and the escape into the night, followed
-by the final statistics. The illustrated title screen shares the same
-procedural comic art.
+by the final statistics. Story panels and the title use painted artwork in the same visual style.
 
-Panels reveal automatically and the active frame expands, with slow camera
-movement, rain, drifting dust, flickering torches and scene-specific
-animation. **Enter**, **Space**,
+Panels advance automatically with slow camera movement, rain and drifting dust. **Enter**, **Space**,
 the **right arrow** or a **click** advances a panel; **Esc** or clicking
 **SKIP** skips the sequence. On a gamepad use the bottom face button to
 advance and the right face button to skip. Playback pauses when the window
@@ -444,7 +468,7 @@ in [src/common.h](src/common.h).
 - **Sounds** synthesized into sample buffers once at startup and mixed in
   the SDL audio callback — playback only starts a cheap mixer voice
   ([src/audio.c](src/audio.c))
-- **Textures and pixel art** painted into images at startup with a small
+- **Artwork** loaded from painted atlases, with material variants, vector detail and animation assembled using a small
   anti-aliased raster library ([src/assets.c](src/assets.c),
   [src/weapons.c](src/weapons.c), [src/gfx.c](src/gfx.c))
 - **Font**: a procedural serif stroke font, rasterised per size on first

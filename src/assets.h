@@ -1,5 +1,5 @@
-// Procedural pixel art: wall textures, item/enemy sprites, weapon views and
-// HUD emblems. Everything is painted once at startup.
+// Painted wall materials, complete animated sprite families, weapon views and
+// HUD emblems. Everything is prepared once at startup.
 
 #ifndef FORTRESS_ASSETS_H
 #define FORTRESS_ASSETS_H
@@ -7,8 +7,8 @@
 #include "common.h"
 #include "gfx.h"
 
-#define TEX 64 // texture and billboard size
-#define WEAPON_VIEW 192 // POV weapon image size
+#define TEX 256         // one consistent resolution for world art and sprite frames
+#define WEAPON_VIEW 384 // supersampled POV artwork, reduced into the viewport
 #define CREST_SIZE 48
 #define PORTRAIT_COLS 5
 #define PORTRAIT_ROWS 2 // row 0: level gaze, row 1: glancing down
@@ -16,25 +16,25 @@
 #define EXPLOSION_FRAMES 8
 #define WALL_DUST_FRAMES 6
 #define WATER_FRAMES 16
-#define SURFACE_MIPS 7 // 64x64 down to 1x1, to soften distant floor detail
+#define SURFACE_MIPS 9 // 256x256 down to 1x1, to soften distant floor detail
 
 typedef enum {
-  WT_STONE, // "1" rough masonry
-  WT_MOSS, // "2" weathered mossy stone
-  WT_TIMBER, // "3" timber-framed plaster
-  WT_DUNGEON, // "4" dungeon wall with a barred window
-  WT_BRICK, // "5" old brick
-  WT_BANNER, // "6" stone with a hanging banner
-  WT_SLIT, // "7" arrow slit (trap shooter)
-  WT_BARS, // "B" fixed iron bars (transparent)
-  WT_DOOR, // "D" oak door
-  WT_BAR_DOOR, // "R" barred door (transparent)
-  WT_GATE, // "X" the locked gate
-  WT_LEVER, // "L" lever, armed
+  WT_STONE,        // "1" rough masonry
+  WT_MOSS,         // "2" weathered mossy stone
+  WT_TIMBER,       // "3" timber-framed plaster
+  WT_DUNGEON,      // "4" dungeon wall with a barred window
+  WT_BRICK,        // "5" old brick
+  WT_BANNER,       // "6" stone with a hanging banner
+  WT_SLIT,         // "7" arrow slit (trap shooter)
+  WT_BARS,         // "B" fixed iron bars (transparent)
+  WT_DOOR,         // "D" oak door
+  WT_BAR_DOOR,     // "R" barred door (transparent)
+  WT_GATE,         // "X" the locked gate
+  WT_LEVER,        // "L" lever, armed
   WT_LEVER_PULLED, // "l" lever, pulled
-  WT_NICHE, // "N" back wall of a niche
+  WT_NICHE,        // "N" back wall of a niche
   WT_DUNGEON_BARE, // "4" without its window, for door and niche jambs
-  WT_BREAKABLE, // "8" cracked masonry, three stages of damage
+  WT_BREAKABLE,    // "8" cracked masonry, three stages of damage
   WT_BREAKABLE_DAMAGED,
   WT_BREAKABLE_CRUMBLING,
   WT_PORTAL, // "~" mirror portal, four animation frames
@@ -71,7 +71,7 @@ typedef enum {
   TRAP_ARROW, // side-on, flying right
   TRAP_ARROW_LEFT,
   TRAP_ARROW_TOWARD, // point-first, at the viewer
-  TRAP_ARROW_AWAY, // tail-first
+  TRAP_ARROW_AWAY,   // tail-first
   TRAP_SPRITE_COUNT
 } TrapSprite;
 
@@ -85,6 +85,7 @@ typedef struct BoxTextures {
 
 typedef struct Assets {
   Image *warden[4], *haunt_shadow, *prisoner, *horror_note, *white_candles;
+  Image *note_page;
   Image *horror_traces[3];
   Image *walls[WT_COUNT];
   Image *walls_dark[WT_COUNT]; // faces along the y axis
@@ -117,10 +118,12 @@ typedef struct Assets {
   Image *portraits[PORTRAIT_SITTERS][PORTRAIT_COLS * PORTRAIT_ROWS];
 } Assets;
 
-void assets_build(Assets *a);
+bool assets_build(Assets *a);
+void assets_free(Assets *a);
+const char *assets_error(void);
 
 // weapons.c: the POV weapon for one frame (0 idle, 1 fired, 2 recovering),
-// a small 3D model rendered into a WEAPON_VIEW x WEAPON_VIEW image.
+// painted atlas artwork sampled into a WEAPON_VIEW x WEAPON_VIEW image.
 Image *weapon_view_build(WeaponKind kind, int frame);
 
 #endif
