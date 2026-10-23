@@ -130,6 +130,89 @@ static void screenshot(const Image *image, const char *path) {
   SDL_DestroySurface(surface);
 }
 
+static void test_pressure_plates(const Assets *assets, bool screenshots) {
+  static const char *arena =
+      "11111111111111111\n"
+      "1...............1\n"
+      "1...............1\n"
+      "1...............1\n"
+      "1...............1\n"
+      "1.P.....^.......1\n"
+      "1...............1\n"
+      "1...............1\n"
+      "1...............1\n"
+      "1...............1\n"
+      "11111111111111111\n";
+  static const float directions[][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {.8f, .6f}};
+  static const char *heights[] = {"", "@height 8 5 1 1 .25\n", "@height 8 5 1 1 .75\n"};
+  Renderer renderer;
+  renderer_init(&renderer, assets);
+  Image *floor = image_new(SCREEN_W, SCREEN_H), *plate = image_new(SCREEN_W, SCREEN_H);
+  Image *armed = image_new(SCREEN_W, SCREEN_H);
+  for (int elevation = 0; elevation < 3; elevation++) {
+    char text[1024], err[128];
+    snprintf(text, sizeof text, "%s%s", heights[elevation], arena);
+    Level lv;
+    CHECK(level_parse(&lv, text, err, sizeof err));
+    CHECK(lv.trap_count == 1);
+    lv.decoration_count = lv.wall_box_count = lv.hanging_count = 0;
+    lv.torch_count = lv.fire_light_count = 0;
+    Session session = {.next_life = 40000, .lives = 3};
+    Game *g = game_create(&lv, 0, &session, NULL);
+    for (size_t side = 0; side < sizeof directions / sizeof directions[0]; side++) {
+      Player *p = &g->player;
+      p->dir_x = directions[side][0]; p->dir_y = directions[side][1];
+      p->plane_x = -p->dir_y * .66f; p->plane_y = p->dir_x * .66f;
+      p->x = 8.5f - p->dir_x * 3; p->y = 5.5f - p->dir_y * 3;
+      if (side == 0) p->y -= 1.1f; // also cover an off-centre view, clear of the weapon
+      g->trap_count = 0;
+      render_view(&renderer, floor, g);
+      g->trap_count = 1;
+      for (int state = TRAP_ARMED; state <= TRAP_COOLDOWN; state++) {
+        g->traps[0].state = (TrapState)state;
+        render_view(&renderer, plate, g);
+        int changed = 0;
+        for (int y = 0; y < VIEW_H; y++) {
+          for (int x = 0; x < SCREEN_W; x++) {
+            int index = y * SCREEN_W + x;
+            if (floor->px[index] == plate->px[index]) continue;
+            // Only the floor inside the plate's fixed footprint may change,
+            // from every angle and on raised ground. Risers stay untouched.
+            CHECK(renderer.floor_mask[index]);
+            float camera = 2.0f * x / SCREEN_W - 1;
+            float dist = renderer.depth[index];
+            float wx = p->x + (p->dir_x + p->plane_x * camera) * dist;
+            float wy = p->y + (p->dir_y + p->plane_y * camera) * dist;
+            CHECK(wx >= 8.199f && wx <= 8.801f && wy >= 5.199f && wy <= 5.801f);
+            changed++;
+          }
+        }
+        if (elevation == 2) CHECK(changed == 0); // the ledge hides the entire top
+        else {
+          CHECK(changed > 100);
+          if (state == TRAP_ARMED) memcpy(armed->px, plate->px, sizeof(uint32_t) * SCREEN_W * VIEW_H);
+          else CHECK(differences(armed, plate, 0, VIEW_H) > 100);
+          if (screenshots && side == 0 && state == TRAP_ARMED)
+            screenshot(plate, elevation ? "build/pressure-plate-raised.bmp" : "build/pressure-plate-flat.bmp");
+        }
+      }
+    }
+    // Masonry in front of the plate hides it completely.
+    g->player.x = 5.5f; g->player.y = 5.5f;
+    g->player.dir_x = 1; g->player.dir_y = 0;
+    g->player.plane_x = 0; g->player.plane_y = .66f;
+    for (int y = 1; y < lv.h - 1; y++) lv.grid[y * lv.w + 7] = '1';
+    render_view(&renderer, plate, g);
+    g->trap_count = 0;
+    render_view(&renderer, floor, g);
+    CHECK(!differences(floor, plate, 0, VIEW_H));
+    game_destroy(g);
+    level_free(&lv);
+  }
+  image_free(floor); image_free(plate); image_free(armed);
+  renderer_free(&renderer);
+}
+
 static void test_shipped_levels(const Assets *assets, bool screenshots) {
   static const float viewpoints[LEVEL_COUNT][4] = {
     {20.5f, 10.5f, .8f, -.6f}, {17.5f, 17.5f, 1, 0}, {23.5f, 16.5f, 0, -1},
@@ -184,6 +267,7 @@ int main(int argc, char **argv) {
   Assets assets;
   assets_build(&assets);
   test_rendering(&assets);
+  test_pressure_plates(&assets, argc > 1 && !strcmp(argv[1], "--screenshots"));
   test_shipped_levels(&assets, argc > 1 && !strcmp(argv[1], "--screenshots"));
   SDL_Quit();
   puts("Floor and ceiling checks passed.");

@@ -611,10 +611,10 @@ static void render_sectors(Renderer *r, Image *fb, const Game *g) {
   }
 }
 
-// Cast pits and shallow water into the floor plane. These surfaces never
-// write the column z-buffer: sight and arrows pass above them.
+// Cast pits, shallow water and pressure plates into the floor plane. These
+// surfaces never write the column z-buffer: sight and arrows pass above them.
 static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
-  if (!g->level->pit_count && !g->level->water_count && !g->level->horror.trace_count) return;
+  if (!g->level->pit_count && !g->level->water_count && !g->level->horror.trace_count && !g->trap_count) return;
   const Player *p = &g->player;
   const Image *stone = r->assets->walls[WT_STONE];
   int frame = (int)fmodf(g->time * 8, WATER_FRAMES);
@@ -625,6 +625,7 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
     float ry = p->dir_y + p->plane_y * camera_x;
     int last_cell = -1;
     int trace = -1;
+    const Trap *plate = NULL;
     int flow_x = 0, flow_y = 0, banks = 0;
     float light = 0;
     Tint tint = {1, 0, 0, 0};
@@ -641,8 +642,11 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
         trace = -1;
         for (int i = 0; i < g->level->horror.trace_count; i++)
           if (g->level->horror.traces[i].x == cx && g->level->horror.traces[i].y == cy) trace = i;
+        plate = NULL;
+        for (int i = 0; i < g->trap_count; i++)
+          if (g->traps[i].spawn->x == cx && g->traps[i].spawn->y == cy) plate = &g->traps[i];
         last_cell = cell;
-        if (kind != '!' && !water && trace < 0) continue;
+        if (kind != '!' && !water && trace < 0 && !plate) continue;
         float depth = (cx + 0.5f - p->x) * p->dir_x + (cy + 0.5f - p->y) * p->dir_y;
         tint = surface_tint(g, cx + 0.5f, cy + 0.5f, maxf(0, depth));
         if (water) {
@@ -655,11 +659,21 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
         }
         last_cell = cell;
       }
-      if (kind != '!' && !water && trace < 0) continue;
+      if (kind != '!' && !water && trace < 0 && !plate) continue;
       float u = wx - cx, v = wy - cy;
-      if (trace >= 0) {
-        const Image *tex = r->assets->horror_traces[g->level->horror.traces[trace].kind];
-        uint32_t c = tex->px[tex_column(tex, v) * tex->w + tex_column(tex, u)];
+      const Image *decal = NULL;
+      if (plate) {
+        // A fixed 0.6-tile square lies flush with the local floor instead
+        // of standing upright as a camera-facing sprite.
+        u = (u - .2f) / .6f;
+        v = (v - .2f) / .6f;
+        if (u < 0 || u >= 1 || v < 0 || v >= 1) continue;
+        decal = r->assets->trap[plate->state == TRAP_ARMED ? TRAP_PLATE : TRAP_PRESSED];
+      } else if (trace >= 0) {
+        decal = r->assets->horror_traces[g->level->horror.traces[trace].kind];
+      }
+      if (decal) {
+        uint32_t c = decal->px[tex_column(decal, v) * decal->w + tex_column(decal, u)];
         if (c >> 24) {
           float a = (c >> 24) / 255.0f;
           px_blend(&fb->px[(size_t)y * fb->w + x], ((c >> 16) & 255) / a * tint.k + tint.r,
@@ -1064,11 +1078,6 @@ static void collect_sprites(Renderer *r, const Game *g) {
         s->alpha = a;
       }
     }
-  }
-  for (int i = 0; i < g->trap_count; i++) {
-    const Trap *t = &g->traps[i];
-    add_sprite(t->spawn->x + 0.5f, t->spawn->y + 0.5f, as->trap[t->state == TRAP_ARMED ? TRAP_PLATE : TRAP_PRESSED],
-               0.6f);
   }
   for (int i = 0; i < lv->pendulum_count; i++) {
     const PendulumSpawn *trap = &lv->pendulums[i];
