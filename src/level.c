@@ -2,6 +2,7 @@
 //   Lines starting with ";" are comments.
 //   Lines starting with "@" are properties: @name, @floor, @ceil (colors),
 //   @surfaces (material theme),
+//   @height / @ceiling x y width height elevation (absolute tile units),
 //   @start (initial facing: N/S/E/W, default E).
 //   Everything else is the map grid, one character per cell:
 //     1-6    walls (texture variants), # = 1
@@ -91,6 +92,18 @@ float level_floor(const Level *lv, float x, float y) {
   return level_floor_at(lv, (int)floorf(x), (int)floorf(y));
 }
 
+float level_ceiling_at(const Level *lv, int x, int y) {
+  if (lv->ceilings && x >= 0 && y >= 0 && x < lv->w && y < lv->h) {
+    float z = lv->ceilings[y * lv->w + x];
+    if (isfinite(z)) return z;
+  }
+  return level_floor_at(lv, x, y) + 1;
+}
+
+float level_ceiling(const Level *lv, float x, float y) {
+  return level_ceiling_at(lv, (int)floorf(x), (int)floorf(y));
+}
+
 void level_water_flow(char c, int *dx, int *dy) {
   *dx = (c == '>') - (c == '<');
   *dy = (c == '}') - (c == '{');
@@ -167,6 +180,15 @@ static bool on_steps(const Level *lv, int x, int y) {
 
 static bool is_floor(const Level *lv, int x, int y) {
   return x >= 0 && y >= 0 && x < lv->w && y < lv->h && lv->grid[y * lv->w + x] == '.';
+}
+
+// Projecting furniture needs an actual bay, rather than the three exposed
+// floor cells of a T-junction. Keep the centre of narrow passages walkable.
+static bool furnishing_bay(const Level *lv, int x, int y, int dx, int dy) {
+  for (int depth = 1; depth <= 2; depth++)
+    for (int side = -1; side <= 1; side++)
+      if (!is_floor(lv, x + dx * depth - dy * side, y + dy * depth + dx * side)) return false;
+  return true;
 }
 
 // Does the face (dx, dy) of wall cell (x, y) belong to a stretch of wall
@@ -381,6 +403,42 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   }
   for (int i = 0; i < cells; i++)
     if (lv->heights[i] != 0) lv->has_heights = true;
+  // Ceilings are independent of floors. Unspecified cells retain the legacy
+  // one-unit clearance, including when a custom map edits its floor later.
+  lv->ceilings = malloc((size_t)cells * sizeof(float));
+  for (int i = 0; i < cells; i++) lv->ceilings[i] = NAN;
+  for (const char *line = text; *line;) {
+    const char *end = strchr(line, '\n');
+    size_t len = end ? (size_t)(end - line) : strlen(line);
+    if (len >= 8 && !strncmp(line, "@ceiling", 8) && (len == 8 || isspace((unsigned char)line[8]))) {
+      char value[256], extra;
+      int x, y, rw, rh;
+      float z;
+      copy_trimmed(value, sizeof value, line + 8, len - 8);
+      if (sscanf(value, "%d %d %d %d %f %c", &x, &y, &rw, &rh, &z, &extra) != 5 ||
+          x < 0 || y < 0 || rw <= 0 || rh <= 0 || x >= w || y >= h || rw > w - x || rh > h - y ||
+          !isfinite(z) || fabsf(z) > LEVEL_MAX_HEIGHT + 1 || fabsf(z / LEVEL_STEP - roundf(z / LEVEL_STEP)) > .001f) {
+        snprintf(err, err_size, "Invalid @ceiling: expected x y width height elevation (steps of 0.125, -5 to 5)");
+        free(rows);
+        level_free(lv);
+        return false;
+      }
+      for (int yy = y; yy < y + rh; yy++)
+        for (int xx = x; xx < x + rw; xx++) lv->ceilings[yy * w + xx] = z;
+      lv->has_ceilings = true;
+    }
+    if (!end) break;
+    line = end + 1;
+  }
+  // A full unit of headroom keeps every existing actor and trap usable.
+  for (int i = 0; i < cells; i++) {
+    if (isfinite(lv->ceilings[i]) && lv->ceilings[i] < lv->heights[i] + 1) {
+      snprintf(err, err_size, "Invalid @ceiling: less than one unit above floor at %d,%d", i % w, i / w);
+      free(rows);
+      level_free(lv);
+      return false;
+    }
+  }
   char *grid = lv->grid;
 
   lv->items = malloc(sizeof(Item) * cells);
@@ -552,6 +610,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
         if (reachable[n]) continue;
         char c = grid[n];
         if (c != '.' && !level_is_water(c) && c != 'D' && c != 'R') continue;
+        if (fabsf(level_floor_at(lv, nx, ny) - level_floor_at(lv, ix, iy)) > LEVEL_STEP + .001f) continue;
         reachable[n] = 1;
         stack[top++] = n;
       }
@@ -802,20 +861,24 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   // every angle. It burns like an oversized torch, so it claims a stretch
   // the torches left dark, and it would rather have flanking floor on both
   // sides, so it reads as the heart of a room instead of a plug in a
-  // corridor — but a floor with no such spot still gets its fire in a
-  // snugger nook. Placed before the wardrobes and chests: the hearth is
+  // corridor. Placed before the wardrobes and chests: the hearth is
   // the centrepiece and picks its wall first. A collision circle
   // half-buried in the wall keeps anyone from standing in the flames.
   int fireplace_limit = cells >= 900 ? 2 : 1;
   int fireplaces = 0;
-  for (int pass = 0; pass < 2; pass++) {
-    bool roomy = pass == 0;
-    if (fireplaces > 0) break; // the strict pass found a hall
+  // Legacy custom maps keep their stable furnishing layout and save signature.
+  // The new campaign opts into independent ceilings and the stricter bays.
+  for (int pass = 0; pass < (lv->has_ceilings ? 1 : 2); pass++) {
+    if (fireplaces > 0) break;
     for (int i = 0; i < cand_count && fireplaces < fireplace_limit; i++) {
       BoxCandidate *c = &cands[i];
       if (c->used || !in_set("1235", c->cell)) continue;
-      int ffx = c->x + c->dx, ffy = c->y + c->dy;
-      if (roomy && (!is_floor(lv, ffx - c->dy, ffy + c->dx) || !is_floor(lv, ffx + c->dy, ffy - c->dx))) continue;
+      if (lv->has_ceilings) {
+        if (!furnishing_bay(lv, c->x, c->y, c->dx, c->dy)) continue;
+      } else if (pass == 0) {
+        int fx = c->x + c->dx, fy = c->y + c->dy;
+        if (!is_floor(lv, fx - c->dy, fy + c->dx) || !is_floor(lv, fx + c->dy, fy - c->dx)) continue;
+      }
       double cx = c->x + 0.5 + c->dx * 0.56, cy = c->y + 0.5 + c->dy * 0.56;
       if (near_torch(lv, cx, cy, 4)) continue;
       bool crowded = false;
@@ -896,6 +959,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   for (int i = 0; i < cand_count && candelabras < candelabra_limit; i++) {
     BoxCandidate *c = &cands[i];
     if (c->used) continue;
+    if (lv->has_ceilings && !furnishing_bay(lv, c->x, c->y, c->dx, c->dy)) continue;
     double cx = c->x + 0.5 + c->dx * 0.68, cy = c->y + 0.5 + c->dy * 0.68;
     if (near_torch(lv, cx, cy, 4)) continue;
     if (near_deco(lv, cx, cy, 2.56)) continue;
@@ -1087,6 +1151,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
 void level_free(Level *lv) {
   free(lv->grid);
   free(lv->heights);
+  free(lv->ceilings);
   free(lv->items);
   free(lv->enemies);
   free(lv->barrels);

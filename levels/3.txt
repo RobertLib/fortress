@@ -1,58 +1,194 @@
-; FORTRESS — floor 3: BARRACKS
-; 1-6 walls, B bars, D door, R barred door, X gate, P player, K key, H potion, F bread,
-; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, Y/y rat, W/w spider, ^ arrow trap, L lever, Z secret wall, ~ mirror portal (paired in reading order)
-; Q gunpowder barrel, q ordinary barrel
-; 8 cracked masonry: break with weapons or a powder blast
-; ! open pit: falling in costs a life; walk around it
-; & east-west pendulum, % north-south pendulum: time your crossing
-; = shallow pool, >/< east/west stream, }/{ south/north stream
+; FORTRESS: authored maze, rooms and routes in tools/author_campaign.py.
 @name BARRACKS
 @surfaces barracks
 @floor #45443c
 @ceil #191a16
-@start N
-; Authored hauntings, candle refuges and fragments of the keepers' oath.
+@start W
 @horror 3
-@haven 3 1 1.3
-@haven 15 15 1.2
-@note 5 1 The captain had the empty suits placed facing the wall. Each dawn they faced our bunks.|Now there are fewer men at roll call, and more suits of armour. Nobody asks where they came from.
-@note 16 15 Our oath was to keep the prisoners here until the last gate fell.|The keeper died with those words in his mouth. The oath did not die with him. Every stolen key wakes it again.
-@scene armor 7 5 7 3 0 5 3
-@scene shadow 3 9 7 9 0
-@scene mirror 17 21 18 21 1
-@trace blood 1 9
-@trace blood 2 9
-@trace blood 3 9
-@trace scratch 5 3
-@trace chains 16 15
-@trace scratch 18 21
-; Static terraces joined by 0.125-high stone steps; no lifts.
-@height 8 0 21 23 0.125
-@height 9 0 20 23 0.25
-@height 10 0 19 23 0.375
-@height 11 0 18 23 0.5
-@height 12 0 17 23 0.625
-@height 13 0 16 23 0.75
-22222222222222422222222222222
-2P........B.RF......AHB..A..4
-282D2~2.222.222.22222.2D222.2
-2.2...2...2.2.2.....2...2TZ.L
-2.2.2.222.2.2.2....S2.G.222.2
-2...L...2.......T.Q.8...2...2
-2.2Z222.2222222.S...2.......2
-2.2.AT2.....2.D...A.2.2.2.2.2
-2D2222222.&.2.4222..2.2.2.2.2
-2........V>>>====w..2.2.D.2.4
-2..cG.22222.2====.222.42242.2
-2...Q.2.HT2....!..D...2...2.2
-2.....2Z22222.2.2.24222.4...2
-2.....L...G.2D4...2...2q2.W.2
-4.2.222.222.2.22222.2.2TT...4
-2...2..H..2H4K2H...T2...4.2.2
-2D442T....2F2.22222.2222222.2
-2...2..q.M^.2.Y.y...2..D..2.2
-222.2Gc...4.2.22222.2.222.2.2
-2.2.......v...2.......2.2.2.2
-2.22242D2222222.2...222.2.4.2
-2...K^..Y.Y..A..2.AK~.....DS2
-222222222242222222222X2242222
+; Southern watch entrance: 34,28 to 39,32
+; Mess and first choice of route: 23,28 to 27,31
+; Bathing room below the barracks: 14,27 to 18,31
+; Lower armoury, first key: 3,24 to 8,29
+; Northwest sleeping ward: 3,3 to 8,8
+; Exercise hall below the gallery: 20,12 to 25,17
+; Captains upper quarters, second key: 32,3 to 38,8
+; Raised private chapel, third key: 20,20 to 25,25
+; Northern concealed weapons: 14,1 to 17,3
+; Southern concealed pay chest: 30,23 to 32,25
+; Entry chooses the mess or outer stair: 34,30 -> 27,30
+; Eastern barrack passage has four blind turns: 36,28 -> 36,25 -> 39,25 -> 39,20 -> 34,20 -> 34,16 -> 30,16 -> 30,15 -> 34,15 -> 34,8
+; Mess chapel approach: 25,28 -> 25,25
+; Chapel descent into the exercise hall: 23,20 -> 23,17
+; The low exercise hall connects the two circuits: 25,15 -> 30,15
+; Westward circuit through the lower armoury: 20,15 -> 17,15 -> 17,20 -> 12,20 -> 12,25 -> 8,25
+; Armoury north route through the sleeping ward: 5,24 -> 5,20 -> 3,20 -> 3,15 -> 8,15 -> 8,8
+; Upper gallery stair returns to the sleeping ward: 8,5 -> 12,5 -> 12,10 -> 21,10 -> 27,10 -> 27,5 -> 32,5
+; Outer captain stair returns to the entrance route: 38,5 -> 40,5 -> 40,15 -> 38,15 -> 38,18 -> 34,18
+; Lower bath loop: 23,30 -> 18,30
+; Bath west return: 14,29 -> 10,29 -> 10,25 -> 12,25
+; Northern cache aperture: 12,5 -> 15,5 -> 15,3
+; Southern cache aperture: 31,30 -> 31,25
+; Breakable lower hall return: 17,17 -> 20,17
+; Breakable chapel service passage: 24,20 -> 30,20 -> 30,16
+; Exit throat: 39,30 -> 42,30
+@haven 36 30 1.15
+@haven 15 30 1.15
+@note 37 31 The captain had the empty suits placed facing the wall. Each dawn they faced our bunks.|Now there are fewer men at roll call, and more suits of armour. Nobody asks where they came from.
+@note 16 30 Our oath was to keep the prisoners here until the last gate fell.|The keeper died with those words in his mouth. The oath did not die with him. Every stolen key wakes it again.
+@scene armor 25 29 24 31 0 26 31
+@scene shadow 17 19 20 16 0
+@scene mirror 26 10 27 8 1
+@trace blood 36 26
+@trace blood 39 23
+@trace scratch 37 31
+@trace scratch 27 9
+@trace chains 16 30
+@height 32 3 7 6 0.75
+@height 27 5 5 1 0.75
+@height 39 5 2 1 0.75
+@height 27 6 1 5 0.75
+@height 40 6 1 4 0.75
+@height 28 8 1 1 0.75
+@height 34 9 1 1 0.625
+@height 16 10 1 1 0.125
+@height 17 10 1 1 0.25
+@height 18 10 1 1 0.375
+@height 19 10 1 1 0.5
+@height 20 10 1 1 0.625
+@height 21 10 6 1 0.75
+@height 34 10 1 1 0.5
+@height 40 10 1 1 0.625
+@height 34 11 1 1 0.375
+@height 40 11 1 1 0.5
+@height 34 12 1 1 0.25
+@height 40 12 1 1 0.375
+@height 34 13 1 1 0.125
+@height 40 13 1 1 0.25
+@height 40 14 1 1 0.125
+@height 23 19 1 1 0.125
+@height 20 20 6 6 0.25
+@height 26 20 1 1 0.125
+@height 25 26 1 1 0.125
+@height 14 27 5 5 -0.125
+@height 12 29 2 1 -0.125
+@ceiling 14 1 4 3 1.25
+@ceiling 4 3 4 6 1.5
+@ceiling 33 3 5 6 2.5
+@ceiling 3 4 1 4 1.5
+@ceiling 8 4 1 4 1.5
+@ceiling 15 4 1 1 1
+@ceiling 32 4 1 4 2.5
+@ceiling 38 4 1 4 2.5
+@ceiling 9 5 1 1 1
+@ceiling 10 5 3 1 2
+@ceiling 13 5 3 1 1.125
+@ceiling 27 5 4 1 2
+@ceiling 31 5 1 1 1.75
+@ceiling 39 5 1 1 1.75
+@ceiling 40 5 1 11 2
+@ceiling 12 6 1 5 2
+@ceiling 27 6 1 5 2
+@ceiling 8 8 1 1 1.125
+@ceiling 28 8 1 1 2
+@ceiling 8 9 1 1 1
+@ceiling 34 9 1 1 1.625
+@ceiling 8 10 1 3 1.125
+@ceiling 13 10 11 1 2
+@ceiling 24 10 1 1 1.75
+@ceiling 25 10 2 1 2
+@ceiling 34 10 1 11 2
+@ceiling 22 11 1 7 2.25
+@ceiling 20 12 1 6 1.5
+@ceiling 21 12 1 6 2.25
+@ceiling 23 12 2 6 2.25
+@ceiling 25 12 1 6 1.5
+@ceiling 8 13 1 1 1
+@ceiling 8 14 1 2 1.125
+@ceiling 3 15 5 1 1.125
+@ceiling 17 15 3 1 1.125
+@ceiling 26 15 1 1 1
+@ceiling 27 15 3 1 1.125
+@ceiling 30 15 4 2 2
+@ceiling 38 15 2 1 2
+@ceiling 3 16 1 5 1.125
+@ceiling 17 16 1 5 1.125
+@ceiling 38 16 1 3 2
+@ceiling 18 17 2 1 1.125
+@ceiling 30 17 1 4 1.125
+@ceiling 23 18 1 1 1.625
+@ceiling 35 18 3 1 2
+@ceiling 23 19 1 1 1.125
+@ceiling 4 20 2 1 1.125
+@ceiling 12 20 5 1 1.125
+@ceiling 21 20 4 6 2
+@ceiling 25 20 3 1 1.625
+@ceiling 28 20 2 1 1.125
+@ceiling 35 20 5 1 2
+@ceiling 5 21 1 2 1.125
+@ceiling 12 21 1 5 1.125
+@ceiling 20 21 1 4 2
+@ceiling 25 21 1 4 2
+@ceiling 39 21 1 5 2
+@ceiling 5 23 1 1 1
+@ceiling 30 23 3 3 1.25
+@ceiling 4 24 4 6 1.875
+@ceiling 3 25 1 4 1.875
+@ceiling 8 25 1 4 1.875
+@ceiling 9 25 1 1 1
+@ceiling 10 25 2 1 1.125
+@ceiling 25 25 1 2 1.5
+@ceiling 36 25 3 1 2
+@ceiling 10 26 1 4 1.125
+@ceiling 31 26 1 1 1
+@ceiling 36 26 1 1 2
+@ceiling 15 27 3 5 1.375
+@ceiling 25 27 1 1 1
+@ceiling 31 27 1 4 1.125
+@ceiling 36 27 1 1 1
+@ceiling 14 28 1 3 1.375
+@ceiling 18 28 1 3 1.375
+@ceiling 23 28 5 4 1.5
+@ceiling 34 28 6 5 1.25
+@ceiling 11 29 2 1 1.125
+@ceiling 13 29 1 1 0.875
+@ceiling 19 30 1 1 1
+@ceiling 20 30 3 1 1.125
+@ceiling 28 30 3 1 1.125
+@ceiling 32 30 1 1 1.125
+@ceiling 33 30 1 1 1
+@ceiling 40 30 3 1 1.125
+2222222222222222222222222222222222222222222
+22222222222222T...2222222222222222222222222
+22222222222222..M.2222222222222222222222222
+2222....222222...T222222222222222.....22222
+222......2222L2Z2222222222222222.......2222
+222...G..D......22222222222....D.A.SK..D.22
+222...F..222.22222222222222.2222...^.H.2.22
+222....A.222.22222222222222.2222.Q....w2.22
+2222.....222.22222222222222.~2222.....22.22
+22222222D222.22222222222222.222222D22222.22
+22222222.222............&...222222.22222.22
+22222222.2222222222222B22222222222.22222.22
+22222222.222222222222....222222222.22222.22
+22222222D22222222222...A..22222222.22222.22
+22222222.22222222222.44.q.22222222.22222.22
+222......22222222....44...D........222...22
+222.2222222222222.22...V..2222.....222.2222
+22~.2222222222222..8.....22222.222.222.2222
+222.2222222222222.22222.222222.222.....2222
+222.2222222222222.22222D222222.222.22222222
+222...222222......222.......8..222......222
+22222.222222.2222222.4....2222222222222.222
+22222.222222.2222222......2222222222222.222
+22222D222222.2222222..K...2222...222222.222
+2222....2222.2222222.A.H4.2222T..222222.222
+222.4..!.D...22222222.....2222..T222....222
+222.ASc..2.22222222222222.22222Z2222.222222
+222.qK.Q.2.2222.Y.2222222D22222.2222D222222
+222.H..4.2.222.===.2222.....22L.22......222
+2222....22...D.>=>y2222.A...222.22.H....222
+22222222222222...F.R.....G.......D...P....X
+222222222222222..A22222.....222222....A.222
+2222222222222222222222222222222222......222
+2222222222222222222222222222222222222222222
+2222222222222222222222222222222222222222222

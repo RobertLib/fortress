@@ -160,6 +160,11 @@ static uint32_t level_signature(const Level *lv) {
   if (lv->has_heights) {
     for (int i = 0; i < lv->w * lv->h; i++) real(c, lv->heights[i], -LEVEL_MAX_HEIGHT, LEVEL_MAX_HEIGHT);
   }
+  if (lv->has_ceilings) {
+    u32(c, 0x4345494cu); // ceiling edits participate in map compatibility
+    for (int y = 0; y < lv->h; y++)
+      for (int x = 0; x < lv->w; x++) real(c, level_ceiling_at(lv, x, y), -LEVEL_MAX_HEIGHT - 1, LEVEL_MAX_HEIGHT + 1);
+  }
   const HorrorLayout *h = &lv->horror;
   if (h->chapter) {
     u32(c, h->chapter);

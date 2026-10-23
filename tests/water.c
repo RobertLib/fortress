@@ -184,8 +184,8 @@ static void test_rendering(const Assets *assets, bool screenshots) {
 
 static void test_shipped_levels(const Assets *assets, bool screenshots) {
   static const float viewpoints[LEVEL_COUNT][4] = {
-    {7.5f, 10.5f, 1, 0}, {15.5f, 10.5f, 0, 1}, {11.5f, 9.5f, 1, 0},
-    {13.5f, 17.5f, .6f, .8f}, {8.5f, 15.5f, 1, 0}
+    {20.5f, 10.5f, .8f, -.6f}, {17.5f, 17.5f, 1, 0}, {14.5f, 29.5f, 1, 0},
+    {3.5f, 10.5f, 1, 0}, {11.5f, 29.5f, 1, 0}
   };
   for (int n = 1; n <= LEVEL_COUNT; n++) {
     char path[64], err[128];

@@ -142,8 +142,8 @@ Failed saves keep the previous slot. Missing, damaged, unsupported or
 map-incompatible saves display a message and leave the current run intact.
 Hauntings, extinguished lights, read notes, pending encounters and the Jailer's
 position and pursuit state are saved too. An event that already happened stays
-finished after loading. The revised campaign maps require a new run when moving
-from a pre-horror build; older saves on unchanged custom maps remain supported.
+finished after loading. The rebuilt campaign maps require a new run when moving
+from an older build; older saves on unchanged custom maps remain supported.
 
 ### Controls
 
@@ -310,7 +310,20 @@ Entering, leaving and walking through water makes splashes; nearby water
 burbles softly, muffled by walls. Sight and arrows pass freely over the surface.
 Explored water appears blue on the map, with a mark indicating the current.
 
-### Stairs and elevation
+### Architecture, stairs and elevation
+
+All five floors have new authored layouts built around winding passages,
+blind corners and separate branches for the three keys. Raised chapels,
+stair galleries, sunken cistern bays, an octagonal burial circuit and a stepped
+throne nave give them distinct architecture. Barred openings reveal places
+reached later by another route; return loops and two breakable shortcuts per
+floor reconnect familiar spaces. Doors fill wall openings with solid jambs.
+
+Floor and ceiling heights are local to the architecture. Low linking passages
+frame taller chambers and upper galleries. Sparse torchlight, repositioned
+hauntings, readable fragments, candle refuges and the Jailer preserve the
+horror pacing. All three keys and the gate are reachable without secrets,
+mirror portals or breaking walls. See [the plans and verification rules](docs/level-design.md).
 
 All five floors have static height differences: raised passages, stair flights
 and sunken rooms. Walk or run up and down the stone steps normally; the camera
@@ -393,8 +406,29 @@ Apply elevations to doors and wall cells as well as open floor, so door leaves,
 secret passages, traps and wall decorations match their surroundings. Keep
 adjacent walkable treads no more than `0.125` apart, and leave stair approaches
 clear of placed barrels. Automatic solid furniture is removed from stair
-flights and their landings. Each cell has one floor with its ceiling one unit
-above it, giving Doom-style 2.5D geometry. Elevations are static throughout play.
+flights and their landings. Each cell has one floor and one ceiling, giving
+Doom-style 2.5D geometry. Elevations are static throughout play.
+
+`@ceiling x y width height elevation` sets an independent, absolute ceiling
+elevation in increments of `0.125`, from `-5` to `5`. Later rectangles override
+earlier ones. Every specified ceiling must be at least one unit above its floor.
+Unspecified ceilings follow their floor plus one, preserving existing custom
+maps. For example, `@ceiling 4 4 9 9 3` makes a tall hall over a nine-tile square.
+Neighbouring ceilings may differ sharply, forming lintels and the lower roofs
+of side aisles. Ceilings occlude sight, sprites and projectiles at their actual
+elevations, and edits invalidate saves for that map.
+
+The campaign source plans are in [tools/author_campaign.py](tools/author_campaign.py).
+They specify every room, corridor, stair flight and object without randomness.
+Run `python3 tools/author_campaign.py` to export all five text maps, or pass a
+floor number to export only that floor. Direct edits to the text maps are also
+possible; exporting again replaces them from the source plans.
+
+Run `./build/architecture_tests` to check door frames, maze structure and routes.
+It walks all six orders of collecting the three keys using the actual movement,
+door controls and pickups, with secret walls and breaches closed. Combat and
+trap damage are isolated from this traversal test and covered by their own
+regression suites. It also checks that each breach opens a physical shortcut.
 
 Wall variants: rough stone masonry, weathered mossy stone, a
 timber-framed wall, a dungeon wall with a barred window, old brick,

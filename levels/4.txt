@@ -1,61 +1,192 @@
-; FORTRESS — floor 4: THE VAULT
-; 1-6 walls, B bars, D door, R barred door, X gate, P player, K key, H potion, F bread,
-; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, Y/y rat, W/w spider, ^ arrow trap, L lever, Z secret wall
-; Q gunpowder barrel, q ordinary barrel
-; 8 cracked masonry: break with weapons or a powder blast
-; ! open pit: falling in costs a life; walk around it
-; & east-west pendulum, % north-south pendulum: time your crossing
-; = shallow pool, >/< east/west stream, }/{ south/north stream
+; FORTRESS: authored maze, rooms and routes in tools/author_campaign.py.
 @name THE VAULT
 @surfaces vault
 @floor #3c3f42
 @ceil #15171a
-@start E
-; Authored hauntings, candle refuges and fragments of the keepers' oath.
+@start W
 @horror 4
-@haven 4 3 1.1
-@haven 17 15 1.2
-@note 3 3 There is no gold in the oldest vault. Only names cut into the stone.|I found mine among them. The date beside it is tomorrow. The scratch marks are still warm.
-@note 18 15 The lord paid his soldiers with keys taken from the dead. Each opened a gate that should have stayed shut.|Your betrayal was no accident. They needed someone alive to carry the keys upward.
-@scene armor 3 4 5 4 1 5 2
-@scene shadow 8 7 13 7 0
-@scene knock 24 9 28 9 1
-@trace scratch 3 3
-@trace scratch 4 3
-@trace chains 8 7
-@trace blood 16 11
-@trace blood 17 11
-@trace blood 18 11
-@trace scratch 18 15
-; Static terraces joined by 0.125-high stone steps; no lifts.
-@height 0 11 31 14 -0.125
-@height 0 12 31 13 -0.25
-@height 0 13 31 12 -0.375
-@height 0 14 31 11 -0.5
-@height 0 15 31 10 -0.625
-@height 0 16 31 9 -0.75
-4444444454544454444454444444444
-4PB...4...R......HD...B...D.W.4
-4.8.T.4.4444444L44444...44544.5
-4D4...4.4...4TZ.Gc......4.....4
-4...4.4.4.4.444...4.Q...4.444.4
-4.4.4.4...T....G4.4.......4.4.4
-4.4.4D454...44444.4.4444.54...4
-4...4.4..%.A....4.4A5.D.......4
-44454.4...q.444.4.4.4445444.444
-4H.Z4T..4...D.4...4....^......4
-4T5SL44444484.4.44444.4544.54.4
-4T4..w....SQ...V....4...4...4.5
-444.4444....44544...444.4T4.4.4
-4.D...5......!...C....4..K5.4.4
-4.4.4.4.4.T.5.4.54444.44444.4.4
-4.4...v.....4.4.....4...H...D.4
-4...444.4.444.4.44..544.4.4.4.4
-4.4.H.4..A..Y.Y.4...ZA4...4...4
-4.44545.444>>>==..4L444...4.4.4
-4..D..^M4....q==...F4.D.4.4.4.4
-4..4444.444S..==444F4.4.4.4.4A4
-4.K.H...D.A..w..4...4.....4.4.4
-44445555444.54....444444444.4.5
-4...GT.A..SK....4..F.yY.cG....4
-4X44444444444444444445444444444
+; Eastern receiving cell and exit: 32,18 to 37,22
+; Western flooded crypt, first key: 3,7 to 8,12
+; Deep burial stack, second key: 6,26 to 12,31
+; Upper northeastern reliquary, third key: 29,5 to 36,10
+; Octagonal ossuary around an opaque central tomb: 15,15 to 23,23
+; Northern candle scriptorium: 17,1 to 21,3
+; Western concealed treasury: 2,2 to 4,4
+; Southern concealed treasury: 24,30 to 27,32
+; Northern spiral approach with a choice at the reliquary stair: 34,18 -> 34,14 -> 27,14 -> 27,11 -> 25,11 -> 25,7 -> 20,7 -> 20,4 -> 15,4 -> 15,9 -> 8,9
+; Upper reliquary stair is reached around the western bend: 25,7 -> 29,7
+; Low preview recess beneath the reliquary window: 34,14 -> 32,14 -> 32,12
+; Receiving-cell lower descent: 32,20 -> 28,20 -> 28,25 -> 23,25 -> 23,22
+; Ossuary north return: 19,15 -> 19,13 -> 15,13 -> 15,9
+; Western crypt descent into the lowest burial stack: 3,10 -> 1,10 -> 1,17 -> 6,17 -> 6,22 -> 9,22 -> 9,26
+; Burial stack rises to the ossuary from the south: 12,29 -> 16,29 -> 16,25 -> 18,25 -> 18,23
+; Reliquary outer stair rejoins the receiving-cell passage: 36,7 -> 38,7 -> 38,13 -> 36,13 -> 36,15 -> 34,15
+; Candle scriptorium approach: 20,4 -> 20,3
+; Western cache approach: 11,9 -> 11,6 -> 10,6 -> 10,3 -> 4,3
+; Southern cache approach: 23,25 -> 23,28 -> 25,28 -> 25,30
+; Western ossuary breach through the burial partition: 6,19 -> 10,19 -> 10,18 -> 15,18
+; Eastern ossuary breach and short service stair: 23,18 -> 27,18 -> 27,14
+; Exit throat: 37,20 -> 40,20
+@haven 35 21 1.15
+@haven 18 2 1.15
+@note 36 21 There is no gold in the oldest vault. Only names cut into the stone.|I found mine among them. The date beside it is tomorrow. The scratch marks are still warm.
+@note 19 2 The lord paid his soldiers with keys taken from the dead. Each opened a gate that should have stayed shut.|Your betrayal was no accident. They needed someone alive to carry the keys upward.
+@scene armor 34 19 33 21 1 36 21
+@scene shadow 15 13 19 16 0
+@scene knock 9 27 11 29 1
+@trace blood 34 16
+@trace blood 34 15
+@trace scratch 36 21
+@trace scratch 19 2
+@trace chains 1 16
+@trace chains 21 21
+@height 29 5 8 6 0.25
+@height 3 7 6 2 -0.25
+@height 28 7 1 1 0.125
+@height 37 7 2 1 0.25
+@height 38 8 1 1 0.25
+@height 3 9 1 4 -0.25
+@height 4 9 3 2 -0.375
+@height 7 9 2 4 -0.25
+@height 9 9 1 1 -0.125
+@height 38 9 1 1 0.125
+@height 1 10 2 1 -0.25
+@height 1 11 1 7 -0.25
+@height 4 11 3 2 -0.25
+@height 19 14 1 1 -0.125
+@height 15 15 9 9 -0.25
+@height 2 17 5 1 -0.25
+@height 27 17 1 1 -0.125
+@height 6 18 1 5 -0.25
+@height 10 18 5 1 -0.25
+@height 24 18 4 1 -0.25
+@height 7 19 4 1 -0.25
+@height 7 22 2 1 -0.25
+@height 9 22 1 1 -0.375
+@height 9 23 1 1 -0.5
+@height 28 23 1 1 -0.125
+@height 9 24 1 1 -0.625
+@height 18 24 1 2 -0.25
+@height 23 24 1 5 -0.25
+@height 28 24 1 2 -0.25
+@height 9 25 1 7 -0.75
+@height 16 25 2 1 -0.25
+@height 24 25 4 1 -0.25
+@height 6 26 3 6 -0.75
+@height 10 26 3 6 -0.75
+@height 16 26 1 1 -0.375
+@height 16 27 1 1 -0.5
+@height 16 28 1 1 -0.625
+@height 24 28 3 1 -0.25
+@height 13 29 4 1 -0.75
+@height 25 29 1 4 -0.25
+@height 24 30 1 3 -0.25
+@height 26 30 2 3 -0.25
+@ceiling 17 1 5 3 1.375
+@ceiling 2 2 3 3 1.25
+@ceiling 5 3 1 1 1
+@ceiling 6 3 5 1 1.125
+@ceiling 10 4 1 3 1.125
+@ceiling 15 4 6 1 1.125
+@ceiling 15 5 1 9 1.125
+@ceiling 20 5 1 3 1.125
+@ceiling 30 5 6 6 2.125
+@ceiling 11 6 1 4 1.125
+@ceiling 29 6 1 4 2.125
+@ceiling 36 6 1 4 2.125
+@ceiling 4 7 4 6 1.625
+@ceiling 21 7 5 1 1.125
+@ceiling 26 7 2 1 1.625
+@ceiling 28 7 1 1 1.125
+@ceiling 37 7 1 1 1.25
+@ceiling 38 7 1 7 1.625
+@ceiling 3 8 1 4 1.625
+@ceiling 8 8 1 4 1.625
+@ceiling 25 8 1 4 1.125
+@ceiling 9 9 1 1 0.875
+@ceiling 10 9 1 1 1.125
+@ceiling 12 9 3 1 1.125
+@ceiling 1 10 1 4 1.125
+@ceiling 2 10 1 1 0.75
+@ceiling 26 11 2 1 1.125
+@ceiling 32 11 1 1 2.125
+@ceiling 27 12 1 7 1.125
+@ceiling 32 12 1 3 1.125
+@ceiling 16 13 4 1 1.125
+@ceiling 36 13 2 1 1.625
+@ceiling 1 14 1 1 0.75
+@ceiling 19 14 1 1 0.875
+@ceiling 28 14 4 1 1.125
+@ceiling 33 14 2 1 1.125
+@ceiling 36 14 1 2 1.625
+@ceiling 1 15 1 3 1.125
+@ceiling 15 15 2 9 1.25
+@ceiling 18 15 3 9 2
+@ceiling 22 15 2 9 1.25
+@ceiling 34 15 1 2 1.125
+@ceiling 35 15 1 1 1.625
+@ceiling 17 16 1 7 2
+@ceiling 21 16 1 7 2
+@ceiling 2 17 5 1 1.125
+@ceiling 34 17 1 1 1
+@ceiling 6 18 1 5 1.125
+@ceiling 10 18 5 1 1.125
+@ceiling 24 18 3 1 1.125
+@ceiling 32 18 6 5 1.375
+@ceiling 7 19 4 1 1.125
+@ceiling 28 20 3 1 1.125
+@ceiling 31 20 1 1 1
+@ceiling 38 20 3 1 1.125
+@ceiling 28 21 1 3 1.125
+@ceiling 7 22 3 1 1.125
+@ceiling 9 23 1 2 1.125
+@ceiling 18 24 1 1 0.75
+@ceiling 23 24 1 5 1.125
+@ceiling 28 24 1 1 0.75
+@ceiling 9 25 1 1 0.25
+@ceiling 16 25 3 1 1.125
+@ceiling 24 25 5 1 1.125
+@ceiling 7 26 5 6 1.125
+@ceiling 16 26 1 4 1.125
+@ceiling 6 27 1 4 1.125
+@ceiling 12 27 1 4 1.125
+@ceiling 24 28 2 1 1.125
+@ceiling 13 29 1 1 0.25
+@ceiling 14 29 2 1 1.125
+@ceiling 25 29 1 1 0.75
+@ceiling 24 30 4 3 1.125
+44444444444444444444444444444444444444444
+44444444444444444.....4444444444444444444
+44T..4L4444444444H...A4444444444444444444
+44.M.Z.....444444.....4444444444444444444
+44..T44444.4444......44444444444444444444
+4444444444.4444.4444.444444444......44444
+4444444444A.444.4444.44444444.A5...G.4444
+4444....444.444.4444........D.....K..D.44
+444.5.A..44.444.444444444.444..Q...^.4.44
+444.>>>Q.D......444444444.444.....5H.4.44
+4.DH===..444444.444444444.4444......44.44
+4.4.SK.5.444444.444444444...4444B44444.44
+4.44....4444444.44444444444.4444.44444.44
+4.4444444444444.....4444444.4444.444...44
+4%44444444444444444R4444444........4.4444
+4.4444444444444444...444444.444444...4444
+4.444444444444444....q44444.444444.444444
+4......4444444445.....V4444.444444D444444
+444444.444....8...555...8...4444......444
+444444.....4444...555.A.44444444.H..A.444
+444444.44444444...555...4444...D...P....X
+444444.444444444.!....544444.444......444
+444444....4444444....F4.4444.444......444
+444444444.44444444...44.4444.444444444444
+444444444.44444444D4444.4444D444444444444
+444444444D444444...4444......444444444444
+4444444.....4444.444444.44444444444444444
+444444.5A.y..444.444444.44444444444444444
+444444.FY..q.444.444444...L44444444444444
+444444....Kw.D...44444444Z444444444444444
+444444..SAH5.44444444444....4444444444444
+4444444.....444444444444T...4444444444444
+444444444444444444444444...T4444444444444
+44444444444444444444444444444444444444444
+44444444444444444444444444444444444444444

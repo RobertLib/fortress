@@ -18,6 +18,7 @@ typedef struct Overlay {
   int tex;
   float wall_x;
   float floor;
+  float ceiling;
 } Overlay;
 
 typedef struct SurfaceTint {

@@ -355,7 +355,7 @@ static void test_rendering(bool screenshots) {
     g = game_create(&lv, n - 1, &session, NULL);
     g->time = 2;
     if (n == 1) {
-      aim(g, 3.25f, 1.5f, 1, 0);
+      aim(g, 5.25f, 28.5f, 1, 0);
       render_view(&r, fb, g); render_hud(&r, fb, g);
       if (screenshots) screenshot(fb, "build/horror-cell.bmp");
     }

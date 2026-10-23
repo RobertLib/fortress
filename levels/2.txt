@@ -1,55 +1,211 @@
-; FORTRESS — floor 2: THE CELLARS
-; 1-6 walls, B bars, D door, R barred door, X gate, P player, K key, H potion, F bread,
-; A bolts, T treasure, M rep. crossbow, G guard, S knight, O captain, V/v bat swarm, C/c war hound, Y/y rat, W/w spider, ^ arrow trap, L lever, Z secret wall
-; Q gunpowder barrel, q ordinary barrel
-; 8 cracked masonry: break with weapons or a powder blast
-; ! open pit: falling in costs a life; walk around it
-; & east-west pendulum, % north-south pendulum: time your crossing
-; = shallow pool, >/< east/west stream, }/{ south/north stream
+; FORTRESS: authored maze, rooms and routes in tools/author_campaign.py.
 @name THE CELLARS
 @surfaces cellars
 @floor #453a2c
 @ceil #1a140e
-@start S
-; Authored hauntings, candle refuges and fragments of the keepers' oath.
+@start E
 @horror 2
-@haven 1 3 1.1
-@haven 23 19 1.2
-@note 3 3 The knocking comes from the old cistern. We drained it yesterday. There is nothing beneath the grating.|When I knock twice, it knocks three times. I have stopped counting.
-@note 24 19 We buried the first keeper below the cellars, his keys chained to his wrist.|The lord ordered every gate locked. By morning the keys were hanging outside his own chamber.
-@scene knock 3 1 7 1 0
-@scene shadow 10 5 15 5 0
-@scene armor 9 9 11 9 1 13 9
-@trace chains 11 5
-@trace blood 10 13
-@trace blood 11 13
-@trace scratch 15 15
-@trace scratch 16 15
-; Static terraces joined by 0.125-high stone steps; no lifts.
-@height 0 4 27 17 -0.125
-@height 0 5 27 16 -0.25
-@height 0 6 27 15 -0.375
-@height 0 7 27 14 -0.5
-@height 0 8 27 13 -0.625
-@height 0 9 27 12 -0.75
-333333333333333333333333333
-3PB..R..B.3...w...D...3.HT3
-1.3.333.3.3.3.3.33333.3Z333
-3...8G3.3.....3.3....SL.D.3
-33.33.3F33.3333T3K1Q..3.3.3
-3...cGL.....T.D.......3.3.3
-3.133Z33333.333..H1333133.3
-1...3.AT1...V..%.T..W...v.3
-3.1.33333..!311.333.33313.1
-3.3..SD.1.....3.3.G.3...3.3
-3.1.333.8TQ.1.3AcGF.3K3.3.3
-3D3.....Y.y.3T.}3.3.3...3.3
-3.3.3333.33.3.q}1D3.333.3.3
-3.1..v....^..===Y.Y.A...3D3
-3.3333333.333===333.13333.3
-3.3.D.......3.^K..YY..y.3A3
-3.3.333A..3D3.3333333.3.3.3
-3A3...3.w.3.3.3...3.D.3.3.3
-3.133.331.3.3G3...q.333H3MX
-3.y.Y.3.G...3...3..H..3...1
-331333311333333333133333333
+; Intake guardroom and exit: 2,2 to 6,5
+; Valve antechamber: 5,9 to 9,13
+; Upper inspection lodge: 14,2 to 18,5
+; Deep crypt, first key: 2,22 to 8,27
+; Cistern with sunken water and raised crossing: 16,11 to 24,20
+; Northern pump house, second key: 29,3 to 35,9
+; Cold store, third key: 29,22 to 36,28
+; Crypt treasury: 2,30 to 4,32
+; Northern concealed cache: 26,1 to 28,2
+; Intake bends before the first encounter: 6,4 -> 11,4 -> 11,8 -> 8,8 -> 8,9
+; First fork through the inspection lodge: 11,4 -> 14,4
+; Lodge to the northern service passage: 18,4 -> 21,4 -> 21,7 -> 25,7 -> 25,5 -> 29,5
+; Barred inspection recess: 16,7 -> 20,7
+; Crypt descent: 6,13 -> 6,17 -> 5,17 -> 5,22
+; Cistern descent turns before revealing the water: 9,11 -> 13,11 -> 13,15 -> 16,15
+; Cistern north stair to the pump route: 20,11 -> 20,7
+; Eastern dry drain below the pump house: 24,17 -> 27,17 -> 27,21 -> 31,21 -> 31,22
+; Drain window faces the cistern: 26,15 -> 27,15 -> 27,17
+; Lower circuit through the cold store: 29,26 -> 25,26 -> 25,30 -> 17,30 -> 17,25 -> 13,25 -> 13,20 -> 8,20 -> 8,24
+; Outer pump stair returns to the cold store: 35,7 -> 38,7 -> 38,16 -> 34,16 -> 34,22
+; Crypt cache approach: 6,27 -> 9,27 -> 9,31 -> 4,31
+; Northern cache approach: 27,5 -> 27,2
+; Broken western drain shortcut: 13,20 -> 13,17 -> 16,17
+; Breakable upper maintenance loop: 16,2 -> 16,1 -> 24,1 -> 24,5 -> 25,5
+; Exit throat: 2,3 -> 0,3
+@haven 3 3 1.15
+@haven 16 3 1.15
+@note 4 3 The knocking comes from the old cistern. We drained it yesterday. There is nothing beneath the grating.|When I knock twice, it knocks three times. I have stopped counting.
+@note 17 4 We buried the first keeper below the cellars, his keys chained to his wrist.|The lord ordered every gate locked. By morning the keys were hanging outside his own chamber.
+@scene knock 8 8 8 11 0
+@scene shadow 14 15 17 15 0
+@scene armor 31 22 30 25 1 35 26
+@trace blood 6 16
+@trace blood 17 16
+@trace scratch 4 3
+@trace scratch 17 4
+@trace chains 14 15
+@trace chains 30 26
+@height 20 8 1 1 -0.125
+@height 20 9 1 1 -0.25
+@height 20 10 1 1 -0.375
+@height 38 10 1 1 -0.125
+@height 16 11 9 2 -0.5
+@height 38 11 1 1 -0.25
+@height 13 12 1 1 -0.125
+@height 38 12 1 1 -0.375
+@height 13 13 1 1 -0.25
+@height 16 13 2 8 -0.5
+@height 18 13 2 2 -0.625
+@height 20 13 1 8 -0.5
+@height 21 13 2 2 -0.625
+@height 23 13 2 8 -0.5
+@height 38 13 1 4 -0.5
+@height 13 14 1 1 -0.375
+@height 13 15 3 1 -0.5
+@height 18 15 2 1 -0.5
+@height 21 15 2 1 -0.5
+@height 25 15 3 1 -0.5
+@height 18 16 2 3 -0.625
+@height 21 16 2 3 -0.625
+@height 27 16 1 6 -0.5
+@height 34 16 4 1 -0.5
+@height 13 17 3 1 -0.5
+@height 25 17 2 1 -0.5
+@height 34 17 1 12 -0.5
+@height 5 18 1 1 -0.125
+@height 13 18 1 8 -0.5
+@height 5 19 1 1 -0.25
+@height 18 19 2 2 -0.5
+@height 21 19 2 2 -0.5
+@height 5 20 1 1 -0.375
+@height 8 20 5 1 -0.5
+@height 5 21 1 12 -0.5
+@height 8 21 1 12 -0.5
+@height 28 21 4 1 -0.5
+@height 2 22 3 11 -0.5
+@height 6 22 2 11 -0.5
+@height 9 22 1 11 -0.5
+@height 29 22 5 7 -0.5
+@height 35 22 2 7 -0.5
+@height 14 25 4 1 -0.5
+@height 17 26 1 5 -0.5
+@height 25 26 4 1 -0.5
+@height 25 27 1 4 -0.5
+@height 18 30 7 1 -0.5
+@ceiling 16 1 9 1 1.125
+@ceiling 26 1 3 2 1.25
+@ceiling 2 2 5 4 1.25
+@ceiling 15 2 3 4 1.375
+@ceiling 24 2 1 4 1.125
+@ceiling 0 3 2 1 1.125
+@ceiling 14 3 1 2 1.375
+@ceiling 18 3 1 2 1.375
+@ceiling 27 3 1 1 1
+@ceiling 30 3 5 7 2
+@ceiling 7 4 1 1 1
+@ceiling 8 4 5 1 1.125
+@ceiling 13 4 1 1 1
+@ceiling 19 4 1 1 1
+@ceiling 20 4 2 1 1.125
+@ceiling 27 4 1 2 1.125
+@ceiling 29 4 1 5 2
+@ceiling 35 4 1 5 2
+@ceiling 11 5 1 4 1.125
+@ceiling 21 5 1 3 1.125
+@ceiling 25 5 2 1 1.125
+@ceiling 28 5 1 1 1
+@ceiling 25 6 1 2 1.125
+@ceiling 16 7 5 1 1.125
+@ceiling 22 7 3 1 1.125
+@ceiling 36 7 1 1 1
+@ceiling 37 7 2 1 1.125
+@ceiling 8 8 3 1 1.125
+@ceiling 20 8 1 2 1.125
+@ceiling 38 8 1 9 1.125
+@ceiling 6 9 3 5 1.5
+@ceiling 5 10 1 3 1.5
+@ceiling 9 10 1 3 1.5
+@ceiling 20 10 1 1 0.625
+@ceiling 10 11 4 1 1.125
+@ceiling 16 11 2 10 1.125
+@ceiling 18 11 5 10 1.875
+@ceiling 23 11 2 10 1.125
+@ceiling 13 12 1 4 1.125
+@ceiling 6 14 1 4 1.125
+@ceiling 14 15 1 1 1.125
+@ceiling 15 15 1 1 0.5
+@ceiling 25 15 1 1 1.875
+@ceiling 26 15 2 1 1.125
+@ceiling 27 16 1 2 1.125
+@ceiling 34 16 4 1 1.125
+@ceiling 5 17 1 4 1.125
+@ceiling 13 17 3 1 1.125
+@ceiling 25 17 2 1 1.125
+@ceiling 34 17 1 3 1.125
+@ceiling 13 18 1 5 1.125
+@ceiling 27 18 1 1 0.5
+@ceiling 27 19 1 1 1.125
+@ceiling 8 20 5 1 1.125
+@ceiling 27 20 1 1 0.5
+@ceiling 34 20 1 1 0.5
+@ceiling 5 21 1 1 0.5
+@ceiling 8 21 1 1 0.5
+@ceiling 27 21 5 1 1.125
+@ceiling 34 21 1 1 1.125
+@ceiling 4 22 3 6 1.25
+@ceiling 8 22 1 2 1.125
+@ceiling 31 22 4 7 1.25
+@ceiling 3 23 1 4 1.25
+@ceiling 7 23 1 4 1.25
+@ceiling 13 23 1 1 0.5
+@ceiling 30 23 1 5 1.25
+@ceiling 35 23 1 5 1.25
+@ceiling 2 24 1 2 1.25
+@ceiling 8 24 1 2 1.25
+@ceiling 13 24 1 2 1.125
+@ceiling 29 24 1 3 1.25
+@ceiling 36 24 1 3 1.25
+@ceiling 14 25 4 1 1.125
+@ceiling 17 26 1 5 1.125
+@ceiling 25 26 3 1 1.125
+@ceiling 28 26 1 1 0.5
+@ceiling 7 27 3 1 1.125
+@ceiling 25 27 1 4 1.125
+@ceiling 9 28 1 4 1.125
+@ceiling 2 30 3 3 1
+@ceiling 18 30 7 1 1.125
+@ceiling 5 31 1 1 0.5
+@ceiling 6 31 3 1 1.125
+33333333333333333333333333333333333333333
+3333333333333333.....8...3T..333333333333
+33..H..33333333...333333.3..T333333333333
+X......3333333.....33333.33Z33.....333333
+33.P.A.D.....D...H.D..33.3L.3.4.....33333
+33.....3333.333...333.33....D..^.S..33333
+33333333333.3333B3333.333.333.A..K..33333
+33333333333.3333.A........333..Q....D..33
+33333333....33333333.33333333.F...4.33.33
+333333...33333333333.333333333.....333.33
+33333.A.F.3333333333R33333333333333333.33
+33333.qcG.....3333.....333333333333333.33
+33333...Q.333.3334...V.433333333333333.33
+333333...3333.33..44.==..3333333333333.33
+333333.333333.33..44.==..3333333333333.33
+333333.333333..D.........B..3333333333.33
+333333.333333333..>>.>>..33.333333.....33
+33333..333333.8...==.44.....333333.333333
+33333.3333333.33..==.44..33%333333.333333
+33333.3333333.3334....A4333.333333.333333
+33333.33......3333.....3333D333333D333333
+33333D33D3333.3333333333333.....33.333333
+3333...3.3333.33333333333333333....333333
+333A..!..3333D3333333333333333......33333
+33.4H....3333.333333333333333.4...q..3333
+33.v.K.4.3333.....33333333333.....W4.3333
+333..y.Y333333333.3333333...D..H..KF.3333
+3333......3333333.3333333.3333..A...33333
+333333333A3333333.3333333.33333....333333
+333333333.3333333.3333333.333333333333333
+33.T.3L33.3333333.........333333333333333
+33.M.Z....3333333333333333333333333333333
+33...333333333333333333333333333333333333
+33333333333333333333333333333333333333333
+33333333333333333333333333333333333333333

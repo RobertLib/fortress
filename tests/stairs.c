@@ -302,8 +302,8 @@ static void test_shipped_levels(const Assets *assets, bool screenshots) {
     if (screenshots) {
       Session session = {.lives = 3, .next_life = 40000};
       Game *g = game_create(&lv, n - 1, &session, NULL);
-      const float views[LEVEL_COUNT][4] = {{1.5f, 3.2f, 0, 1}, {5.5f, 3.5f, 0, 1},
-        {6.5f, 1.5f, 1, 0}, {10.5f, 10.5f, 0, 1}, {7.5f, 1.5f, 1, 0}};
+      const float views[LEVEL_COUNT][4] = {{5.5f, 11.5f, 0, -1}, {20.5f, 7.5f, 0, 1},
+        {15.5f, 10.5f, 1, 0}, {9.5f, 22.5f, 0, 1}, {24.5f, 24.5f, 0, -1}};
       const float *v = views[n - 1];
       g->player.x = v[0]; g->player.y = v[1]; g->player.dir_x = v[2]; g->player.dir_y = v[3];
       g->player.plane_x = -v[3] * .66f; g->player.plane_y = v[2] * .66f;

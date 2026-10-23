@@ -323,7 +323,7 @@ bool game_line_of_sight_3d(const Game *g, float x0, float y0, float z0, float x1
     float exit = minf(1, minf(side_x, side_y));
     float za = z0 + (z1 - z0) * enter, zb = z0 + (z1 - z0) * exit;
     float floor = level_floor_at(g->level, cx, cy);
-    if (minf(za, zb) < floor + .001f || maxf(za, zb) > floor + 1 - .001f) return false;
+    if (minf(za, zb) < floor + .001f || maxf(za, zb) > level_ceiling_at(g->level, cx, cy) - .001f) return false;
     if (cx == tx && cy == ty) return true;
     if (enter > 0) {
       char cell = game_cell(g, cx, cy);
@@ -1019,7 +1019,7 @@ static void update_projectiles(Game *g, float dt) {
       int cx = (int)floorf(a->x), cy = (int)floorf(a->y);
       char cell = game_cell(g, cx, cy);
       float floor = level_floor_at(g->level, cx, cy);
-      if (a->z <= floor || a->z >= floor + 1) { dead = true; break; }
+      if (a->z <= floor || a->z >= level_ceiling_at(g->level, cx, cy)) { dead = true; break; }
       if (cell == 'B' || cell == 'R') continue;
       if (!level_is_open(cell) && !((cell == 'D' || cell == 'Z') && game_door_open_amount(g, cx, cy) > 0.85f)) {
         if (cell == '8') game_hit_wall(g, cx, cy, a->dmg > 0 ? a->dmg : WALL_BOLT_DAMAGE);

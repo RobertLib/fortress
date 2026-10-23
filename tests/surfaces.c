@@ -132,8 +132,8 @@ static void screenshot(const Image *image, const char *path) {
 
 static void test_shipped_levels(const Assets *assets, bool screenshots) {
   static const float viewpoints[LEVEL_COUNT][4] = {
-    {7.5f, 10.5f, 1, 0}, {15.5f, 10.5f, 0, 1}, {11.5f, 9.5f, 1, 0},
-    {13.5f, 17.5f, .6f, .8f}, {8.5f, 15.5f, 1, 0}
+    {20.5f, 10.5f, .8f, -.6f}, {17.5f, 17.5f, 1, 0}, {23.5f, 16.5f, 0, -1},
+    {17.5f, 22.5f, 0, -1}, {23.5f, 19.5f, 0, -1}
   };
   Renderer renderer;
   renderer_init(&renderer, assets);
