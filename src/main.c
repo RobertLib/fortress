@@ -924,6 +924,19 @@ static void title_text(const char *str, float x, float y, float size, const char
   font_draw(fb, str, x, y, size, FONT_BOLD, ALIGN_CENTER, color_parse(color));
 }
 
+static float draw_wordmark(float x, float y, float size, TextAlign align, const char *color) {
+  float emblem_size = size * .96f;
+  float emblem_width = emblem_size * .75f;
+  float gap = size * .32f;
+  float width = emblem_width + gap + font_measure("FORTRESS", size, FONT_BOLD);
+  if (align == ALIGN_CENTER) x -= width / 2;
+  else if (align == ALIGN_RIGHT) x -= width;
+  // Align the shield's visual centre with the capitals, above the text baseline.
+  ui_emblem(fb, x + emblem_width / 2, y - size * .36f - emblem_size / 32, emblem_size);
+  font_draw(fb, "FORTRESS", x + emblem_width + gap, y, size, FONT_BOLD, ALIGN_LEFT, color_parse(color));
+  return width;
+}
+
 static void format_time(char *buf, size_t size, float t) {
   int m = (int)floorf(t / 60);
   int s = (int)floorf(fmodf(t, 60));
@@ -943,10 +956,7 @@ static void draw_menu(Menu m, int index, MenuSpan span) {
       gfx_fill_rect(fb, span.x + 2, top, span.width - 2, .5f, rgba(190, 158, 102, .3f));
       ui_diamond(fb, span.x + span.width - 14, y - l.size * .34f, 2.5f, rgb(205, 174, 119));
     }
-    char number[8];
-    snprintf(number, sizeof number, "%02d", i + 1);
-    text_align(number, span.x + 13, y - 1, 8, selected ? "#bda477" : "#6e777b", ALIGN_LEFT);
-    text_align(m.items[i].label(), span.x + 38, y, l.size, selected ? "#f1e4c8" : "#a9afb0", ALIGN_LEFT);
+    text_align(m.items[i].label(), span.x + 14, y, l.size, selected ? "#f1e4c8" : "#a9afb0", ALIGN_LEFT);
   }
 }
 
@@ -972,10 +982,9 @@ static void draw_center_screen(const char *bg, const char *line) {
   fill(bg);
   for (int y = 0; y < H; y++)
     gfx_fill_rect(fb, 0, y, W, 1, rgba(8, 19, 27, .4f * (1 - y / (float)H)));
-  ui_emblem(fb, W / 2, 135, 46);
-  text("FORTRESS", W / 2, 207, 35, "#e8ddc6");
-  ui_rule(fb, 205, 230, 230);
-  text(line, W / 2, 266, 12, "#acb7b8");
+  float width = draw_wordmark(W / 2.0f, 190, 35, ALIGN_CENTER, "#e8ddc6");
+  ui_rule(fb, (W - width) / 2, 216, width);
+  text(line, W / 2, 252, 12, "#acb7b8");
 }
 
 static void draw_error(void) {
@@ -986,31 +995,27 @@ static void draw_error(void) {
   text("Keep the complete assets and levels folders beside the game.", W / 2, 351, 11, "#9fadb2");
 }
 
-static void screen_card(const char *kicker, const char *title) {
+static void screen_card(const char *title) {
   menu_background();
   gfx_fill_rect(fb, 0, 0, W, H, rgba(3, 8, 13, .76f));
   ui_panel(fb, 110, 35, 420, 326);
-  text(kicker, W / 2, 61, 9, "#a5b0b3");
   title_text(title, W / 2, 101, 27, "#e8dcc3");
   ui_rule(fb, 150, 118, 340);
 }
 
 static void draw_intro(void) {
   menu_background();
-  ui_emblem(fb, 62, 78, 33);
-  text_align("A MEDIEVAL DARK FANTASY", 42, 120, 10, "#bba57e", ALIGN_LEFT);
-  font_draw(fb, "FORTRESS", 40, 172, 48, FONT_BOLD, ALIGN_LEFT, rgb(235, 224, 201));
-  ui_rule(fb, 42, 193, 246);
-  font_draw(fb, "Betrayed. Imprisoned. Still alive.", 42, 229, 13, FONT_REGULAR, ALIGN_LEFT, rgb(188, 194, 191));
-  font_draw(fb, "Five floors between you and freedom.", 42, 251, 12, FONT_REGULAR, ALIGN_LEFT, rgb(150, 162, 165));
+  float width = draw_wordmark(42, 164, 42, ALIGN_LEFT, "#ebe0c9");
+  ui_rule(fb, 42, 185, width);
+  font_draw(fb, "Betrayed. Imprisoned. Still alive.", 42, 219, 13, FONT_REGULAR, ALIGN_LEFT, rgb(188, 194, 191));
+  font_draw(fb, "Five floors between you and freedom.", 42, 241, 12, FONT_REGULAR, ALIGN_LEFT, rgb(150, 162, 165));
   float pulse = .8f + .2f * sinf(clock_time * 2);
-  gfx_fill_rect(fb, 42, 294, 225, 35, rgba(13, 20, 26, .82f));
-  gfx_fill_rect(fb, 42, 294, 2, 35, rgba(205, 174, 119, pulse));
+  gfx_fill_rect(fb, 42, 280, 225, 35, rgba(13, 20, 26, .82f));
+  gfx_fill_rect(fb, 42, 280, 2, 35, rgba(205, 174, 119, pulse));
   char hint[64];
-  snprintf(hint, sizeof hint, "%s  BEGIN YOUR ESCAPE",
+  snprintf(hint, sizeof hint, "%s  MAIN MENU",
            gamepad && gamepad_active ? gamepad_button_name(SDL_GAMEPAD_BUTTON_SOUTH) : "ENTER");
-  text_align(hint, 56, 316, 11, "#e5d4b2", ALIGN_LEFT);
-  text_align("FIVE FLOORS. THREE KEYS. ONE WAY OUT.", 42, 378, 8, "#8f9b9f", ALIGN_LEFT);
+  text_align(hint, 56, 302, 11, "#e5d4b2", ALIGN_LEFT);
 }
 
 static void draw_story(void) {
@@ -1029,9 +1034,8 @@ static void draw_story(void) {
 
 static void draw_main_menu(void) {
   menu_background();
-  ui_emblem(fb, 56, 46, 23);
-  text_align("FORTRESS", 40, 96, 35, "#ebe0c9", ALIGN_LEFT);
-  text_align("THE ROAD TO FREEDOM", 42, 117, 9, "#b5a07b", ALIGN_LEFT);
+  draw_wordmark(40, 94, 35, ALIGN_LEFT, "#ebe0c9");
+  ui_rule(fb, MAIN_MENU_SPAN.x, 116, MAIN_MENU_SPAN.width);
   draw_menu(main_menu(), main_menu_index, MAIN_MENU_SPAN);
   if (notice_timer > 0) text_align(notice, 320, 342, 11, "#ecdbb7", ALIGN_LEFT);
   menu_footer("CONFIRM");
@@ -1039,20 +1043,17 @@ static void draw_main_menu(void) {
 
 static void draw_difficulty(void) {
   menu_background();
-  text_align("BEGIN YOUR ESCAPE", 42, 54, 9, "#b5a07b", ALIGN_LEFT);
   text_align("Choose your fate", 40, 96, 30, "#ebe0c9", ALIGN_LEFT);
   draw_menu(difficulty_menu(), difficulty_menu_index, DIFFICULTY_MENU_SPAN);
   ui_panel(fb, 325, 145, 275, 152);
   if (difficulty_menu_index < DIFFICULTY_COUNT) {
-    static const char *titles[] = {"A glimmer of hope", "Steel your resolve", "No mercy within"};
     static const char *lines[][2] = {{"Weaker foes. Half the damage.", "More bolts for the road ahead."},
-                                     {"The original Fortress challenge.", "Every bolt and every step count."},
-                                     {"Stronger foes. Deadlier encounters.", "Fewer bolts. Make each one count."}};
+                                     {"Standard enemy health and damage.", "Standard bolt supplies."},
+                                     {"Stronger foes. Deadlier encounters.", "Fewer bolts."}};
     int i = difficulty_menu_index;
-    text_align(titles[i], 344, 177, 17, "#e4d2ae", ALIGN_LEFT);
-    ui_rule(fb, 344, 190, 235);
     for (int j = 0; j < 2; j++)
-      font_draw(fb, lines[i][j], 344, 216 + j * 19, 11, FONT_REGULAR, ALIGN_LEFT, rgb(177, 186, 187));
+      font_draw(fb, lines[i][j], 344, 184 + j * 22, 11, FONT_REGULAR, ALIGN_LEFT, rgb(177, 186, 187));
+    ui_rule(fb, 344, 241, 235);
     char buf[80];
     const DifficultySettings *settings = game_difficulty_settings(DIFFICULTY_CHOICES[i]);
     snprintf(buf, sizeof buf, "%d STARTING BOLTS  /  THREE LIVES", (int)round_half_up(16 * settings->ammo));
@@ -1107,13 +1108,13 @@ static void draw_controls(void) {
 }
 
 static void draw_quit(void) {
-  screen_card("THE FORTRESS WILL REMEMBER", "Leave the fortress?");
+  screen_card("Quit the game?");
   ui_emblem(fb, W / 2, 174, 38);
-  font_draw(fb, "Your road will still be here.", W / 2, 225, 14, FONT_REGULAR, ALIGN_CENTER, rgb(178, 189, 191));
+  font_draw(fb, "Unsaved progress will be lost.", W / 2, 225, 14, FONT_REGULAR, ALIGN_CENTER, rgb(178, 189, 191));
   ui_rule(fb, 170, 251, 300);
-  control_hint("ENTER  /  LEAVE", "%s  /  LEAVE", 287, 13, "#e1c99d");
+  control_hint("ENTER  /  QUIT GAME", "%s  /  QUIT GAME", 287, 13, "#e1c99d");
   char hint[80];
-  snprintf(hint, sizeof hint, "%s  /  STAY AND FIGHT",
+  snprintf(hint, sizeof hint, "%s  /  BACK TO MENU",
            gamepad && gamepad_active ? gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST) : "ESC");
   text(hint, W / 2, 322, 11, "#a5b2b6");
 }
@@ -1127,7 +1128,7 @@ static void draw_level_start(void) {
   text(buf, W / 2, 117, 11, "#a7b2b5");
   title_text(game->level->name, W / 2.0f, 165, 36, "#e8dcc4");
   ui_rule(fb, 164, 187, 312);
-  font_draw(fb, "Find three keys. Open the gate. Keep moving.", W / 2, 222, 14, FONT_REGULAR, ALIGN_CENTER,
+  font_draw(fb, "Find three keys. Open the gate.", W / 2, 222, 14, FONT_REGULAR, ALIGN_CENTER,
             rgb(179, 190, 193));
   snprintf(buf, sizeof buf, "%d LIVES    /    %06d SCORE    /    %s", session.lives, session.score,
            game_difficulty_settings(session.difficulty)->name);
@@ -1145,7 +1146,6 @@ static void draw_level_start(void) {
 static void draw_pause_overlay(void) {
   gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(2, 6, 10, .72f));
   ui_panel(fb, 174, 40, 292, 275);
-  text("A MOMENT OF RESPITE", W / 2.0f, 64, 9, "#a59b86");
   title_text("PAUSED", W / 2.0f, 99, 29, "#e6d6b7");
   draw_menu(pause_menu(), pause_menu_index, PAUSE_MENU_SPAN);
   if (notice_timer > 0) text(notice, W / 2.0f, 284, 11, "#ead9b0");
@@ -1163,7 +1163,6 @@ static void draw_death_fade(void) {
 static void draw_died_overlay(void) {
   gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(9, 8, 12, .75f));
   ui_panel(fb, 125, 65, 390, 189);
-  text("THE STONES CLAIM ANOTHER", W / 2, 92, 9, "#b29887");
   title_text("YOU HAVE FALLEN", W / 2, 132, 28, "#ddc4a9");
   ui_rule(fb, 175, 151, 290);
   char lives[48];
@@ -1186,7 +1185,7 @@ static int percent(int part, int whole) { return whole ? (int)round_half_up(100.
 static void draw_level_complete(void) {
   char title[48], time[16], kills[48], treasure[48], secrets[32], bonus[24], score[24];
   snprintf(title, sizeof title, "FLOOR %02d CLEARED", game->level_index + 1);
-  screen_card("ONE GATE CLOSER TO FREEDOM", title);
+  screen_card(title);
 
   format_time(time, sizeof time, game->time);
   snprintf(kills, sizeof kills, "%d/%d  (%d%%)", game->kills, game->total_enemies,
@@ -1206,7 +1205,7 @@ static void draw_level_complete(void) {
 }
 
 static void draw_game_over(void) {
-  screen_card("YOUR ESCAPE ENDS HERE", "GAME OVER");
+  screen_card("GAME OVER");
   ui_emblem(fb, W / 2, 161, 37);
   char buf[64];
   snprintf(buf, sizeof buf, "%06d", session.score);
@@ -1222,8 +1221,7 @@ static void draw_game_over(void) {
 
 static void draw_victory(void) {
   char time[16], kills[48], treasure[48], secrets[32], lives[16], score[24];
-  screen_card("THE LAST GATE IS BEHIND YOU", "BEYOND THE WALLS");
-  font_draw(fb, "You have earned the dawn.", W / 2, 141, 12, FONT_REGULAR, ALIGN_CENTER, rgb(182, 193, 194));
+  screen_card("YOU ESCAPED");
 
   format_time(time, sizeof time, session.total_time);
   snprintf(kills, sizeof kills, "%d/%d  (%d%%)", session.total_kills, session.total_enemies,
@@ -1235,7 +1233,7 @@ static void draw_victory(void) {
   snprintf(score, sizeof score, "%d", session.score);
   const char *rows[][2] = {{"TOTAL TIME", time},  {"KILLS", kills},      {"TREASURE", treasure},
                            {"SECRETS", secrets}, {"LIVES LEFT", lives}, {"FINAL SCORE", score}};
-  stat_rows(rows, 6, 176, 23, 12);
+  stat_rows(rows, 6, 150, 26, 13);
 
   control_hint("ENTER  /  TITLE SCREEN", "%s  /  TITLE SCREEN", 337, 12, "#d8c098");
 }
