@@ -5,7 +5,7 @@
 @ceil #1e1914
 @start N
 @horror 1
-; Prison entry and visible exit: 2,26 to 6,30
+; Prison entry: 2,26 to 6,30
 ; Cell seen through the entry bars; reached on the return loop: 8,27 to 12,29
 ; Guard mess at the first three-way junction: 9,15 to 13,19
 ; Western vestry: 2,11 to 6,15
@@ -25,7 +25,6 @@
 ; Lower key return with two blind turns: 27,24 -> 22,24 -> 22,20 -> 17,20 -> 17,17 -> 13,17
 ; Return through the cell glimpsed at the beginning: 17,20 -> 17,26 -> 12,26 -> 12,28
 ; The cell rejoins the entry from below: 10,29 -> 10,31 -> 6,31 -> 6,30
-; Gate approach: 2,28 -> 0,28
 ; Treasury approach: 5,17 -> 5,19 -> 3,19
 ; Upper treasury aperture: 29,4 -> 29,2
 ; Western breakable return: 6,13 -> 11,13
@@ -37,6 +36,7 @@
 ; Bakers cottage and bread store: 43,14 to 46,16
 ; First emergence into the village square: 36,20 -> 41,20
 ; North lane returns to the guardhouse stair: 36,6 -> 45,6
+; Abbey stair gate at the far end of the north lane: 63,6 -> 65,6
 @haven 3 28 1.15
 @haven 20 9 1.15
 @note 3 27 Keep to the white candles. The Jailer cannot cross their light.|If you hear chains, walk quietly and break his line of sight. A bolt will hold him for a moment. He cannot be killed.
@@ -68,12 +68,14 @@
 @terrain stone 39 0 27 3
 @terrain stone 39 3 6 3
 @terrain cobble 45 3 19 1
-@terrain stone 64 3 2 30
+@terrain stone 64 3 2 3
 @terrain cobble 45 4 8 9
 @terrain stone 53 4 9 8
 @terrain cobble 62 4 2 13
 @terrain cobble 38 6 7 1
+@terrain cobble 64 6 2 1
 @terrain stone 39 7 6 5
+@terrain stone 64 7 2 26
 @terrain stone 39 12 2 8
 @terrain grass 41 12 4 1
 @terrain cobble 53 12 9 5
@@ -111,11 +113,12 @@
 @prop oak 49 23
 @prop urn 44 16
 @prop urn 44 25
-@monk 48 9 BROTHER MATTHIAS|You opened the grain stores for us. The lord called it treason.|The innkeeper hid a gate key in his room. Return to the prison gate; its stair leads beneath the abbey. Follow the white candles.
+@monk 48 9 BROTHER MATTHIAS|You opened the grain stores for us. The lord called it treason.|The innkeeper hid a key in his room. The abbey stair gate stands at the far eastern end of the north lane. Follow the white candles.
 @landmark 51 20 12 VILLAGE WELL
 @landmark 57 7 5 THE EMPTY INN
+@landmark 63 6 3 ABBEY STAIR GATE
 @objective Search the guardhouse and village. Recover three gate keys.
-@destination The prison stair descends to the abbey cistern.
+@destination The far east lane gate descends to the abbey cistern.
 @height 28 1 4 9 0.5
 @height 13 2 1 4 0.5
 @height 14 2 1 1 0.375
@@ -154,7 +157,7 @@
 @ceiling 28 4 5 6 2
 @ceiling 44 4 9 2 1.75
 @ceiling 53 4 9 4 2.125
-@ceiling 62 4 3 27 1.75
+@ceiling 62 4 3 2 1.75
 @ceiling 10 5 1 1 1.5
 @ceiling 11 5 2 1 1.75
 @ceiling 19 5 2 7 1.5
@@ -166,9 +169,12 @@
 @ceiling 35 6 2 1 1.75
 @ceiling 37 6 8 1 1.375
 @ceiling 45 6 8 7 1.75
+@ceiling 62 6 2 25 1.75
+@ceiling 64 6 2 1 1.125
 @ceiling 26 7 1 1 2.25
 @ceiling 36 7 1 14 1.75
 @ceiling 44 7 1 6 1.75
+@ceiling 64 7 1 24 1.75
 @ceiling 5 8 1 1 1.375
 @ceiling 15 8 2 1 1.125
 @ceiling 17 8 1 1 1
@@ -237,7 +243,6 @@
 @ceiling 2 26 5 5 1.25
 @ceiling 12 26 5 1 1.125
 @ceiling 8 27 5 3 1.25
-@ceiling 0 28 2 1 1.125
 @ceiling 42 29 7 2 1.75
 @ceiling 10 30 1 1 1
 @ceiling 6 31 5 1 1.125
@@ -247,7 +252,7 @@
 1111.....1111.1111111.1111111Z1111111112222222.................222
 111..KS...111.1111111R111111.....111111222222........333333333..22
 111....^..D...1111111...11L.....A.11111222222........3.......3..22
-111v....A.1111111111...A.11...K...D..................3.....K.3..22
+111v....A.1111111111...A.11...K...D..................3.....K.3...X
 1111.....1111111111.2.v...B.q.....11.11222222........3.......3..22
 11111D111111111..&...>=>..1.....w.11.11222222........3333D3333..22
 11111.111111111.111..===2.11.....111.11222222........3.Ag....3..22
@@ -269,7 +274,7 @@
 1111D111111111111.111111111.!...A.1111122.3q....3...............22
 11.....11111......111111111.H..A..1111122.3..F..3...............22
 11H....1..A..111111111111111.....11111122.3.....3...............22
-X......B....y111111111111111111111111112223333333..............222
+11.....B....y111111111111111111111111112223333333..............222
 11.PA..1.F.Y.111111111111111111111111112222...................2222
 11.....111D1111111111111111111111111111222222222222222222222222222
 111111.....1111111111111111111111111111222222222222222222222222222

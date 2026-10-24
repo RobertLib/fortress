@@ -19,6 +19,12 @@ landmarks. Local ground materials include grass, earth, cobbles, gravel and
 leaf litter. Roofs occlude a directional night sky. The dimensions below
 describe the retained interior plans, before the district extension.
 
+Each exit stands on the far side of its chapter from the player start:
+the eastern end of the village north lane, the southeast cloister, beyond
+the northwest barrack sleeping ward, beyond the western flooded crypt,
+and above the keep's throne stair. The entry rooms have no exit gates.
+All gates still require three keys; the district connections remain loops.
+
 All five interior floor plans are explicitly authored. They retain the three-key horror maze
 loop, but replace the old tile arrangements and global height bands with local
 stairs, galleries, lowered chambers and carefully framed connections.
@@ -90,7 +96,9 @@ Run `ctest --test-dir build --output-on-failure`. The architecture regression:
 
 - Rejects example floating and dead-end doors and checks every campaign door.
 - Requires substantial enclosed passages alongside the new open districts.
-- Completes all six key orders on every floor, then walks back to and uses the
+- Requires exactly one exit, separated from the start by at least half the
+  map's width or height.
+- Completes all six key orders on every floor, then walks to and uses the
   gate with real movement, use input, door timing, stair traversal and pickups.
 - Keeps barrels and furniture solid; secret walls and breaches stay closed,
   and mirrors are unused during those thirty full routes.

@@ -115,6 +115,8 @@ def village(d):
     d.building('Bakers cottage and bread store', 3, 13, 8, 17, (8, 15), 'EW', '3', 1.625)
     d.connect('First emergence into the village square', (36, 20), (2, 20))
     d.connect('North lane returns to the guardhouse stair', (36, 6), (6, 6))
+    m.route('Abbey stair gate at the far end of the north lane', (d.x+24, 6), (m.w-1, 6))
+    m.thing('X', (m.w-1, 6)); d.surface('cobble', 24, 6, 26, 6)
     for i, z in enumerate([.375, .25, .125, 0]): m.z[6][37+i] = z
     d.key((32, 25), (20, 6))
     d.prop('well', (12, 19)); d.prop('oak', (4, 19), (22, 25), (11, 14), (23, 14))
@@ -124,10 +126,11 @@ def village(d):
     d.thing('F', (5, 15), (6, 26)); d.thing('A', (16, 9), (20, 23)); d.thing('H', (23, 20))
     d.thing('g', (17, 9)); d.thing('G', (19, 20)); d.thing('c', (20, 20)); d.thing('q', (4, 25))
     d.haven(9, 8)
-    d.monk(9, 9, 'BROTHER MATTHIAS', 'You opened the grain stores for us. The lord called it treason.|The innkeeper hid a gate key in his room. Return to the prison gate; its stair leads beneath the abbey. Follow the white candles.')
+    d.monk(9, 9, 'BROTHER MATTHIAS', 'You opened the grain stores for us. The lord called it treason.|The innkeeper hid a key in his room. The abbey stair gate stands at the far eastern end of the north lane. Follow the white candles.')
     d.landmark(12, 20, 12, 'VILLAGE WELL'); d.landmark(18, 7, 5, 'THE EMPTY INN')
+    d.landmark(24, 6, 3, 'ABBEY STAIR GATE')
     d.lines += ['@objective Search the guardhouse and village. Recover three gate keys.',
-                '@destination The prison stair descends to the abbey cistern.']
+                '@destination The far east lane gate descends to the abbey cistern.']
 
 
 def abbey(d):
@@ -142,6 +145,8 @@ def abbey(d):
     d.building('Monastic infirmary', 3, 22, 9, 29, (6, 22), wall='1', ceiling=1.75)
     d.connect('Cistern pump stair opens onto the church porch', (38, 7), (2, 7))
     d.connect('Lower drain returns through the cloister', (34, 26), (2, 26))
+    m.route('Garden service gate beyond the southeast cloister', (d.x+24, 30), (m.w-1, 30))
+    m.thing('X', (m.w-1, 30)); d.surface('cobble', 24, 30, 26, 30)
     # A six-tread stair brings the -0.5 lower drain up into the garden.
     for i, z in enumerate([-.5, -.375, -.25, -.125, 0]): m.z[26][38+i] = z
     m.z[26][37] = -.5
@@ -158,8 +163,9 @@ def abbey(d):
     d.thing('H', (7, 25), (7, 27)); d.thing('F', (4, 27)); d.thing('A', (18, 16), (23, 26))
     d.thing('S', (18, 19)); d.thing('G', (23, 22)); d.thing('v', (19, 12))
     d.landmark(15, 9, 8, 'CHURCH OF SAINT ALDEN'); d.landmark(17, 24, 10, 'THE HERB CLOISTER'); d.landmark(6, 26, 4, 'INFIRMARY')
+    d.landmark(24, 30, 3, 'GARDEN SERVICE GATE')
     d.lines += ['@objective Search the cistern and church. Break the abbey gate seal.',
-                '@destination The service gate leads to the garden ward.']
+                '@destination The southeast cloister gate leads to the garden ward.']
 
 
 def park(d):
@@ -184,11 +190,11 @@ def park(d):
     d.prop('pine',(3,8),(8,4),(14,30),(24,17),(16,24))
     d.prop('table',(18,6)); d.prop('chair',(20,8))
     d.haven(9, 5)
-    d.monk(9,6,'BROTHER PAVEL', 'These paths once fed the village, before the lord locked the grain away.|The gardener carried a key to his lodge. Cross the pond by its stone bridge, or circle the orchard. Both paths return to the barracks.')
+    d.monk(9,6,'BROTHER PAVEL', 'These paths once fed the village, before the lord locked the grain away.|The gardener carried a key to his lodge. Cross the pond or circle the orchard, then seek the burial gate beyond the northwest barrack ward.')
     d.thing('H',(5,27)); d.thing('F',(18,8)); d.thing('A',(14,15),(22,26)); d.thing('G',(18,14)); d.thing('c',(19,14)); d.thing('s',(18,7))
     d.landmark(10,15,12,'THE WALLED PARK'); d.landmark(19,20,5,'THE STONE BRIDGE'); d.landmark(20,7,4,'GARDENERS LODGE')
     d.lines += ['@objective Recover the garrison keys from barracks, armoury and park.',
-                '@destination The burial gate opens onto the old vault road.']
+                '@destination The northwest barrack gate opens onto the old vault road.']
 
 
 def graves(d):
@@ -211,11 +217,11 @@ def graves(d):
     d.prop('oak',(5,30),(19,18),(23,21),(14,20),(5,24),(9,26),(18,24))
     d.prop('pine',(3,4),(13,4),(24,5),(24,9)); d.prop('candelabra',(18,6),(20,6))
     d.key((34,7),(22,26)); d.haven(17,6)
-    d.monk(17,7,'BROTHER TOMAS', 'The missing keeper was buried beneath the stone cross in Blackwood. His key was never returned.|The grave road and forest path meet again at the receiving cell. Take its gate to the keep. Do not follow a voice off the path.')
+    d.monk(17,7,'BROTHER TOMAS', 'The missing keeper was buried beneath the stone cross in Blackwood. His key was never returned.|The gate to the keep lies beyond the flooded crypt at the far western end. Do not follow a voice off the path.')
     d.thing('A',(12,13),(20,27)); d.thing('H',(21,8)); d.thing('F',(18,8)); d.thing('W',(7,25)); d.thing('S',(20,25)); d.thing('v',(9,7))
     d.landmark(8,10,9,'SAINT ALDENS CHURCHYARD'); d.landmark(19,7,5,'THE VIGIL CHAPEL'); d.landmark(14,25,11,'BLACKWOOD'); d.landmark(21,26,3,'THE KEEPERS GRAVE')
     d.lines += ['@objective Find the burial keys in crypt, ossuary and Blackwood.',
-                '@destination The receiving gate climbs to the warlords keep.']
+                '@destination The western crypt gate climbs to the warlords keep.']
 
 
 def last_bell(d):

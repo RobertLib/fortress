@@ -52,10 +52,10 @@ ochrana se automaticky nevztahuje na vojáky a zvířata.
 
 | Kapitola | Povinný cíl v nové oblasti | Návrat a následující cíl |
 | --- | --- | --- |
-| The Outer Ward, 66 × 33 | Po útěku z cely se otevře podhradí. Studna určuje střed náměstí; třetí klíč je uvnitř hostince severovýchodně od ní. Dvě chalupy a tržiště dávají vesnici obytný charakter a skrývají zásoby. | Severní ulice se vrací na hlídkové schodiště. Vězeňská brána po třech klíčích otevře sestup pod opatství. |
-| The Silent Abbey, 68 × 35 | Horní přístup z cisterny míří ke kostelu, dolní odvodňovací cesta vystoupá do klášterní zahrady. Třetí klíč leží vedle oltáře v kostele sv. Aldena. Ošetřovna a dva mniši vysvětlují místo. | Hlavní a boční kostelní dveře dovolují průchod. Zahrada se vrací na dolní okruh cisterny. Služební brána vede ke kasárnám. |
-| The Garden Ward, 70 × 35 | Kasárna a zbrojnice otevřou park s trávníky, studnou a jezírkem. Klíč je v zahradníkově domku u severní větve. | Jezírko lze přejít po suchém kamenném mostku nebo obejít. Východní schodiště a jižní zásobovací cesta vedou zpět na dvě různá místa kasáren. |
-| Blackwood Graves, 68 × 35 | Cesta z přijímací síně sestupuje do krypty a kostnice a vychází na hřbitov. Náhrobky a zádušní kaple předcházejí hustšímu lesu. Klíč leží u kříže na správcově lesním hrobě. | Hřbitovní cesta a lesní průsek mají dvě různá napojení na podzemí. Brána přijímací síně vede na horní hrad. |
+| The Outer Ward, 66 × 33 | Po útěku z cely se otevře podhradí. Studna určuje střed náměstí; třetí klíč je uvnitř hostince severovýchodně od ní. Dvě chalupy a tržiště dávají vesnici obytný charakter a skrývají zásoby. | Severní ulice se vrací na hlídkové schodiště. Brána na jejím vzdáleném východním konci po třech klíčích otevře sestup pod opatství. |
+| The Silent Abbey, 68 × 35 | Horní přístup z cisterny míří ke kostelu, dolní odvodňovací cesta vystoupá do klášterní zahrady. Třetí klíč leží vedle oltáře v kostele sv. Aldena. Ošetřovna a dva mniši vysvětlují místo. | Hlavní a boční kostelní dveře dovolují průchod. Zahrada se vrací na dolní okruh cisterny. Služební brána v jihovýchodním rohu ambitu vede ke kasárnám. |
+| The Garden Ward, 70 × 35 | Kasárna a zbrojnice otevřou park s trávníky, studnou a jezírkem. Klíč je v zahradníkově domku u severní větve. | Jezírko lze přejít po suchém kamenném mostku nebo obejít. Východní schodiště a jižní zásobovací cesta vedou zpět na dvě různá místa kasáren. Východ je za severozápadní ložnicí, přes mapu od jižního vstupu. |
+| Blackwood Graves, 68 × 35 | Cesta z přijímací síně sestupuje do krypty a kostnice a vychází na hřbitov. Náhrobky a zádušní kaple předcházejí hustšímu lesu. Klíč leží u kříže na správcově lesním hrobě. | Hřbitovní cesta a lesní průsek mají dvě různá napojení na podzemí. Brána za zatopenou kryptou na vzdáleném západním konci vede na horní hrad. |
 | The Last Bell, 72 × 37 | Kaple a zbrojnice hradu vedou do otevřeného horního nádvoří. Poslední oblastní klíč je u oltáře v domě správce zvonu. | Nádvoří spojuje věžní cestu se zásobovacím přístupem zbrojnice. Finální návrat stoupá trůnní lodí do apsidy a na odkrytý úsek za poslední branou. |
 
 V každé kapitole jsou právě tři klíče. Jeden byl přemístěn do nové čtvrti;
@@ -64,6 +64,10 @@ oblasti jsou povinnou součástí průzkumu. Každá má dva samostatné fyzick�
 přístupy do staršího okruhu. Žádný klíč nevyžaduje tajné dveře, teleport
 ani rozbití zdi. Obě tajné skrýše a oba průlomy v každé kapitole zůstávají
 nepovinnými odměnami a zkratkami.
+
+Východ každé kapitoly leží na opačné straně mapy od začátku. Vstupní
+místnosti neobsahují výstupní bránu; rozhovory a popis následujícího cíle
+ukazují na její nové umístění. Každá brána stále vyžaduje všechny tři klíče.
 
 ### Rytmus, boj a zásoby
 

@@ -139,7 +139,7 @@ class Map:
 
 def guardhouse():
     m = Map(1, 'GUARDHOUSE', 'guardhouse', 39, 33, '1', ('#4a4038', '#1e1914'))
-    m.box('Prison entry and visible exit', 2, 26, 6, 30, ceiling=1.25)
+    m.box('Prison entry', 2, 26, 6, 30, ceiling=1.25)
     m.box('Cell seen through the entry bars; reached on the return loop', 8, 27, 12, 29, ceiling=1.25)
     m.box('Guard mess at the first three-way junction', 9, 15, 13, 19, cut=1, ceiling=1.625)
     m.box('Western vestry', 2, 11, 6, 15, cut=1, ceiling=1.75)
@@ -160,7 +160,6 @@ def guardhouse():
     m.route('Lower key return with two blind turns', (27,24), (22,24), (22,20), (17,20), (17,17), (13,17))
     m.route('Return through the cell glimpsed at the beginning', (17,20), (17,26), (12,26), (12,28))
     m.route('The cell rejoins the entry from below', (10,29), (10,31), (6,31), (6,30))
-    m.route('Gate approach', (2,28), (0,28))
     m.route('Treasury approach', (5,17), (5,19), (3,19))
     m.route('Upper treasury aperture', (29,4), (29,2))
     m.route('Western breakable return', (6,13), (11,13))
@@ -185,7 +184,7 @@ def guardhouse():
                           (30,21,'NS','D'), (26,24,'EW','D'), (14,17,'EW','D'),
                           (10,30,'NS','D'), (4,19,'EW','Z'), (29,3,'NS','Z')]:
         m.door(x,y,axis,kind)
-    m.thing('8',(8,13),(25,17)); m.thing('X',(0,28)); m.thing('P',(3,29))
+    m.thing('8',(8,13),(25,17)); m.thing('P',(3,29))
     m.thing('K',(5,4),(30,6),(32,25))
     m.thing('=',(22,8),(21,9),(22,9),(23,9)); m.thing('>',(21,8),(23,8))
     m.thing('!',(28,25)); m.thing('&',(17,8)); m.roof(17,8,17,8,1)
@@ -206,7 +205,7 @@ def guardhouse():
 
 def cellars():
     m = Map(2, 'THE CELLARS', 'cellars', 41, 35, '3', ('#453a2c', '#1a140e'), 'E')
-    m.box('Intake guardroom and exit',2,2,6,5,ceiling=1.25)
+    m.box('Intake guardroom',2,2,6,5,ceiling=1.25)
     m.box('Valve antechamber',5,9,9,13,cut=1,ceiling=1.5)
     m.box('Upper inspection lodge',14,2,18,5,cut=1,ceiling=1.375)
     m.box('Deep crypt, first key',2,22,8,27,cut=2,ceiling=1.25)
@@ -230,7 +229,6 @@ def cellars():
     m.route('Northern cache approach',(27,5),(27,2))
     m.route('Broken western drain shortcut',(13,20),(13,17),(16,17))
     m.route('Breakable upper maintenance loop',(16,2),(16,1),(24,1),(24,5),(25,5))
-    m.route('Exit throat',(2,3),(0,3))
     m.floor(2,22,9,32,-.5);m.floor(16,11,24,20,-.5)
     m.steps(5,18,0,1,[-.125,-.25,-.375,-.5])
     m.steps(13,12,0,1,[-.125,-.25,-.375,-.5]);m.floor(14,15,15,15,-.5)
@@ -256,7 +254,7 @@ def cellars():
                            (15,15,'EW','D'),(20,10,'NS','R'),(28,5,'EW','D'),(36,7,'EW','D'),
                            (27,20,'NS','D'),(28,26,'EW','D'),(13,23,'NS','D'),(8,21,'NS','D'),
                            (34,20,'NS','D'),(5,31,'EW','Z'),(27,3,'NS','Z')]:m.door(x,y,axis,kind)
-    m.thing('8',(14,17),(21,1));m.thing('P',(3,4));m.thing('X',(0,3))
+    m.thing('8',(14,17),(21,1));m.thing('P',(3,4))
     m.thing('K',(5,25),(33,6),(34,26))
     for y in range(13,19):
         for x in range(18,23):
@@ -304,7 +302,7 @@ def barracks():
     m.route('Southern cache aperture',(31,30),(31,25))
     m.route('Breakable lower hall return',(17,17),(20,17))
     m.route('Breakable chapel service passage',(24,20),(30,20),(30,16))
-    m.route('Exit throat',(39,30),(42,30))
+    m.route('Burial gate beyond the northwest sleeping ward',(6,3),(6,0))
     m.floor(32,3,38,8,.75);m.floor(28,5,31,5,.75);m.floor(27,5,27,10,.75);m.floor(21,10,26,10,.75)
     m.steps(20,10,-1,0,[.625,.5,.375,.25,.125,0]);m.steps(34,9,0,1,[.625,.5,.375,.25,.125,0])
     m.floor(39,5,40,5,.75);m.floor(40,6,40,9,.75);m.steps(40,10,0,1,[.625,.5,.375,.25,.125,0])
@@ -321,7 +319,7 @@ def barracks():
                            (26,15,'EW','D'),(9,25,'EW','D'),(5,23,'NS','D'),(8,13,'NS','D'),(8,9,'NS','D'),
                            (9,5,'EW','D'),(31,5,'EW','D'),(34,9,'NS','D'),(39,5,'EW','D'),
                            (19,30,'EW','R'),(13,29,'EW','D'),(15,4,'NS','Z'),(31,26,'NS','Z')]:m.door(x,y,axis,kind)
-    m.thing('8',(19,17),(28,20));m.thing('P',(37,30));m.thing('X',(42,30))
+    m.thing('8',(19,17),(28,20));m.thing('P',(37,30));m.thing('X',(6,0))
     m.thing('K',(5,27),(36,5),(22,23))
     for x in [15,16,17]:
         m.thing('=',(x,28));m.thing('>' if x!=16 else '=',(x,29))
@@ -343,7 +341,7 @@ def barracks():
 
 def vault():
     m=Map(4,'THE VAULT','vault',41,35,'4',('#3c3f42','#15171a'),'W')
-    m.box('Eastern receiving cell and exit',32,18,37,22,ceiling=1.375)
+    m.box('Eastern receiving cell',32,18,37,22,ceiling=1.375)
     m.box('Western flooded crypt, first key',3,7,8,12,cut=1,ceiling=1.625)
     m.box('Deep burial stack, second key',6,26,12,31,cut=1,ceiling=1.125)
     m.box('Upper northeastern reliquary, third key',29,5,36,10,cut=1,ceiling=2.125)
@@ -364,7 +362,8 @@ def vault():
     m.route('Southern cache approach',(23,25),(23,28),(25,28),(25,30))
     m.route('Western ossuary breach through the burial partition',(6,19),(10,19),(10,18),(15,18))
     m.route('Eastern ossuary breach and short service stair',(23,18),(27,18),(27,14))
-    m.route('Exit throat',(37,20),(40,20))
+    m.route('Keep gate beyond the western flooded crypt',(3,8),(0,8))
+    m.floor(0,8,2,8,-.25)
     m.floor(3,7,8,12,-.25);m.floor(2,10,2,10,-.25);m.steps(9,9,1,0,[-.125,0])
     m.floor(1,10,1,17,-.25);m.floor(2,17,6,17,-.25);m.floor(6,18,6,22,-.25);m.floor(7,22,8,22,-.25)
     m.steps(9,22,0,1,[-.375,-.5,-.625,-.75]);m.floor(6,26,12,31,-.75)
@@ -385,7 +384,7 @@ def vault():
                            (9,25,'NS','D'),(13,29,'EW','D'),(18,24,'NS','D'),(19,14,'NS','R'),
                            (28,24,'NS','D'),(28,7,'EW','D'),(37,7,'EW','D'),
                            (5,3,'EW','Z'),(25,29,'NS','Z')]:m.door(x,y,axis,kind)
-    m.thing('8',(14,18),(24,18));m.thing('P',(35,20));m.thing('X',(40,20))
+    m.thing('8',(14,18),(24,18));m.thing('P',(35,20));m.thing('X',(0,8))
     m.thing('K',(5,11),(10,29),(34,7))
     for y in [9,10]:
         for x in [4,5,6]:m.thing('>' if y==9 else '=',(x,y))

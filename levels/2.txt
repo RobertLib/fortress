@@ -5,7 +5,7 @@
 @ceil #1a140e
 @start E
 @horror 2
-; Intake guardroom and exit: 2,2 to 6,5
+; Intake guardroom: 2,2 to 6,5
 ; Valve antechamber: 5,9 to 9,13
 ; Upper inspection lodge: 14,2 to 18,5
 ; Deep crypt, first key: 2,22 to 8,27
@@ -29,7 +29,6 @@
 ; Northern cache approach: 27,5 -> 27,2
 ; Broken western drain shortcut: 13,20 -> 13,17 -> 16,17
 ; Breakable upper maintenance loop: 16,2 -> 16,1 -> 24,1 -> 24,5 -> 25,5
-; Exit throat: 2,3 -> 0,3
 ; Abbey cloister and herb garden: 43,13 to 65,31
 ; West processional way: 43,3 to 49,17
 ; East processional way: 62,3 to 65,19
@@ -38,6 +37,7 @@
 ; Monastic infirmary: 45,23 to 49,28
 ; Cistern pump stair opens onto the church porch: 38,7 -> 43,7
 ; Lower drain returns through the cloister: 34,26 -> 43,26
+; Garden service gate beyond the southeast cloister: 65,30 -> 67,30
 @haven 3 3 1.15
 @haven 16 3 1.15
 @note 4 3 The knocking comes from the old cistern. We drained it yesterday. There is nothing beneath the grating.|When I knock twice, it knocks three times. I have stopped counting.
@@ -69,7 +69,7 @@
 @terrain stone 49 3 15 12
 @terrain cobble 64 3 1 14
 @terrain gravel 65 3 1 18
-@terrain stone 66 3 2 32
+@terrain stone 66 3 2 27
 @terrain cobble 40 7 4 1
 @terrain gravel 44 7 4 14
 @terrain stone 41 8 2 18
@@ -84,7 +84,7 @@
 @terrain gravel 50 18 2 3
 @terrain gravel 59 18 3 3
 @terrain grass 43 21 9 1
-@terrain grass 59 21 7 11
+@terrain grass 59 21 7 9
 @terrain grass 43 22 1 4
 @terrain stone 44 22 7 8
 @terrain grass 51 22 1 10
@@ -92,6 +92,10 @@
 @terrain stone 41 27 2 8
 @terrain grass 43 27 1 5
 @terrain grass 44 30 7 2
+@terrain grass 59 30 6 2
+@terrain cobble 65 30 3 1
+@terrain grass 65 31 1 1
+@terrain stone 66 31 2 4
 @terrain stone 43 32 23 3
 @prop altar 56 5
 @prop cross 56 4
@@ -117,8 +121,9 @@
 @landmark 56 9 8 CHURCH OF SAINT ALDEN
 @landmark 58 24 10 THE HERB CLOISTER
 @landmark 47 26 4 INFIRMARY
+@landmark 65 30 3 GARDEN SERVICE GATE
 @objective Search the cistern and church. Break the abbey gate seal.
-@destination The service gate leads to the garden ward.
+@destination The southeast cloister gate leads to the garden ward.
 @height 20 8 1 1 -0.125
 @height 20 9 1 1 -0.25
 @height 20 10 1 1 -0.375
@@ -176,14 +181,13 @@
 @ceiling 15 2 3 4 1.375
 @ceiling 24 2 1 4 1.125
 @ceiling 42 2 25 1 1.75
-@ceiling 0 3 2 1 1.125
 @ceiling 14 3 1 2 1.375
 @ceiling 18 3 1 2 1.375
 @ceiling 27 3 1 1 1
 @ceiling 30 3 5 7 2
 @ceiling 42 3 7 4 1.75
 @ceiling 49 3 15 4 3.25
-@ceiling 64 3 3 30 1.75
+@ceiling 64 3 3 27 1.75
 @ceiling 7 4 1 1 1
 @ceiling 8 4 5 1 1.125
 @ceiling 13 4 1 1 1
@@ -272,12 +276,15 @@
 @ceiling 9 28 1 4 1.125
 @ceiling 2 30 3 3 1
 @ceiling 18 30 7 1 1.125
+@ceiling 64 30 2 3 1.75
+@ceiling 66 30 2 1 1.125
 @ceiling 5 31 1 1 0.5
 @ceiling 6 31 3 1 1.125
+@ceiling 66 31 1 2 1.75
 33333333333333333333333333333333333333333222222222222222222222222222
 3333333333333333.....8...3T..333333333333222222222222222222222222222
 33..H..33333333...333333.3..T333333333333222222222222222222222222222
-X......3333333.....33333.33Z33.....33333322......111111111111111..22
+33.....3333333.....33333.33Z33.....33333322......111111111111111..22
 33.P.A.D.....D...H.D..33.3L.3.4.....3333322......1.............1..22
 33.....3333.333...333.33....D..^.S..3333322......1.......K.....1..22
 33333333333.3333B3333.333.333.A..K..3333322......1.1.........1.1..22
@@ -304,7 +311,7 @@ X......3333333.....33333.33Z33.....33333322......111111111111111..22
 3333......3333333.3333333.3333..A...3333322.1F..H.1...............22
 333333333A3333333.3333333.33333....33333322.1.....1...............22
 333333333.3333333.3333333.33333333333333322.1111111...............22
-33.T.3L33.3333333.........33333333333333322.......................22
+33.T.3L33.3333333.........33333333333333322........................X
 33.M.Z....3333333333333333333333333333333222.....................222
 33...333333333333333333333333333333333333222222222222222222222222222
 33333333333333333333333333333333333333333222222222222222222222222222

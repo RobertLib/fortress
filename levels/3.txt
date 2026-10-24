@@ -30,7 +30,7 @@
 ; Southern cache aperture: 31,30 -> 31,25
 ; Breakable lower hall return: 17,17 -> 20,17
 ; Breakable chapel service passage: 24,20 -> 30,20 -> 30,16
-; Exit throat: 39,30 -> 42,30
+; Burial gate beyond the northwest sleeping ward: 6,3 -> 6,0
 ; Walled park, lawns and orchard: 45,3 to 67,31
 ; Gardeners lodge at the northern fork: 60,5 to 65,9
 ; Barrack east stair opens onto the park: 40,15 -> 45,15
@@ -121,12 +121,12 @@
 @prop pine 59 24
 @prop table 61 6
 @prop chair 63 8
-@monk 52 6 BROTHER PAVEL|These paths once fed the village, before the lord locked the grain away.|The gardener carried a key to his lodge. Cross the pond by its stone bridge, or circle the orchard. Both paths return to the barracks.
+@monk 52 6 BROTHER PAVEL|These paths once fed the village, before the lord locked the grain away.|The gardener carried a key to his lodge. Cross the pond or circle the orchard, then seek the burial gate beyond the northwest barrack ward.
 @landmark 53 15 12 THE WALLED PARK
 @landmark 62 20 5 THE STONE BRIDGE
 @landmark 63 7 4 GARDENERS LODGE
 @objective Recover the garrison keys from barracks, armoury and park.
-@destination The burial gate opens onto the old vault road.
+@destination The northwest barrack gate opens onto the old vault road.
 @height 32 3 7 6 0.75
 @height 27 5 5 1 0.75
 @height 39 5 2 1 0.75
@@ -157,6 +157,7 @@
 @height 25 26 1 1 0.125
 @height 14 27 5 5 -0.125
 @height 12 29 2 1 -0.125
+@ceiling 6 0 1 3 1.125
 @ceiling 14 1 4 3 1.25
 @ceiling 44 2 25 8 1.75
 @ceiling 4 3 4 6 1.5
@@ -252,10 +253,9 @@
 @ceiling 28 30 3 1 1.125
 @ceiling 32 30 1 1 1.125
 @ceiling 33 30 1 1 1
-@ceiling 40 30 3 1 1.125
-2222222222222222222222222222222222222222222222222222222222222222222222
-22222222222222T...2222222222222222222222222222222222222222222222222222
-22222222222222..M.2222222222222222222222222222222222222222222222222222
+222222X222222222222222222222222222222222222222222222222222222222222222
+222222.2222222T...2222222222222222222222222222222222222222222222222222
+222222.2222222..M.2222222222222222222222222222222222222222222222222222
 2222....222222...T222222222222222.....2222222222.................22222
 222......2222L2Z2222222222222222.......22222222............33333333222
 222...G..D......22222222222....D.A.SK..D.22222.............3......3222
@@ -283,7 +283,7 @@
 222.qK.Q.2.2222.Y.2222222D22222.2222D22222222...H...................22
 222.H..4.2.222.===.2222.....22L.22......22222.......................22
 2222....22...D.>=>y2222.A...222.22.H....222222.....................222
-22222222222222...F.R.....G.......D...P....X2222...................2222
+22222222222222...F.R.....G.......D...P..2222222...................2222
 222222222222222..A22222.....222222....A.22222222.................22222
 2222222222222222222222222222222222......222222222222222222222222222222
 2222222222222222222222222222222222222222222222222222222222222222222222

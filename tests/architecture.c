@@ -252,14 +252,17 @@ static int play_floor(Level *lv, int n, const int order[3], bool report) {
   Session session = {.lives = 3, .next_life = 40000};
   Game *g = game_create(lv, n - 1, &session, NULL);
   g->enemy_count = 0;
-  int keys[3], key_count = 0, gate = -1, doors_used = 0, turns = 0;
+  int keys[3], key_count = 0, gate = -1, gate_count = 0, doors_used = 0, turns = 0;
   for (int i = 0; i < lv->item_count; i++)
     if (lv->items[i].kind == ITEM_KEY) {
       CHECK(key_count < 3);
       keys[key_count++] = (int)lv->items[i].y * lv->w + (int)lv->items[i].x;
     }
-  for (int i = 0; i < lv->w * lv->h; i++) if (lv->grid[i] == 'X') gate = i;
-  CHECK(key_count == 3 && gate >= 0);
+  for (int i = 0; i < lv->w * lv->h; i++) if (lv->grid[i] == 'X') { gate = i; gate_count++; }
+  CHECK(key_count == 3 && gate_count == 1);
+  // The exit belongs on the far side of the level, away from the entry room.
+  CHECK(abs(gate % lv->w - (int)lv->start_x) >= lv->w / 2 ||
+        abs(gate / lv->w - (int)lv->start_y) >= lv->h / 2);
   int *path = malloc((size_t)lv->w * lv->h * sizeof(int));
   for (int i = 0; i < 3; i++) {
     int length = find_path(g, keys[i], path);
