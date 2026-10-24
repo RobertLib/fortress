@@ -197,7 +197,7 @@ void game_add_score(Game *g, int n) {
   s->score += n;
   while (s->score >= s->next_life) {
     s->next_life += EXTRA_LIFE_EVERY;
-    if (s->arcade || !g->level->campaign.enabled) {
+    if (s->arcade) {
       s->lives++;
       audio_play(SND_EXTRA_LIFE, 1, 1);
       game_say(g, "EXTRA LIFE!", 2.2f);

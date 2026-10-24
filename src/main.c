@@ -80,7 +80,7 @@ static int gamepad_menu_direction;
 static float gamepad_menu_timer;
 static State options_return=ST_MENU,slots_return=ST_MENU;
 static int options_page,options_row,binding_row,slot_row,selected_slot;
-static bool binding_wait,slot_save_mode;
+static bool binding_wait,slot_save_mode,slots_capture_mouse;
 static float autosave_timer;
 static Persist story_retry_equipment;
 static float combat_music_tail;
@@ -88,6 +88,8 @@ static char *manual_paths[2],*automatic_path,*checkpoint_path;
 static SaveInfo slot_info[5];
 static bool slot_valid[5];
 static void refresh_save_slots(void);
+static void open_slots(bool saving);
+static void save_preferences(void);
 static void checkpoint_game(void);
 static bool restore_checkpoint(void);
 static bool safe_to_autosave(void);
@@ -96,9 +98,19 @@ static const char *gamepad_button_name(SDL_GamepadButton button);
 
 // ------------------------------------------------------------------ helpers
 
-static bool fullscreen(void) { return (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0; }
+static bool fullscreen(void) { return window && (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0; }
 
-static void toggle_fullscreen(void) { SDL_SetWindowFullscreen(window, !fullscreen()); }
+static void toggle_fullscreen(void) {
+  bool on=!fullscreen();
+  if (SDL_SetWindowFullscreen(window,on)) preferences_get()->fullscreen=on;
+}
+
+static void apply_preferences(void) {
+  const Preferences *p=preferences_get();
+  audio_set_mix(p->effects,p->music);
+  audio_set_enabled(p->sound);
+  if (window && fullscreen()!=p->fullscreen) SDL_SetWindowFullscreen(window,p->fullscreen);
+}
 
 static bool mouse_captured(void) { return SDL_GetWindowRelativeMouseMode(window); }
 
@@ -201,8 +213,7 @@ static void restart_level(void) {
   session.total_treasure = maxi(0, session.total_treasure - game->treasure);
   session.total_secrets_found = maxi(0, session.total_secrets_found - game->secrets_found);
   Persist equipment = story_retry_equipment;
-  start_level(game->level_index,
-              !session.arcade && game->level->campaign.enabled ? &equipment : NULL);
+  start_level(game->level_index, !session.arcade ? &equipment : NULL);
 }
 
 static void next_level(void) {
@@ -261,27 +272,15 @@ static void notify_save(const char *message) {
 }
 
 static void act_save_game(void) {
-  const char *path = slot_path(selected_slot);
-  char err[96];
-  if (!path)
-    notify_save("SAVE FOLDER UNAVAILABLE");
-  else if (savegame_write(path, game, err, sizeof err)) {
-    blip();
-    notify_save("GAME SAVED");
-  } else
-    notify_save(err);
+  if (!game || game->player_dead || game->completed) {
+    notify_save("SAVE DURING A LIVE GAME");
+    return;
+  }
+  open_slots(true);
 }
 
 static void act_load_game(void) {
-  const char *path = slot_path(selected_slot);
-  char err[96];
-  if (!path) {
-    notify_save("SAVE FOLDER UNAVAILABLE");
-  } else if (savegame_load(path, levels, levels_loaded, &game, &session, err, sizeof err)) {
-    finish_load_game();
-  } else {
-    notify_save(err);
-  }
+  open_slots(false);
 }
 
 static void checkpoint_game(void) {
@@ -368,9 +367,6 @@ static const char *label_save_game(void) { return "SAVE GAME"; }
 static const char *label_load_game(void) { return "LOAD GAME"; }
 static const char *label_controls(void) { return "CONTROLS"; }
 static const char *label_options(void) { return "OPTIONS"; }
-static const char *label_slots(void) { return "SAVE SLOTS"; }
-static const char *label_sound(void) { return audio_enabled() ? "SOUND: ON" : "SOUND: OFF"; }
-static const char *label_fullscreen(void) { return fullscreen() ? "FULLSCREEN: ON" : "FULLSCREEN: OFF"; }
 static const char *label_quit(void) { return "QUIT GAME"; }
 static const char *label_resume(void) { return "RESUME"; }
 static const char *label_quit_to_menu(void) { return "QUIT TO MENU"; }
@@ -411,62 +407,74 @@ static void act_controls(void) {
 static void act_options(void) {
   options_return=state; options_page=0; options_row=0; set_state(ST_OPTIONS); blip();
 }
-static void act_slots(void) {
-  slots_return=state; slot_save_mode=state==ST_PAUSED; slot_row=selected_slot;
+static int slot_count(void) { return slot_save_mode?3:5; }
+static void open_slots(bool saving) {
+  if (state!=ST_SLOTS) {
+    slots_return=state;
+    slots_capture_mouse=state==ST_PLAYING && mouse_captured();
+  }
+  slot_save_mode=saving; slot_row=selected_slot;
   refresh_save_slots();
-  set_state(ST_SLOTS); blip();
+  set_state(ST_SLOTS); capture_mouse(false); blip();
+}
+static void close_slots(void) {
+  set_state(slots_return);
+  capture_mouse(slots_return==ST_PLAYING && slots_capture_mouse);
 }
 static void save_preferences(void) {
   char *path=user_file("options.cfg");
   if (!path || !preferences_save(path)) notify_save("COULD NOT SAVE OPTIONS");
   free(path);
 }
-static int option_rows(void) { static const int rows[]={4,2,3,3}; return rows[options_page]; }
+static int option_rows(void) { static const int rows[]={5,3,3,3}; return rows[options_page]; }
+static bool option_is_button(void) {
+  return ((options_page==0 || options_page==1) && options_row==0) ||
+    options_page==2 || (options_page==3 && options_row>0);
+}
 static void adjust_option(int direction) {
   Preferences *p=preferences_get();
-  if (options_page==0) {
+  if (options_page==0 && options_row==0) toggle_fullscreen();
+  else if (options_page==0) {
     int *values[]={&p->brightness,&p->bob,&p->shake,&p->text};
     int lo[]={70,0,0,100},hi[]={140,100,100,150},step[]={10,25,25,25};
-    *values[options_row]=clampi(*values[options_row]+step[options_row]*direction,lo[options_row],hi[options_row]);
+    int row=options_row-1;
+    *values[row]=clampi(*values[row]+step[row]*direction,lo[row],hi[row]);
+  } else if (options_page==1 && options_row==0) {
+    p->sound=!p->sound; audio_set_enabled(p->sound);
   } else if (options_page==1) {
-    int *value=options_row==0?&p->effects:&p->music;
+    int *value=options_row==1?&p->effects:&p->music;
     *value=clampi(*value+5*direction,0,100);
     audio_set_mix(p->effects,p->music);
   } else if (options_page==2) {
     bool *values[]={&p->tutorials,&p->autosave,&p->arcade}; *values[options_row]=!*values[options_row];
   } else if (options_row==0) p->sensitivity=clampi(p->sensitivity+25*direction,25,250);
   else if (options_row==1) { binding_row=0; binding_wait=false; set_state(ST_BINDINGS); }
-  else { preferences_defaults(); audio_set_mix(p->effects,p->music); }
+  else { preferences_defaults(); apply_preferences(); }
   blip();
 }
 static void activate_slot(void) {
+  if (slot_row<0 || slot_row>=slot_count()) return;
   const char *path=slot_path(slot_row); char err[96];
   if (!path) { notify_save("SAVE FOLDER UNAVAILABLE"); return; }
-  if (slot_save_mode && slot_row<3) {
-    if (savegame_write(path,game,err,sizeof err)) { selected_slot=slot_row; refresh_save_slots(); notify_save("GAME SAVED"); blip(); }
+  if (slot_save_mode) {
+    if (savegame_write(path,game,err,sizeof err)) {
+      selected_slot=slot_row; refresh_save_slots(); close_slots(); notify_save("GAME SAVED"); blip();
+    }
     else notify_save(err);
-  } else if (!slot_save_mode) {
+  } else {
     if (savegame_load(path,levels,levels_loaded,&game,&session,err,sizeof err)) {
       if (slot_row<3) selected_slot=slot_row;
+      if (slots_return==ST_OPTIONS || slots_return==ST_BINDINGS) save_preferences();
       finish_load_game();
+      capture_mouse(slots_return==ST_PLAYING && slots_capture_mouse);
     } else notify_save(err);
-  } else notify_save("AUTOMATIC SLOTS ARE READ ONLY");
+  }
 }
 static void refresh_save_slots(void) {
   for (int i=0;i<5;i++) {
     const char *path=slot_path(i);
     slot_valid[i]=path && savegame_inspect(path,levels,levels_loaded,&slot_info[i]);
   }
-}
-
-static void act_sound(void) {
-  audio_set_enabled(!audio_enabled());
-  blip();
-}
-
-static void act_fullscreen(void) {
-  blip();
-  toggle_fullscreen();
 }
 
 static void act_quit(void) {
@@ -488,18 +496,14 @@ static void act_quit_to_menu(void) {
 
 static const MenuItem MAIN_MENU_FULL[] = {
     {label_continue, act_continue}, {label_new_game, act_new_game}, {label_load_game, act_load_game},
-    {label_controls, act_controls}, {label_sound, act_sound},       {label_fullscreen, act_fullscreen},
-    {label_options,act_options}, {label_slots,act_slots}, {label_quit, act_quit},
+    {label_controls, act_controls}, {label_options,act_options}, {label_quit, act_quit},
 };
 
 static const MenuItem PAUSE_MENU[] = {
     {label_resume, act_resume},
     {label_save_game, act_save_game},
     {label_load_game, act_load_game},
-    {label_slots,act_slots},
     {label_options,act_options},
-    {label_sound, act_sound},
-    {label_fullscreen, act_fullscreen},
     {label_quit_to_menu, act_quit_to_menu},
 };
 #define PAUSE_MENU_COUNT ((int)(sizeof PAUSE_MENU / sizeof PAUSE_MENU[0]))
@@ -623,12 +627,9 @@ static void handle_state_key(SDL_Scancode sc) {
     else if (enter) { binding_wait=true; blip(); }
     break;
   case ST_SLOTS:
-    if (esc) set_state(slots_return);
-    else if (sc==SDL_SCANCODE_UP || sc==SDL_SCANCODE_DOWN) slot_row=menu_nav(sc,5,slot_row);
-    else if (sc==SDL_SCANCODE_LEFT || sc==SDL_SCANCODE_RIGHT) {
-      if (game && !game->player_dead && !game->completed) slot_save_mode=!slot_save_mode;
-      else slot_save_mode=false;
-    } else if (enter) activate_slot();
+    if (esc) close_slots();
+    else if (sc==SDL_SCANCODE_UP || sc==SDL_SCANCODE_DOWN) slot_row=menu_nav(sc,slot_count(),slot_row);
+    else if (enter) activate_slot();
     break;
   case ST_MENU: {
     Menu m = main_menu();
@@ -723,17 +724,15 @@ static void handle_state_click(float x, float y) {
     if (y>=83 && y<=108 && x>=40 && x<=600) { options_page=clampi((int)((x-40)/140),0,3); options_row=0; blip(); }
     else if (y>=119 && y<119+option_rows()*36 && x>=70 && x<=570) {
       options_row=(int)((y-119)/36);
-      if (options_page==2 || (options_page==3 && options_row>0)) adjust_option(1);
+      if (option_is_button()) adjust_option(1);
       else if (x>=470) adjust_option(x<530?-1:1);
     } else if (y>=359) { set_state(options_return); save_preferences(); }
   } else if (state==ST_BINDINGS) {
     if (y>=91 && y<91+ACTION_COUNT*19 && x>=65 && x<=575) { binding_row=(int)((y-91)/19); binding_wait=true; }
     else if (y>=359) { binding_wait=false; set_state(ST_OPTIONS); }
   } else if (state==ST_SLOTS) {
-    if (y>=112 && y<112+5*39 && x>=65 && x<=575) { slot_row=(int)((y-112)/39); activate_slot(); }
-    else if (y>=83 && y<=108) {
-      slot_save_mode=x>320 && game && !game->player_dead && !game->completed;
-    } else if (y>=359) set_state(slots_return);
+    if (y>=112 && y<112+slot_count()*39 && x>=65 && x<=575) { slot_row=(int)((y-112)/39); activate_slot(); }
+    else if (y>=359) close_slots();
   } else if (story_state()) {
     if (!input_focused) return;
     if (x >= 520 && x <= 627 && y >= 368 && y <= 394) finish_story();
@@ -772,8 +771,7 @@ static void handle_state_hover(float x, float y) {
   } else if (state==ST_BINDINGS) {
     if (!binding_wait && x>=65 && x<=575 && y>=91 && y<91+ACTION_COUNT*19) { hit=(int)((y-91)/19); binding_row=hit; }
   } else if (state==ST_SLOTS) {
-    if (x>=65 && x<=575 && y>=112 && y<112+5*39) { hit=(int)((y-112)/39); slot_row=hit; }
-    else if (y>=83 && y<=108) hit=0;
+    if (x>=65 && x<=575 && y>=112 && y<112+slot_count()*39) { hit=(int)((y-112)/39); slot_row=hit; }
   } else if (state == ST_MENU) {
     hit = menu_hit_test(main_menu(), MAIN_MENU_SPAN, x, y);
     if (hit >= 0 && hit != main_menu_index) {
@@ -1006,10 +1004,12 @@ static void on_key_down(SDL_Scancode sc) {
   if (sc == SDL_SCANCODE_2) input.weapon = WEAPON_CROSSBOW;
   if (sc == SDL_SCANCODE_3) input.weapon = WEAPON_ARBALEST;
   if (sc == SDL_SCANCODE_M) {
-    audio_set_enabled(!audio_enabled());
+    preferences_get()->sound=!audio_enabled();
+    audio_set_enabled(preferences_get()->sound);
+    save_preferences();
     if (game) game_say(game, audio_enabled() ? "SOUND ON" : "SOUND OFF", 1.2f);
   }
-  if (sc == SDL_SCANCODE_F) toggle_fullscreen();
+  if (sc == SDL_SCANCODE_F) { toggle_fullscreen(); save_preferences(); }
   if (action==ACTION_MAP && game && state == ST_PLAYING && game->horror.reading < 0) game->show_map = !game->show_map;
   handle_state_key(sc);
 }
@@ -1139,7 +1139,7 @@ static void update(float dt) {
     death_delay += dt;
     if (death_delay > 1.4f) {
       death_delay = 0;
-      if (session.arcade || !game->level->campaign.enabled) session.lives--;
+      if (session.arcade) session.lives--;
       capture_mouse(false);
       if (session.lives <= 0) {
         audio_play(SND_GAME_OVER, 1, 1);
@@ -1532,16 +1532,18 @@ static void draw_options(void) {
     text(tabs[i],110+i*140,100,11,options_page==i?"#e4c78e":"#82969e");
   }
   Preferences *p=preferences_get();
-  const char *labels[4][4]={{"BRIGHTNESS","WEAPON MOVEMENT","CAMERA SHAKE","READING TEXT"},
-    {"SOUND EFFECTS","MUSIC"},{"CONTEXTUAL HINTS","AUTOMATIC SAVING","NEW GAME RULES"},
+  const char *labels[4][5]={{"FULLSCREEN","BRIGHTNESS","WEAPON MOVEMENT","CAMERA SHAKE","READING TEXT"},
+    {"SOUND","SOUND EFFECTS","MUSIC"},{"CONTEXTUAL HINTS","AUTOMATIC SAVING","NEW GAME RULES"},
     {"MOUSE SENSITIVITY","KEYBOARD BINDINGS","RESET ALL OPTIONS"}};
-  int numbers[4][4]={{p->brightness,p->bob,p->shake,p->text},{p->effects,p->music},{0,0,0},{p->sensitivity,0,0}};
+  int numbers[4][5]={{0,p->brightness,p->bob,p->shake,p->text},{0,p->effects,p->music},{0},{p->sensitivity}};
   for (int i=0;i<option_rows();i++) {
     float y=141+i*36;
     if (i==options_row) { gfx_fill_rect(fb,62,y-22,516,32,rgba(139,116,75,.2f)); gfx_fill_rect(fb,62,y-22,2,32,rgb(193,165,112)); }
     font_draw(fb,labels[options_page][i],77,y,13,FONT_BOLD,ALIGN_LEFT,rgb(196,206,205));
     char value[64];
-    if (options_page==2) snprintf(value,sizeof value,"%s",i==0?(p->tutorials?"ON":"OFF"):i==1?(p->autosave?"ON":"OFF"):(p->arcade?"ARCADE":"STORY"));
+    if (options_page==0 && i==0) snprintf(value,sizeof value,"<  %s  >",fullscreen()?"ON":"OFF");
+    else if (options_page==1 && i==0) snprintf(value,sizeof value,"<  %s  >",p->sound?"ON":"OFF");
+    else if (options_page==2) snprintf(value,sizeof value,"%s",i==0?(p->tutorials?"ON":"OFF"):i==1?(p->autosave?"ON":"OFF"):(p->arcade?"ARCADE":"STORY"));
     else if (options_page==3 && i>0) snprintf(value,sizeof value,"%s",i==1?"CHANGE":"RESTORE");
     else snprintf(value,sizeof value,"<  %d%%  >",numbers[options_page][i]);
     text_align(value,557,y,13,"#d7bc86",ALIGN_RIGHT);
@@ -1550,7 +1552,7 @@ static void draw_options(void) {
     options_page==1?"Music follows exploration, danger and the silence of refuges.":
     options_page==2?"Story: retry a safe save. Arcade: three lives and fresh equipment.":
     "Choose a binding, then press its new key. Conflicting bindings swap.";
-  font_draw(fb,desc,W/2,300,10,FONT_REGULAR,ALIGN_CENTER,rgb(148,168,172));
+  font_draw(fb,desc,W/2,311,10,FONT_REGULAR,ALIGN_CENTER,rgb(148,168,172));
   if (options_page==0) font_draw(fb,"The white candles remember your name.",W/2,328,13*p->text/100.0f,FONT_REGULAR,ALIGN_CENTER,rgb(218,208,182));
   font_draw(fb,"TAB / SHOULDERS: SECTION   UP / DOWN: SELECT   LEFT / RIGHT: CHANGE",W/2,350,8,FONT_BOLD,ALIGN_CENTER,rgb(173,185,186));
   font_draw(fb,"ESC / BACK - SAVE OPTIONS AND RETURN",W/2,366,9,FONT_BOLD,ALIGN_CENTER,rgb(209,188,146));
@@ -1568,13 +1570,12 @@ static void draw_bindings(void) {
   font_draw(fb,"SELECT / CLICK A ROW TO REBIND    -    ESC / BACK TO RETURN",W/2,366,9,FONT_BOLD,ALIGN_CENTER,rgb(209,188,146));
 }
 static void draw_slots(void) {
-  options_card("SAVED JOURNEYS");
-  text("<  LOAD",225,101,12,slot_save_mode?"#82969e":"#e4c78e");
-  text("SAVE  >",415,101,12,slot_save_mode?"#e4c78e":"#82969e");
-  for (int i=0;i<5;i++) {
+  options_card(slot_save_mode?"SAVE GAME":"LOAD GAME");
+  text(slot_save_mode?"CHOOSE A SLOT TO SAVE YOUR GAME":"CHOOSE A SAVED GAME TO LOAD",W/2,100,11,"#aabbbd");
+  for (int i=0;i<slot_count();i++) {
     float y=132+i*39;
     if (i==slot_row) { gfx_fill_rect(fb,62,y-20,516,37,rgba(139,116,75,.23f)); gfx_fill_rect(fb,62,y-20,2,37,rgb(193,165,112)); }
-    char title[64]; snprintf(title,sizeof title,i<3?"MANUAL SLOT %d":i==3?"AUTOSAVE":"CHAPTER CHECKPOINT",i+1);
+    char title[64]; snprintf(title,sizeof title,i<3?"SLOT %d":i==3?"AUTOSAVE":"CHAPTER CHECKPOINT",i+1);
     text_align(title,76,y,11,"#d9c18f",ALIGN_LEFT);
     if (slot_valid[i]) {
       SaveInfo *info=&slot_info[i]; char details[80];
@@ -1583,8 +1584,14 @@ static void draw_slots(void) {
       text_align(details,558,y+11,8,"#8aa0a7",ALIGN_RIGHT);
     } else text_align("EMPTY OR INCOMPATIBLE",558,y+4,9,"#81939b",ALIGN_RIGHT);
   }
-  font_draw(fb,"F5 SAVES TO THE SELECTED MANUAL SLOT. F9 LOADS IT.",W/2,335,9,FONT_REGULAR,ALIGN_CENTER,rgb(148,168,172));
-  font_draw(fb,"LEFT / RIGHT: LOAD OR SAVE    ENTER: SELECT    ESC / BACK: RETURN",W/2,366,8,FONT_BOLD,ALIGN_CENTER,rgb(209,188,146));
+  font_draw(fb,slot_save_mode?"SELECTING AN OCCUPIED SLOT REPLACES THAT SAVED GAME":
+    "AUTOSAVE AND CHAPTER CHECKPOINT ARE SAVED AUTOMATICALLY",W/2,335,9,FONT_REGULAR,ALIGN_CENTER,rgb(148,168,172));
+  char hint[128];
+  if (gamepad && gamepad_active)
+    snprintf(hint,sizeof hint,"UP / DOWN: SELECT    %s: %s    %s: BACK",gamepad_button_name(SDL_GAMEPAD_BUTTON_SOUTH),
+      slot_save_mode?"SAVE":"LOAD",gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST));
+  else snprintf(hint,sizeof hint,"UP / DOWN: SELECT    ENTER / CLICK: %s    ESC: BACK",slot_save_mode?"SAVE":"LOAD");
+  font_draw(fb,hint,W/2,366,8,FONT_BOLD,ALIGN_CENTER,rgb(209,188,146));
 }
 static void render(void) {
   switch (state) {
@@ -1681,9 +1688,11 @@ int main(int argc, char **argv) {
   char *options_path=user_file("options.cfg");
   if (options_path) preferences_load(options_path);
   free(options_path);
-  audio_set_mix(preferences_get()->effects,preferences_get()->music);
+  apply_preferences();
   find_gamepad();
-  if (!SDL_CreateWindowAndRenderer("Fortress", W * 2, H * 2, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY,
+  SDL_WindowFlags flags=SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+  if (preferences_get()->fullscreen) flags|=SDL_WINDOW_FULLSCREEN;
+  if (!SDL_CreateWindowAndRenderer("Fortress", W * 2, H * 2, flags,
                                    &window, &sdl_renderer)) {
     SDL_Log("Cannot create the window: %s", SDL_GetError());
     SDL_Quit();

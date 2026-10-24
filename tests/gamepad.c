@@ -101,6 +101,8 @@ static void test_menus(SDL_Joystick *joystick) {
   update_gamepad(.01f);
   CHECK(pause_menu_index == 1);
   tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
+  CHECK(state==ST_SLOTS && slot_save_mode && slot_count()==3);
+  tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
   CHECK(!strcmp(notice, "GAME SAVED") && state == ST_PAUSED);
   game->player.health = 24;
   button(joystick, SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
@@ -108,6 +110,8 @@ static void test_menus(SDL_Joystick *joystick) {
   button(joystick, SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
   update_gamepad(.01f);
   CHECK(pause_menu_index == 2);
+  tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
+  CHECK(state==ST_SLOTS && !slot_save_mode && slot_count()==5);
   tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
   CHECK(state == ST_PLAYING && game->player.health == 67);
   tap(joystick, SDL_GAMEPAD_BUTTON_START);

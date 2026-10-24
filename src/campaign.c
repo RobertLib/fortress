@@ -309,6 +309,7 @@ void campaign_update(Game *g,float dt) {
         if (!enemy_dead(e) && e->type<=ENEMY_CAPTAIN && hypotf(e->x-s->decoy_x,e->y-s->decoy_y)<9 &&
             !game_line_of_sight(g,e->x,e->y,g->player.x,g->player.y)) {
           e->last_seen_x=s->decoy_x; e->last_seen_y=s->decoy_y; e->has_last_seen=true;
+          e->lost_timer=0;
           e->state=ES_CHASE;
         }
       }

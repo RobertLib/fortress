@@ -2286,7 +2286,7 @@ void render_hud(Renderer *r, Image *fb, const Game *g) {
   Color bar = p->venom > 0 ? rgb(118, 148, 77) : rgb(149, 59, 55);
   gfx_fill_rect(fb, 62, y + 58, 96 * health, 3, bar);
   gfx_fill_rect(fb, 62, y + 58, 96 * health, 1, color_shade(bar, 1.4f));
-  if (g->session->arcade || !g->level->campaign.enabled) {
+  if (g->session->arcade) {
     hud_text(fb, "LIVES", 61, y + 73, 8, muted);
     for (int i = 0; i < mini(g->session->lives, 8); i++) ui_diamond(fb, 101 + i * 7, y + 70, 2, gold);
   } else hud_text(fb,"STORY MODE",61,y+73,8,muted);

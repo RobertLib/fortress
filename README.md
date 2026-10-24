@@ -168,21 +168,23 @@ warps go directly to the game without replaying the prologue.
 
 ### Save / Load
 
-Press **F5** during play to save, and **F9** to load the saved position.
+Press **F5** during play to choose where to save, and **F9** to choose a saved game to load.
 The pause menu also offers **SAVE GAME** and **LOAD GAME**; **LOAD GAME**
 is available from the main menu, including after restarting the game.
 F9 also works after death or game over.
 
-**SAVE SLOTS** offers three manual slots, an autosave and a chapter checkpoint,
-with chapter, difficulty, health and ammunition previews. F5/F9 use the selected
-manual slot (slot 1 on startup). Automatic slots are read-only in the browser.
-They preserve the
+**SAVE GAME** opens a choice of three manual slots. **LOAD GAME** offers those
+slots plus the autosave and chapter checkpoint, with chapter, difficulty,
+health and ammunition previews. Use arrows and Enter, click a slot, or select
+and confirm with a gamepad. Esc / Back cancels. Selecting an occupied save slot
+replaces it; automatic saves only appear in **LOAD GAME**.
+Saves preserve the
 current floor, position, health, weapons, ammunition, keys, difficulty,
 score and lives, along with enemies, pickups, doors, levers, traps, barrels,
 damaged and broken walls, arrows in flight and the explored map. Saving is available while alive on
 an unfinished floor. Starting a new game leaves the saved slot intact.
 **CONTINUE** resumes the run currently in memory; **LOAD GAME** restores
-the last position written to disk.
+the position from the save you select.
 
 Saves are written as `savegame.dat`, `savegame-2.dat`, `savegame-3.dat`,
 `autosave.dat` and `checkpoint.dat` in the per-user application data folder
@@ -245,7 +247,9 @@ The repeating crossbow can break a knight's shield guard with successive hits;
 flanking or attacking during his windup avoids the shield. Impacts distinguish
 metal from flesh and confirm a hit at the reticle.
 
-**OPTIONS** is available from the title and pause menus. Adjust brightness,
+**OPTIONS** is available from the title and pause menus. Fullscreen is under
+**DISPLAY**, and sound on/off and both volume controls are under **SOUND**.
+These choices persist across restarts. Adjust brightness,
 weapon motion, camera shake, reading text (100–150%), sound effects, music,
 mouse sensitivity, hints and saving. Rebind movement, fire, use, run, map,
 journal and both tools; assigning an occupied key swaps the two actions.
@@ -393,8 +397,8 @@ the blast that destroys it, protecting anything behind it from that explosion.
 ### Pits
 
 Open pits have a pale stone rim around a dark shaft. Stepping into the
-opening makes you fall and costs one life on every difficulty; the floor
-can then be retried as after any other death. Walk around them — each floor
+opening makes you fall. Story mode restores a safe save or lets you retry with
+your equipment; Arcade costs one life, on every difficulty. Walk around them — each floor
 has one, and all three keys and the gate remain reachable without crossing
 a pit. Grounded enemies avoid the holes; bats and spiders on their silk
 threads can pass above them. Sight, sound and arrows pass over the opening.

@@ -114,6 +114,16 @@ static void tactical_tools(void) {
   position(play,3.5,5.5,1,0); campaign_throw_decoy(play);
   CHECK(play->campaign.decoys==1 && play->campaign.decoy_timer==7 && play->campaign.decoy_x<5);
   campaign_throw_decoy(play); CHECK(play->campaign.decoys==1);
+  // A soldier returning after a lost chase must investigate a fresh sound.
+  Enemy *guard=&play->enemies[0];
+  guard->hp=25; guard->state=ES_RETURN; guard->lost_timer=5.1f; guard->x=8.5f; guard->y=5.5f;
+  CHECK(!game_line_of_sight(play,guard->x,guard->y,play->player.x,play->player.y));
+  campaign_update(play,.01f);
+  CHECK(guard->state==ES_CHASE && guard->lost_timer==0);
+  enemy_update(guard,play,.01f);
+  CHECK(guard->state==ES_CHASE && guard->x<8.5f);
+  CHECK(guard->last_seen_x==play->campaign.decoy_x && guard->last_seen_y==play->campaign.decoy_y);
+  guard->state=ES_DEAD; guard->hp=0;
   play->horror.warden=(Warden){.state=WARDEN_HUNT,.x=8.5,.y=5.5,.remaining=20,.lost_timer=0};
   ticks(play,1);
   CHECK(fabsf(play->horror.warden.target_x-play->campaign.decoy_x)<.01f);
@@ -170,13 +180,18 @@ static void preferences_and_saves(void) {
   CHECK(preferences_bind(ACTION_FORWARD,SDL_SCANCODE_S));
   CHECK(p->keys[ACTION_FORWARD]==SDL_SCANCODE_S && p->keys[ACTION_BACK]==SDL_SCANCODE_W);
   CHECK(!preferences_bind(ACTION_FIRE,SDL_SCANCODE_F5));
-  p->sensitivity=150; p->text=150; p->bob=0; p->shake=0;
+  p->sensitivity=150; p->text=150; p->bob=0; p->shake=0; p->sound=false; p->fullscreen=true;
   char *path=user_file("production-options.cfg"); CHECK(path && preferences_save(path));
   preferences_defaults(); CHECK(preferences_load(path));
   CHECK(p->sensitivity==150 && p->text==150 && p->bob==0 && p->keys[ACTION_FORWARD]==SDL_SCANCODE_S);
+  CHECK(!p->sound && p->fullscreen);
   CHECK(SDL_SaveFile(path,"malformed",9)); CHECK(!preferences_load(path)); CHECK(p->sensitivity==150);
   const char *overflow="FORTRESS OPTIONS 99999999999999999999999999999999999\n";
   CHECK(SDL_SaveFile(path,overflow,strlen(overflow))); CHECK(!preferences_load(path) && p->sensitivity==150);
+  // Existing version-one options keep their bindings and receive the new defaults.
+  const char *legacy="FORTRESS OPTIONS 1\n125 100 100 100 125 80 40\n1 1 0\n26 22 4 7 13 8 225 43 12 20 5\n";
+  CHECK(SDL_SaveFile(path,legacy,strlen(legacy)) && preferences_load(path));
+  CHECK(p->sound && !p->fullscreen && p->sensitivity==125 && p->keys[ACTION_USE]==SDL_SCANCODE_E);
   SDL_RemovePath(path); free(path); preferences_defaults();
   CHECK(load_levels()); new_game(0,DIFFICULTY_NORMAL); begin_level();
   CHECK(!session.arcade);
@@ -191,15 +206,19 @@ static void preferences_and_saves(void) {
   CHECK(state==ST_PLAYING && game->player.health==61 && !game->player_dead);
   int matching_run=session.run_id; session.run_id=matching_run==1?2:1;
   CHECK(!restore_checkpoint()); session.run_id=matching_run;
-  set_state(ST_PAUSED); act_slots(); CHECK(state==ST_SLOTS && slot_save_mode);
-  slot_row=1; activate_slot(); CHECK(selected_slot==1 && slot_valid[1]);
-  game->player.health=30; slot_save_mode=false; activate_slot(); CHECK(state==ST_PLAYING && game->player.health==61);
+  set_state(ST_PAUSED); act_save_game(); CHECK(state==ST_SLOTS && slot_save_mode);
+  slot_row=1; activate_slot(); CHECK(state==ST_PAUSED && selected_slot==1 && slot_valid[1]);
+  game->player.health=30; act_load_game(); activate_slot(); CHECK(state==ST_PLAYING && game->player.health==61);
   set_state(ST_PAUSED); act_options(); CHECK(state==ST_OPTIONS);
-  options_page=0; options_row=0; p->brightness=100;
-  handle_state_click(200,130); CHECK(p->brightness==100);
-  handle_state_click(550,130); CHECK(p->brightness==110);
-  handle_state_click(490,130); CHECK(p->brightness==100);
+  options_page=0; options_row=1; p->brightness=100;
+  handle_state_click(200,166); CHECK(p->brightness==100);
+  handle_state_click(550,166); CHECK(p->brightness==110);
+  handle_state_click(490,166); CHECK(p->brightness==100);
   on_gamepad_button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER); CHECK(options_page==1);
+  CHECK(p->sound && audio_enabled());
+  handle_state_click(200,130); CHECK(!p->sound && !audio_enabled());
+  on_gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT); CHECK(p->sound && audio_enabled());
+  options_row=1;
   on_gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT); CHECK(p->effects==90);
   on_gamepad_button(SDL_GAMEPAD_BUTTON_START); CHECK(state==ST_PAUSED);
   act_options();
@@ -209,7 +228,8 @@ static void preferences_and_saves(void) {
   handle_state_key(SDL_SCANCODE_ESCAPE); CHECK(state==ST_OPTIONS);
   handle_state_key(SDL_SCANCODE_ESCAPE); CHECK(state==ST_PAUSED);
   set_state(ST_PLAYING); game->campaign.journal=true; game->player.health=54;
-  on_key_down(SDL_SCANCODE_F5); game->player.health=2; on_key_down(SDL_SCANCODE_F9);
+  on_key_down(SDL_SCANCODE_F5); activate_slot();
+  game->player.health=2; on_key_down(SDL_SCANCODE_F9); activate_slot();
   CHECK(state==ST_PLAYING && game->player.health==54);
   on_gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT); CHECK(game->campaign.journal);
   int page=game->campaign.journal_page;
@@ -290,13 +310,13 @@ static void loaded_story_recovery(void) {
     game->player.ammo=73; game->player.has_arbalest=true; game->player.weapon=WEAPON_ARBALEST;
     game->time=12; session.score=1234;
     int run_id=session.run_id;
-    act_save_game(); CHECK(!strcmp(notice,"GAME SAVED"));
+    act_save_game(); activate_slot(); CHECK(!strcmp(notice,"GAME SAVED"));
     // Both automatic files now belong to a different playthrough.
     new_game(1,DIFFICULTY_NORMAL); session.run_id=run_id+1000; begin_level();
     if (scenario==2) preferences_get()->autosave=false;
     if (browser) {
-      set_state(ST_MENU); act_slots(); slot_row=2; slot_save_mode=false; activate_slot();
-    } else on_key_down(SDL_SCANCODE_F9);
+      set_state(ST_MENU); act_load_game(); slot_row=2; activate_slot();
+    } else { on_key_down(SDL_SCANCODE_F9); activate_slot(); }
     CHECK(state==ST_PLAYING && session.run_id==run_id && game->player.ammo==73 && game->player.has_arbalest);
     SaveInfo info;
     CHECK(savegame_inspect(slot_path(3),levels,levels_loaded,&info));
@@ -314,7 +334,7 @@ static void loaded_story_recovery(void) {
     else CHECK(state==ST_LEVEL_START && game->player.health==100 && game->time==0);
   }
   preferences_defaults(); selected_slot=0;
-  puts("Quickload and slot-browser Story recovery preserve equipment with foreign checkpoints, unsafe loads and saving disabled.");
+  puts("Keyboard and menu load selection preserve Story equipment with foreign checkpoints, unsafe loads and saving disabled.");
 }
 static void closing_door_occupancy(void) {
   reset_fixture();
@@ -508,15 +528,46 @@ static void retry_statistics(void) {
   CHECK(SDL_RemovePath(path)); free(path); preferences_defaults();
   puts("Arcade retries, saved attempts, completion counts and carried score/lives/relics passed.");
 }
+static void custom_map_rules(void) {
+  game_destroy(game); game=NULL;
+  Level original=levels[0]; char err[128];
+  CHECK(level_parse(&levels[0],"111111111\n1P......1\n111111111\n",err,sizeof err));
+  CHECK(!levels[0].campaign.enabled);
+  for (int arcade=0;arcade<2;arcade++) {
+    preferences_defaults(); preferences_get()->autosave=false; preferences_get()->arcade=arcade!=0;
+    new_game(0,DIFFICULTY_NORMAL); begin_level(); session.run_id=0;
+    // A loaded custom map establishes the same fallback equipment as a campaign map.
+    game->player.ammo=73; game->player.has_arbalest=true; game->player.weapon=WEAPON_ARBALEST;
+    finish_load_game();
+    int attempts=arcade?3:5;
+    for (int i=0;i<attempts;i++) {
+      game_hurt_player(game,1000); update(1.5f);
+      CHECK(session.lives==(arcade?2-i:3));
+      if (arcade && i==2) { CHECK(state==ST_GAME_OVER); break; }
+      CHECK(state==ST_DIED); restart_level();
+      CHECK(state==ST_LEVEL_START && game->player.health==100);
+      CHECK(game->player.ammo==(arcade?16:73));
+      CHECK(game->player.has_arbalest==!arcade);
+      CHECK(game->player.weapon==(arcade?WEAPON_CROSSBOW:WEAPON_ARBALEST));
+      begin_level();
+    }
+    if (!arcade) { game_add_score(game,40000); CHECK(session.lives==3 && session.next_life==80000); }
+  }
+  game_destroy(game); game=NULL; level_free(&levels[0]); levels[0]=original; preferences_defaults();
+  puts("Custom maps honor unlimited Story retries and loaded equipment; Arcade retains three lives and fresh equipment.");
+}
 static void save_frame(const char *name) {
   SDL_Surface *surface=SDL_CreateSurfaceFrom(W,H,SDL_PIXELFORMAT_ARGB8888,fb->px,W*4);
   CHECK(surface && SDL_SaveBMP(surface,name)); SDL_DestroySurface(surface);
 }
 static void screenshots(void) {
   CHECK(assets_build(&assets) && comic_art_build(&comic_art)); renderer_init(&renderer,&assets); fb=image_new(W,H);
-  preferences_get()->text=150; options_page=0; options_row=3; set_state(ST_OPTIONS); render(); save_frame("build/production-options.bmp");
+  preferences_get()->text=150; options_page=0; options_row=4; set_state(ST_OPTIONS); render(); save_frame("build/production-options.bmp");
+  options_page=1; options_row=0; render(); save_frame("build/production-sound-options.bmp");
+  set_state(ST_MENU); render(); save_frame("build/production-main-menu.bmp");
   set_state(ST_BINDINGS); binding_row=ACTION_DECOY; render(); save_frame("build/production-bindings.bmp");
   refresh_save_slots(); set_state(ST_SLOTS); slot_save_mode=false; render(); save_frame("build/production-slots.bmp");
+  slot_save_mode=true; render(); save_frame("build/production-save.bmp");
   new_game(1,DIFFICULTY_NORMAL); set_state(ST_PLAYING); game->campaign.journal=true;
   render(); save_frame("build/production-journal.bmp"); game->campaign.journal=false;
   game->horror.reading=game->level->world.monks[0].note;
@@ -548,7 +599,7 @@ static void screenshots(void) {
 int main(int argc,char **argv) {
   CHECK(SDL_Init(0)); fixture_map(); progression(); tactical_tools(); soldier_combat(); preferences_and_saves();
   autosave_trap_safety(); autosave_powder_safety(); loaded_story_recovery(); closing_door_occupancy();
-  reading_input_isolation(); journal_and_map_input(); authored_campaign(); retry_statistics();
+  reading_input_isolation(); journal_and_map_input(); authored_campaign(); retry_statistics(); custom_map_rules();
   if (argc>1 && !strcmp(argv[1],"--screenshots")) screenshots();
   game_destroy(play); level_free(&fixture); game_destroy(game);
   for (int i=0;i<levels_loaded;i++) level_free(&levels[i]);

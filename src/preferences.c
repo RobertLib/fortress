@@ -7,10 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const Preferences defaults={100,100,100,100,100,85,45,true,true,false,
+static const Preferences defaults={100,100,100,100,100,85,45,true,true,false,true,false,
   {SDL_SCANCODE_W,SDL_SCANCODE_S,SDL_SCANCODE_A,SDL_SCANCODE_D,SDL_SCANCODE_J,SDL_SCANCODE_E,
    SDL_SCANCODE_LSHIFT,SDL_SCANCODE_TAB,SDL_SCANCODE_I,SDL_SCANCODE_Q,SDL_SCANCODE_B}};
-static Preferences current={100,100,100,100,100,85,45,true,true,false,
+static Preferences current={100,100,100,100,100,85,45,true,true,false,true,false,
   {SDL_SCANCODE_W,SDL_SCANCODE_S,SDL_SCANCODE_A,SDL_SCANCODE_D,SDL_SCANCODE_J,SDL_SCANCODE_E,
    SDL_SCANCODE_LSHIFT,SDL_SCANCODE_TAB,SDL_SCANCODE_I,SDL_SCANCODE_Q,SDL_SCANCODE_B}};
 Preferences *preferences_get(void) { return &current; }
@@ -68,15 +68,18 @@ bool preferences_load(const char *path) {
   if (!read) { free(data); return false; }
   data[size]=0;
   Preferences staged=defaults;
-  int v=0,tutorials=0,autosave=0,arcade=0;
+  int v=0,tutorials=0,autosave=0,arcade=0,sound=1,fullscreen=0;
   const char *prefix="FORTRESS OPTIONS ";
   bool ok=size>strlen(prefix) && !strncmp(data,prefix,strlen(prefix));
   const char *p=data+(ok?strlen(prefix):0);
   int *values[]={&v,&staged.sensitivity,&staged.brightness,&staged.bob,&staged.shake,&staged.text,
     &staged.effects,&staged.music,&tutorials,&autosave,&arcade};
   for (size_t i=0;i<SDL_arraysize(values) && ok;i++) ok=read_integer(&p,values[i]);
-  ok=ok && v==1 && tutorials>=0 && tutorials<=1 && autosave>=0 && autosave<=1 && arcade>=0 && arcade<=1;
+  ok=ok && (v==1 || v==2) && tutorials>=0 && tutorials<=1 && autosave>=0 && autosave<=1 && arcade>=0 && arcade<=1;
+  if (ok && v>=2) ok=read_integer(&p,&sound) && read_integer(&p,&fullscreen) &&
+    sound>=0 && sound<=1 && fullscreen>=0 && fullscreen<=1;
   staged.tutorials=tutorials!=0; staged.autosave=autosave!=0; staged.arcade=arcade!=0;
+  staged.sound=sound!=0; staged.fullscreen=fullscreen!=0;
   for (int i=0;i<ACTION_COUNT && ok;i++) {
     ok=read_integer(&p,&staged.keys[i]);
   }
@@ -90,9 +93,9 @@ bool preferences_load(const char *path) {
 bool preferences_save(const char *path) {
   if (!path || !valid(&current)) return false;
   char data[1024];
-  int n=snprintf(data,sizeof data,"FORTRESS OPTIONS 1\n%d %d %d %d %d %d %d\n%d %d %d\n",
+  int n=snprintf(data,sizeof data,"FORTRESS OPTIONS 2\n%d %d %d %d %d %d %d\n%d %d %d %d %d\n",
     current.sensitivity,current.brightness,current.bob,current.shake,current.text,current.effects,current.music,
-    current.tutorials,current.autosave,current.arcade);
+    current.tutorials,current.autosave,current.arcade,current.sound,current.fullscreen);
   for (int i=0;i<ACTION_COUNT;i++) n+=snprintf(data+n,sizeof data-(size_t)n,"%d%s",current.keys[i],i+1==ACTION_COUNT?"\n":" ");
   size_t len=strlen(path)+5; char *temporary=malloc(len);
   if (!temporary) return false;

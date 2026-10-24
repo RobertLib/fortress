@@ -5,7 +5,7 @@ typedef enum { ACTION_FORWARD,ACTION_BACK,ACTION_LEFT,ACTION_RIGHT,ACTION_FIRE,A
   ACTION_RUN,ACTION_MAP,ACTION_JOURNAL,ACTION_DECOY,ACTION_BRACE,ACTION_COUNT } KeyAction;
 typedef struct Preferences {
   int sensitivity,brightness,bob,shake,text,effects,music;
-  bool tutorials,autosave,arcade;
+  bool tutorials,autosave,arcade,sound,fullscreen;
   int keys[ACTION_COUNT];
 } Preferences;
 Preferences *preferences_get(void);
