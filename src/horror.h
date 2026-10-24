@@ -48,6 +48,7 @@ typedef struct HorrorState {
   uint32_t scenes_fired, scenes_changed, notes_read;
   float scene_timer[HORROR_SCENES];
   int keys_seen, pending_hunts, ambient_cycle, reading;
+  int reading_page; // story first, followed by the monk's current errand
   float key_x[3], key_y[3];
   int opened_door[3];
   float blackout, ambient_timer, calm_timer, tension;

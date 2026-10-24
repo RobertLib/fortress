@@ -37,7 +37,8 @@ typedef struct DifficultySettings {
 
 const DifficultySettings *game_difficulty_settings(Difficulty difficulty);
 
-// Totals carried across the floors of one run.
+// Totals carried across the floors of one run. Discovery counts include the
+// current attempt; a fresh retry removes its counts before rebuilding the map.
 typedef struct Session {
   Difficulty difficulty;
   uint32_t relics;

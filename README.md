@@ -91,13 +91,16 @@ ordered burial inscriptions, then the two oath locks and final bell.
 **STORY** rules are the default: death restores a safe automatic save without
 a lives limit. **ARCADE** rules, chosen in Options before a new game, give three
 lives, an extra life every 40,000 points, and fresh equipment on a chapter retry.
+Completion statistics count the surviving attempt of each chapter; Arcade
+retries retain earned score, lives and relics without counting discoveries twice.
 
 Each chapter includes a required objective in its outdoor district, two
 return connections, wells and named landmarks. Enter the village inn and
 cottages, speak with six peaceful monks, search Saint Alden's church and its
 infirmary, cross the park's pond bridge and follow Blackwood to the keeper's
-grave. Press **E / Space / gamepad Use** near a monk to speak; press again to
-close the conversation. Reading pauses the world. Monks stand near white
+grave. Press **E / Space / gamepad Use** near a monk to speak. Monks with an
+errand show their story first, then the current request or thanks; use again
+to advance and finally close the conversation. Reading pauses the world. Monks stand near white
 candles, which protect against the Jailer. Wells are solid landmarks.
 
 Five monks also offer optional errands. Bring back the grain tally, reliquary,
@@ -196,7 +199,8 @@ Options and keyboard bindings persist in `options.cfg`. For portable testing,
 Failed saves keep the previous slot. Missing, damaged, unsupported or
 map-incompatible saves display a message and leave the current run intact.
 Hauntings, extinguished lights, read notes, pending encounters and the Jailer's
-position and pursuit state are saved too. An event that already happened stays
+position and pursuit state are saved too, including the current conversation page.
+An event that already happened stays
 finished after loading. The expanded campaign maps require a new run when moving
 from an older build; older saves on unchanged custom maps remain supported.
 

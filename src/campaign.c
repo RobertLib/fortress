@@ -253,9 +253,13 @@ void campaign_converse(Game *g,int note) {
   }
   game_add_score(g,1000); audio_play(SND_PICKUP_WEAPON,.8f,1);
 }
-const char *campaign_dialogue(const Game *g,int note) {
+int campaign_dialogue_pages(const Game *g,int note) {
   const Errand *e=&g->level->campaign.errand;
-  if (e->present && note==g->level->world.monks[e->monk].note) {
+  return e->present && note==g->level->world.monks[e->monk].note ? 2 : 1;
+}
+const char *campaign_dialogue(const Game *g,int note,int page) {
+  const Errand *e=&g->level->campaign.errand;
+  if (page==1 && campaign_dialogue_pages(g,note)>1) {
     if (g->campaign.errand_done) return e->thanks;
     return e->request;
   }

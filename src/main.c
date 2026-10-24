@@ -122,6 +122,13 @@ static void set_state(State s) {
   if (s == ST_GAME_OVER || s == ST_STORY_OUTRO || s == ST_VICTORY) resumable = false;
 }
 
+static void pause_play(void) {
+  set_state(ST_PAUSED);
+  pause_menu_index = 0;
+  capture_mouse(false);
+  blip();
+}
+
 static bool story_state(void) { return state == ST_STORY_INTRO || state == ST_STORY_OUTRO; }
 
 static void story_sound(void) {
@@ -183,6 +190,11 @@ static void begin_level(void) {
 
 static void restart_level(void) {
   if (!session.arcade && restore_checkpoint()) return;
+  // Completion percentages describe the surviving attempt. Arcade score,
+  // lives and relics still carry over, but rediscoveries must not count twice.
+  session.total_kills = maxi(0, session.total_kills - game->kills);
+  session.total_treasure = maxi(0, session.total_treasure - game->treasure);
+  session.total_secrets_found = maxi(0, session.total_secrets_found - game->secrets_found);
   start_level(game->level_index, NULL); // classic rules: fresh crossbow after death
 }
 
@@ -641,10 +653,7 @@ static void handle_state_key(SDL_Scancode sc) {
   case ST_PLAYING:
     if (esc) {
       if (game->campaign.journal) { game->campaign.journal=false; clear_input(); return; }
-      set_state(ST_PAUSED);
-      pause_menu_index = 0;
-      capture_mouse(false);
-      blip();
+      pause_play();
     }
     break;
   case ST_PAUSED:
@@ -790,7 +799,7 @@ static void remove_gamepad(SDL_JoystickID id) {
   gamepad_active = false;
   clear_input();
   if (state == ST_PLAYING) {
-    handle_state_key(SDL_SCANCODE_ESCAPE);
+    pause_play();
     snprintf(notice, sizeof notice, "GAMEPAD DISCONNECTED");
     notice_timer = 4;
   }
@@ -1011,7 +1020,7 @@ static void handle_event(const SDL_Event *e) {
   case SDL_EVENT_WINDOW_FOCUS_LOST:
     input_focused = false;
     clear_input();
-    if (state == ST_PLAYING) handle_state_key(SDL_SCANCODE_ESCAPE);
+    if (state == ST_PLAYING) pause_play();
     capture_mouse(false);
     break;
   case SDL_EVENT_KEY_DOWN:
@@ -1079,7 +1088,7 @@ static void update(float dt) {
   }
   if (state == ST_LEVEL_START && state_timer > 3 && input_focused) begin_level();
   update_gamepad(dt);
-  if (state != ST_PLAYING) return;
+  if (state != ST_PLAYING || !input_focused) return;
   Input frame = input;
   apply_gamepad(&frame);
   game->controller_input=gamepad && gamepad_active;

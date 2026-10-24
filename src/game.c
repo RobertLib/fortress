@@ -1239,7 +1239,13 @@ static void update_water_audio(Game *g, float dt) {
 void game_update(Game *g, float dt, Input *input) {
   if (g->campaign.journal) return;
   if (g->horror.reading >= 0 && !g->player_dead && !g->completed) {
-    if (input->use) { input->use = false; g->horror.reading = -1; }
+    if (input->use) {
+      input->use = false;
+      if (++g->horror.reading_page >= campaign_dialogue_pages(g,g->horror.reading)) {
+        g->horror.reading = -1;
+        g->horror.reading_page = 0;
+      }
+    }
     return; // Reading pauses the world, including venom and the pursuer.
   }
   if (g->player_dead || g->completed) {

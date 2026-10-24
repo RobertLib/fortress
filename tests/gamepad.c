@@ -249,6 +249,30 @@ static void test_actions(SDL_Joystick *joystick) {
   handle_event(&event);
   tap(joystick, SDL_GAMEPAD_BUTTON_START);
   CHECK(state == ST_PLAYING && input_focused);
+
+  // Automatic pauses must bypass Escape's "close the journal" action.
+  on_key_down(SDL_SCANCODE_I);
+  CHECK(game->campaign.journal);
+  float time = game->time;
+  game->player.venom = 2;
+  game->player.venom_timer = .01f;
+  int health = game->player.health;
+  event.type = SDL_EVENT_WINDOW_FOCUS_LOST;
+  handle_event(&event);
+  CHECK(state == ST_PAUSED && game->campaign.journal && !input_focused);
+  update(.5f);
+  CHECK(game->time == time && game->player.health == health && game->player.venom == 2);
+  event.type = SDL_EVENT_WINDOW_FOCUS_GAINED;
+  handle_event(&event);
+  update(.5f);
+  CHECK(state == ST_PAUSED && game->time == time);
+  tap(joystick, SDL_GAMEPAD_BUTTON_START);
+  CHECK(state == ST_PLAYING && game->campaign.journal);
+  tap(joystick, SDL_GAMEPAD_BUTTON_EAST);
+  CHECK(!game->campaign.journal);
+  update(.01f);
+  CHECK(game->time > time);
+
   set_state(ST_LEVEL_START);
   state_timer = 4;
   event.type = SDL_EVENT_WINDOW_FOCUS_LOST;
@@ -332,9 +356,13 @@ int main(void) {
   CHECK(other);
   tap(other, SDL_GAMEPAD_BUTTON_START);
   CHECK(state == ST_PLAYING);
+  game->campaign.journal = true;
+  float time = game->time;
   CHECK(SDL_DetachVirtualJoystick(first));
   pump();
-  CHECK(state == ST_PAUSED && gamepad_id == second && !input.fire);
+  CHECK(state == ST_PAUSED && game->campaign.journal && gamepad_id == second && !input.fire);
+  update(.5f);
+  CHECK(game->time == time);
   CHECK(!strcmp(notice, "GAMEPAD DISCONNECTED"));
   CHECK(SDL_DetachVirtualJoystick(second));
   pump();
@@ -344,7 +372,9 @@ int main(void) {
   pump();
   CHECK(gamepad && gamepad_id == first);
   tap(SDL_GetGamepadJoystick(gamepad), SDL_GAMEPAD_BUTTON_START);
-  CHECK(state == ST_PLAYING);
+  CHECK(state == ST_PLAYING && game->campaign.journal);
+  tap(SDL_GetGamepadJoystick(gamepad), SDL_GAMEPAD_BUTTON_EAST);
+  CHECK(!game->campaign.journal);
 
   // Exercise gamepad hints as well as switching back to keyboard hints.
   fb = image_new(W, H);

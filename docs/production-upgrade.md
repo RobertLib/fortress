@@ -79,12 +79,21 @@ barrels, water, stairs, traps, mirrors and breakable walls retain their roles.
 
 ## Persistence and integration
 
-Save version 8 explicitly serializes campaign progress, interrupted operations,
+Save version 9 explicitly serializes campaign progress, interrupted operations,
 relics, errands, supplies, brace/decoy timers, finale, soldier tactics, projectile
-weapon source and noise radius. A run identifier prevents death recovery from
-loading an automatic slot belonging to a different run. Legacy versions 1–7
+weapon source, noise radius and the current conversation page. A run identifier prevents death recovery from
+loading an automatic slot belonging to a different run. Legacy versions 1–8
 remain readable on compatible, unchanged maps. The expanded authored campaign
 requires starting a new run when upgrading from the earlier maps.
+
+Monks with errands present two pages: their original story and then the current
+request or thanks. Use advances the page before ending the conversation; the
+world remains paused on both pages. Focus loss and controller disconnection
+enter the pause menu directly, including while the journal is open.
+
+Fresh chapter retries discard that attempt's kill, treasure and secret counts
+from the run's completion statistics. Earned Arcade score, lives and relics
+remain; a restored Story checkpoint retains the counts from its saved attempt.
 
 Three manual slots and two automatic slots are separate files. Autosaving waits
 for adequate health and a safe situation; a dormant queued hunt can be saved in

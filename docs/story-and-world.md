@@ -41,8 +41,10 @@ nepřemísťuje mimo obrazovku.
 
 Vězeňské zápisky zachovávají osobní svědectví o zvucích, zbrojích a zradě.
 Rozhovory jejich nejistotu doplňují konkrétními orientačními informacemi.
-Dohrání nevyžaduje přečíst každý text. Rozhovory lze opakovat; přečtení
-i právě otevřený rozhovor se ukládají stejně jako zápisky. Při čtení stojí
+Dohrání nevyžaduje přečíst každý text. Mniši s dobrovolným úkolem nejprve
+vyprávějí svůj příběh; další stisk použití ukáže zadání nebo poděkování,
+poslední stisk rozhovor zavře. Rozhovory lze opakovat; přečtení
+i právě otevřená stránka rozhovoru se ukládají stejně jako zápisky. Při čtení stojí
 čas, jed i nepřátelé.
 
 Mniši jsou neútočné postavy a nepatří do počtu nepřátel ani zabití. Nejsou

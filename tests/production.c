@@ -215,12 +215,15 @@ static void authored_campaign(void) {
   for (int n=0;n<LEVEL_COUNT;n++) {
     new_game(n,DIFFICULTY_NORMAL); const CampaignLayout *c=&game->level->campaign;
     CHECK(c->enabled && c->count && c->errand.present && c->has_errand_door);
+    const Monk *monk=&game->level->world.monks[c->errand.monk];
+    CHECK(campaign_dialogue_pages(game,monk->note)==2);
+    CHECK(!strcmp(campaign_dialogue(game,monk->note,0),monk->text));
+    CHECK(!strcmp(campaign_dialogue(game,monk->note,1),c->errand.request));
     game->horror.calm_timer=10000;
     for (int i=0;i<game->enemy_count;i++) { game->enemies[i].hp=0; game->enemies[i].state=ES_DEAD; }
     position(game,c->errand.x+.5f,c->errand.y+.5f,1,0); campaign_update(game,.01f);
     CHECK(game->campaign.errand_found && !game->campaign.errand_done);
     Door *reward=game_door_at(game,c->errand_door_x,c->errand_door_y); CHECK(reward && reward->state==DOOR_CLOSED);
-    const Monk *monk=&game->level->world.monks[c->errand.monk];
     const int directions[][2]={{0,1},{1,0},{-1,0},{0,-1}}; bool spoke=false;
     for (int d=0;d<4;d++) {
       int dx=directions[d][0],dy=directions[d][1];
@@ -230,12 +233,24 @@ static void authored_campaign(void) {
       }
     }
     CHECK(spoke && game->campaign.errand_done && reward->state==DOOR_OPENING);
-    CHECK(game->secrets_found==1 && !strcmp(campaign_dialogue(game,monk->note),c->errand.thanks));
+    CHECK(game->secrets_found==1 && game->horror.reading_page==0);
+    CHECK(!strcmp(campaign_dialogue(game,monk->note,0),monk->text));
+    CHECK(!strcmp(campaign_dialogue(game,monk->note,1),c->errand.thanks));
     int score=session.score; campaign_converse(game,monk->note); CHECK(score==session.score && game->secrets_found==1);
+    float time=game->time;
+    game->player.venom=2; game->player.venom_timer=.01f;
+    int health=game->player.health;
+    Input use={.weapon=-1,.use=true}; game_update(game,.5f,&use);
+    CHECK(!use.use && game->horror.reading==monk->note && game->horror.reading_page==1);
+    CHECK(game->time==time && game->player.health==health && game->player.venom==2);
     CHECK(savegame_write(path,game,err,sizeof err));
+    SaveInfo info; CHECK(savegame_inspect(path,levels,levels_loaded,&info) && info.run_id==session.run_id);
     CHECK(savegame_load(path,levels,levels_loaded,&game,&session,err,sizeof err));
     CHECK(game->campaign.errand_done && game_door_at(game,c->errand_door_x,c->errand_door_y)->state==DOOR_OPENING);
-    game->horror.reading=-1;
+    CHECK(game->horror.reading==monk->note && game->horror.reading_page==1);
+    use.use=true; game_update(game,.5f,&use);
+    CHECK(!use.use && game->horror.reading==-1 && game->horror.reading_page==0 && game->time==time);
+    game->player.venom=0;
     if (n==LEVEL_COUNT-1) {
       int last=c->count-1; const Mechanism *m=&c->stations[last]; CHECK(m->kind==MECHANISM_OATH);
       game->campaign.done=(1u<<last)-1;
@@ -265,6 +280,53 @@ static void authored_campaign(void) {
   CHECK(play->horror.noise_radius==4.5f && play->horror.noise_timer>0);
   puts("All five authored errand doors, real monk conversations, one-time rewards, final bell prerequisites and quiet footsteps passed.");
 }
+
+static void collect_chapter_counts(void) {
+  for (int i=0;i<game->enemy_count;i++) enemy_hit(&game->enemies[i],game,10000);
+  Input idle={.weapon=-1};
+  for (;;) {
+    int index=0;
+    while (index<game->item_count && game->items[index].kind!=ITEM_TREASURE) index++;
+    if (index==game->item_count) break;
+    Item item=game->items[index];
+    int treasure=game->treasure;
+    position(game,item.x,item.y,1,0); game_update(game,.001f,&idle);
+    CHECK(!game->player_dead && game->treasure==treasure+1);
+  }
+  const CampaignLayout *c=&game->level->campaign;
+  position(game,c->errand.x+.5f,c->errand.y+.5f,1,0); game_update(game,.001f,&idle);
+  campaign_converse(game,game->level->world.monks[c->errand.monk].note);
+  CHECK(game->kills==game->total_enemies && game->treasure==game->total_treasure && game->secrets_found==1);
+}
+static void retry_statistics(void) {
+  preferences_get()->arcade=true; new_game(0,DIFFICULTY_NORMAL);
+  collect_chapter_counts();
+  int kills=session.total_kills,treasure=session.total_treasure,secrets=session.total_secrets_found;
+  next_level(); // Completed chapters must survive retries of the following one.
+  collect_chapter_counts();
+  CHECK(session.total_kills>kills && session.total_treasure>treasure && session.total_secrets_found>secrets);
+  char *path=user_file("production-retry.dat"),err[128]; CHECK(path);
+  CHECK(savegame_write(path,game,err,sizeof err));
+  CHECK(savegame_load(path,levels,levels_loaded,&game,&session,err,sizeof err));
+  int score=session.score,lives=session.lives;
+  uint32_t relics=session.relics;
+  game_hurt_player(game,1000);
+  set_state(ST_PLAYING);
+  for (int i=0;i<32;i++) update(.05f);
+  CHECK(state==ST_DIED && session.lives==lives-1);
+  on_key_down(SDL_SCANCODE_RETURN);
+  CHECK(state==ST_LEVEL_START && game->level_index==1 && game->player.health==100);
+  CHECK(session.total_kills==kills && session.total_treasure==treasure && session.total_secrets_found==secrets);
+  CHECK(session.score==score && session.lives==lives-1 && session.relics==relics);
+  CHECK(savegame_write(path,game,err,sizeof err));
+  CHECK(savegame_load(path,levels,levels_loaded,&game,&session,err,sizeof err));
+  collect_chapter_counts(); next_level();
+  CHECK(session.total_kills==session.total_enemies && percent(session.total_kills,session.total_enemies)==100);
+  CHECK(session.total_treasure==session.max_treasure && percent(session.total_treasure,session.max_treasure)==100);
+  CHECK(session.total_secrets_found==secrets+1 && session.total_secrets_found<=session.max_secrets);
+  CHECK(SDL_RemovePath(path)); free(path); preferences_defaults();
+  puts("Arcade retries, saved attempts, completion counts and carried score/lives/relics passed.");
+}
 static void save_frame(const char *name) {
   SDL_Surface *surface=SDL_CreateSurfaceFrom(W,H,SDL_PIXELFORMAT_ARGB8888,fb->px,W*4);
   CHECK(surface && SDL_SaveBMP(surface,name)); SDL_DestroySurface(surface);
@@ -278,6 +340,12 @@ static void screenshots(void) {
   render(); save_frame("build/production-journal.bmp"); game->campaign.journal=false;
   game->horror.reading=game->level->world.monks[0].note;
   render(); save_frame("build/production-large-dialogue.bmp");
+  game->horror.reading_page=1;
+  render(); save_frame("build/production-large-errand.bmp");
+  new_game(4,DIFFICULTY_NORMAL); set_state(ST_PLAYING);
+  game->campaign.errand_found=game->campaign.errand_done=true;
+  game->horror.reading=game->level->world.monks[0].note; game->horror.reading_page=1;
+  render(); save_frame("build/production-large-thanks.bmp");
   new_game(0,DIFFICULTY_NORMAL); set_state(ST_PLAYING);
   const Mechanism *m=&game->level->campaign.stations[0];
   position(game,m->x-.7f,m->y+.5f,1,0); render(); save_frame("build/production-winch.bmp");
@@ -297,7 +365,7 @@ static void screenshots(void) {
   image_free(fb); fb=NULL; renderer_free(&renderer); assets_free(&assets); comic_art_free(&comic_art);
 }
 int main(int argc,char **argv) {
-  CHECK(SDL_Init(0)); fixture_map(); progression(); tactical_tools(); soldier_combat(); preferences_and_saves(); authored_campaign();
+  CHECK(SDL_Init(0)); fixture_map(); progression(); tactical_tools(); soldier_combat(); preferences_and_saves(); authored_campaign(); retry_statistics();
   if (argc>1 && !strcmp(argv[1],"--screenshots")) screenshots();
   game_destroy(play); level_free(&fixture); game_destroy(game);
   for (int i=0;i<levels_loaded;i++) level_free(&levels[i]);

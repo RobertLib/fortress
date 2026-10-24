@@ -185,6 +185,7 @@ bool horror_use_note(Game *g) {
   int n = horror_near_note(g);
   if (n < 0) return false;
   g->horror.reading = n;
+  g->horror.reading_page = 0;
   g->show_map = false;
   g->horror.notes_read |= 1u << n;
   campaign_converse(g,n);

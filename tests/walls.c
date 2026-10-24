@@ -181,8 +181,8 @@ static void rewrite_save(const char *path, bool legacy, const Game *game) {
   uint8_t *data = malloc((size_t)size);
   CHECK(data && fread(data, 1, (size_t)size, file) == (size_t)size);
   fclose(file);
-  // Keep legacy fixtures and wall corruption independent of appended v7/v8 state.
-  long campaign_extension=112+game->enemy_count*12+game->projectile_count*4;
+  // Keep legacy fixtures and wall corruption independent of appended v7-v9 state.
+  long campaign_extension=116+game->enemy_count*12+game->projectile_count*4;
   if (legacy) {
     data[8] = 1;
     size -= 8+campaign_extension; // v4 camera easing, v6 burst and campaign extension

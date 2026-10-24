@@ -1904,7 +1904,7 @@ static void render_horror_text(Renderer *r, Image *fb, const Game *g) {
   const Monk *monk = world_monk_note(g->level, index);
   font_draw(fb, monk ? monk->name : "WORDS LEFT BEHIND", W / 2, 48, 18, FONT_BOLD, ALIGN_CENTER, rgb(92, 44, 34));
   // Word-wrap the short handwritten fragments; | starts a new paragraph.
-  const char *text = campaign_dialogue(g,index);
+  const char *text = campaign_dialogue(g,index,g->horror.reading_page);
   char line[224] = {0};
   size_t len = 0;
   float y = 88;
@@ -1933,7 +1933,14 @@ static void render_horror_text(Renderer *r, Image *fb, const Game *g) {
     }
     p = end + 1;
   }
-  font_draw(fb, monk ? "USE - END CONVERSATION" : "USE - FOLD THE NOTE", W / 2, 293, 10, FONT_BOLD, ALIGN_CENTER, rgb(112, 72, 50));
+  int pages=campaign_dialogue_pages(g,index);
+  char footer[80];
+  if (pages>1)
+    snprintf(footer,sizeof footer,"USE - %s (%d / %d)",g->horror.reading_page+1<pages?"NEXT":"END CONVERSATION",g->horror.reading_page+1,pages);
+  else snprintf(footer,sizeof footer,"%s",monk?"USE - END CONVERSATION":"USE - FOLD THE NOTE");
+  float footer_width=font_measure(footer,11,FONT_BOLD)+24;
+  gfx_fill_rect(fb,W/2-footer_width/2,275,footer_width,24,rgba(45,31,20,.94f));
+  font_draw(fb,footer,W/2,291,11,FONT_BOLD,ALIGN_CENTER,rgb(231,211,170));
 }
 
 static void journal_line(Image *fb,const char *text,float y,Color color) {

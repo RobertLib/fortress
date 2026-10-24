@@ -174,9 +174,13 @@ static void rehash(uint8_t *data, size_t size) {
 static void test_legacy_campaign_save(void) {
   fresh_game(0,DIFFICULTY_NORMAL); session.run_id=415; session.relics=5; session.arcade=true;
   game->horror.noise_radius=4.5f; save();
-  size_t size; uint8_t *data=SDL_LoadFile(SLOT,&size); CHECK(data && size>8 && data[8]==8);
+  size_t size; uint8_t *data=SDL_LoadFile(SLOT,&size); CHECK(data && size>8 && data[8]==9);
+  // Version 8 has a run identifier but no conversation page.
+  data[8]=8; size-=4; rehash(data,size); write_file(SLOT,data,size);
+  SaveInfo info; CHECK(savegame_inspect(SLOT,levels,2,&info) && info.run_id==415);
+  load(); CHECK(session.run_id==415 && game->horror.reading_page==0);
   data[8]=7; size-=4; rehash(data,size); write_file(SLOT,data,size); SDL_free(data);
-  SaveInfo info; CHECK(savegame_inspect(SLOT,levels,2,&info) && info.run_id==0);
+  CHECK(savegame_inspect(SLOT,levels,2,&info) && info.run_id==0);
   load(); CHECK(session.run_id==0 && session.relics==5 && session.arcade && game->horror.noise_radius==4.5f);
 }
 static void test_legacy_repeater_save(void) {
@@ -187,10 +191,10 @@ static void test_legacy_repeater_save(void) {
   save();
   size_t size;
   uint8_t *data = SDL_LoadFile(SLOT, &size);
-  CHECK(data && size > 8 && data[8] == 8);
+  CHECK(data && size > 8 && data[8] == 9);
   // Version 5 ends before the new pending-burst count.
   data[8] = 5;
-  size -= 4 + 112 + game->enemy_count*12 + game->projectile_count*4;
+  size -= 8 + 112 + game->enemy_count*12 + game->projectile_count*4;
   rehash(data, size);
   write_file(SLOT, data, size);
   SDL_free(data);
@@ -212,8 +216,9 @@ static void test_bad_files_and_failed_save(void) {
   uint8_t *data = malloc(size);
   CHECK(data);
   // Unsupported version, invalid level, difficulty, score, NaN position,
-  // invalid item and burst counts. Recompute checksums to exercise field validation too.
-  const size_t offsets[] = {8, 12, 28, 32, 72, 140, size - 8};
+  // invalid items, run identifier and conversation page. Recompute checksums
+  // to exercise field validation too.
+  const size_t offsets[] = {8, 12, 28, 32, 72, 140, size - 12, size - 8};
   for (size_t i = 0; i < sizeof offsets / sizeof offsets[0]; i++) {
     memcpy(data, original, size);
     memset(data + offsets[i], 0xff, 4);

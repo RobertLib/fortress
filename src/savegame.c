@@ -8,7 +8,7 @@
 
 // Explicit little-endian fields: no struct padding, native enums or pointers
 // reach disk. Bump the version when the schema or gameplay interpretation changes.
-#define SAVE_VERSION 8
+#define SAVE_VERSION 9
 #define SAVE_LIMIT (16 * 1024 * 1024)
 #define TIME_LIMIT 100000000.0f
 static const char MAGIC[8] = {'F', 'R', 'T', 'S', 'A', 'V', 'E', '\0'};
@@ -366,6 +366,8 @@ static void transfer_game(Codec *c, Game *g) {
     F(g->horror.noise_radius,0,11);
   }
   if (c->version>=8) I(g->session->run_id,0,INT_MAX);
+  if (c->version>=9)
+    I(g->horror.reading_page,0,g->horror.reading<0?0:campaign_dialogue_pages(g,g->horror.reading)-1);
 }
 
 bool savegame_write(const char *path, Game *g, char *err, size_t err_size) {
@@ -424,7 +426,7 @@ bool savegame_inspect(const char *path,const Level *levels,int count,SaveInfo *i
   for (int i=0;i<6;i++) real(&c,0,-10000,10000);
   int health=integer(&c,0,1,100),ammo=integer(&c,0,0,99);
   int run_id=0;
-  if (c.version>=8) { c.pos=size-8; run_id=integer(&c,0,0,INT_MAX); }
+  if (c.version>=8) { c.pos=size-(c.version>=9?12:8); run_id=integer(&c,0,0,INT_MAX); }
   c.pos=size-4; uint32_t hash=u32(&c,0);
   bool ok=c.ok && !memcmp(magic,MAGIC,8) && c.version>=1 && c.version<=SAVE_VERSION &&
     hash==checksum(data,size-4) && signature==level_signature(&levels[index]);
