@@ -45,7 +45,7 @@ int main(void) {
   SDL_RemovePath(save_path);
   CHECK(load_levels());
 
-  set_state(ST_INTRO);
+  set_state(ST_MENU);
   on_key_down(SDL_SCANCODE_3);
 #if FORTRESS_DEBUG_TOOLS
   CHECK(state == ST_LEVEL_START && game && game->level_index == 2);
@@ -56,11 +56,17 @@ int main(void) {
   game_destroy(game);
   game = NULL;
 #else
-  CHECK(state == ST_INTRO && !game);
+  CHECK(state == ST_MENU && !game);
 #endif
-  set_state(ST_INTRO);
+  set_state(ST_MENU);
   on_key_down(SDL_SCANCODE_RETURN);
-  CHECK(state == ST_MENU);
+  CHECK(state == ST_DIFFICULTY && !game);
+  on_key_down(SDL_SCANCODE_ESCAPE);
+  CHECK(state == ST_MENU && !game);
+  on_key_down(SDL_SCANCODE_ESCAPE);
+  CHECK(state == ST_QUIT && running);
+  on_key_down(SDL_SCANCODE_ESCAPE);
+  CHECK(state == ST_MENU && running);
 
   check_layout(main_menu(), MAIN_MENU_SPAN);
   check_layout(difficulty_menu(), DIFFICULTY_MENU_SPAN);

@@ -83,7 +83,10 @@ static void test_outro(void) {
   CHECK(state == ST_VICTORY && session.score == 12345 && session.total_kills == 17);
   CHECK(session.total_time == 124 && session.total_enemies == enemies);
   handle_state_key(SDL_SCANCODE_RETURN);
-  CHECK(state == ST_INTRO);
+  CHECK(state == ST_MENU && main_menu_index == 0);
+  set_state(ST_VICTORY);
+  handle_state_key(SDL_SCANCODE_ESCAPE);
+  CHECK(state == ST_MENU && main_menu_index == 0);
   begin_story(COMIC_OUTRO);
   handle_state_key(SDL_SCANCODE_ESCAPE);
   CHECK(state == ST_VICTORY && session.total_time == 124);
@@ -97,6 +100,9 @@ static void test_outro(void) {
   set_state(ST_GAME_OVER);
   handle_state_key(SDL_SCANCODE_RETURN);
   CHECK(state == ST_DIFFICULTY);
+  set_state(ST_GAME_OVER);
+  handle_state_key(SDL_SCANCODE_ESCAPE);
+  CHECK(state == ST_MENU && main_menu_index == 0);
 }
 
 static uint64_t frame_hash(void) {
@@ -135,8 +141,8 @@ static void test_art(bool previews) {
     }
     CHECK(state == (kind == COMIC_INTRO ? ST_LEVEL_START : ST_VICTORY));
   }
-  draw_intro();
-  if (previews) save_preview("comic-title.bmp");
+  draw_main_menu();
+  if (previews) save_preview("comic-menu.bmp");
   image_free(fb);
   fb = NULL;
   comic_art_free(&comic_art);

@@ -10,7 +10,7 @@ The game retains its 640 × 400 raycasting presentation.
 
 | Family | Implementation |
 | --- | --- |
-| Title, main menu, difficulty, controls, quit | Painted fortress, shared slate panels, brass rules, stable selection and matching mouse bounds |
+| Main menu, difficulty, controls, quit | Painted fortress, shared slate panels, brass rules, stable selection and matching mouse bounds |
 | Loading and installation error | Matching title, panels and readable status text |
 | Chapters, pause, death, floor complete, game over, victory | Shared typography, cards, spacing, controls and contextual statistics |
 | Story | Six painted cinematic scenes, camera movement, weather and caption panel |
@@ -65,7 +65,7 @@ shallow frame projection, an actual cavity behind the wall plane, stable geometr
 during animation, a seamless loop, foreground wall and ledge occlusion, and the
 absence of a duplicate camera-facing fireplace.
 
-The native window should also be checked through title → new game →
+The native window should also be checked through main menu → new game →
 difficulty → story → chapter → play → map → pause. Release artwork lives
 alongside `build/release/fortress` in `assets/` and `levels/`.
 

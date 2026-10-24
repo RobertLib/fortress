@@ -56,9 +56,12 @@ static void tap(SDL_Joystick *joystick, SDL_GamepadButton value) {
 }
 
 static void test_menus(SDL_Joystick *joystick) {
-  set_state(ST_INTRO);
-  tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
+  set_state(ST_MENU);
   CHECK(state == ST_MENU && main_menu_index == 0);
+  tap(joystick, SDL_GAMEPAD_BUTTON_EAST);
+  CHECK(state == ST_QUIT && running);
+  tap(joystick, SDL_GAMEPAD_BUTTON_EAST);
+  CHECK(state == ST_MENU && running);
   update_gamepad(.01f); // neutral arms navigation after a screen change
   button(joystick, SDL_GAMEPAD_BUTTON_DPAD_UP, true);
   CHECK(main_menu_index == main_menu().count - 1); // press works before the next frame
@@ -130,9 +133,12 @@ static void test_menus(SDL_Joystick *joystick) {
   CHECK(state == ST_DIFFICULTY);
   tap(joystick, SDL_GAMEPAD_BUTTON_EAST);
   CHECK(state == ST_MENU);
+  set_state(ST_GAME_OVER);
+  tap(joystick, SDL_GAMEPAD_BUTTON_EAST);
+  CHECK(state == ST_MENU && main_menu_index == 0);
   set_state(ST_VICTORY);
   tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
-  CHECK(state == ST_INTRO);
+  CHECK(state == ST_MENU && main_menu_index == 0);
   begin_story(COMIC_OUTRO);
   tap(joystick, SDL_GAMEPAD_BUTTON_START);
   CHECK(state == ST_STORY_OUTRO && comic.panel == 1);
@@ -342,7 +348,6 @@ int main(void) {
 
   // Exercise gamepad hints as well as switching back to keyboard hints.
   fb = image_new(W, H);
-  draw_intro();
   begin_story(COMIC_INTRO);
   draw_story();
   set_state(ST_PLAYING);

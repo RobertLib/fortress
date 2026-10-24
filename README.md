@@ -23,7 +23,7 @@ make clean          # remove build directories
 `make release` builds an optimized CMake `Release` binary without debug
 tools or test executables. Run it with `./build/release/fortress`; its
 `levels/` and `assets/` folders are copied alongside it. The `--level` / `-l` arguments
-and title-screen number-key shortcuts are compiled out. Development builds
+and main-menu number-key shortcuts are compiled out. Development builds
 from `make` and `make run` keep those shortcuts. The separate build folders
 let you switch between development and production without cleaning.
 Use `RELEASE_DIR=/path/to/output` to change the production build directory.
@@ -56,7 +56,8 @@ invalid atlases show a clear installation error instead of loading mismatched fa
 
 ### Visual presentation
 
-The title and menus share a painted fortress, drifting motes, dark iron panels
+The game opens directly in the main menu, ready to start or load a game.
+The menus share a painted fortress, drifting motes, dark iron panels
 and restrained brass details. The same visual language carries through the
 difficulty selection, controls, chapter introduction, pause screen and HUD.
 Selection stays lit while navigating with a keyboard, mouse or gamepad.
@@ -129,7 +130,7 @@ opening the grain stores, broken chains and a stolen crossbow. The prison
 encompasses the whole estate; each opened gate loosens the keeper's oath.
 Clearing the final chapter plays an epilogue of the last gate opening,
 the oath breaking and the village's release, followed
-by the final statistics. Story panels and the title use painted artwork in the same visual style.
+by the final statistics. Story panels and the menus use painted artwork in the same visual style.
 
 Panels advance automatically with slow camera movement, rain and drifting dust. **Enter**, **Space**,
 the **right arrow** or a **click** advances a panel; **Esc** or clicking
@@ -221,7 +222,7 @@ ways to jump straight to a chosen level. These are unavailable in
 
 - `make run LEVEL=3`
 - start the game with `--level 3` (or `-l 3`)
-- press the level's number key (`1`–`5`) on the title screen
+- press the level's number key (`1`–`5`) in the main menu
 
 ### Enemies
 

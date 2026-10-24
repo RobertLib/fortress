@@ -344,8 +344,6 @@ static void presentation(void) {
   clock_time = 2;
   set_state(ST_LOADING);
   shot("loading");
-  set_state(ST_INTRO);
-  shot("title");
   set_state(ST_MENU);
   shot("menu");
   set_state(ST_DIFFICULTY);

@@ -24,7 +24,6 @@
 
 typedef enum {
   ST_LOADING,
-  ST_INTRO,
   ST_MENU,
   ST_DIFFICULTY,
   ST_STORY_INTRO,
@@ -404,7 +403,6 @@ static int menu_hit_test(Menu m, MenuSpan span, float x, float y) {
 // screens where a click anywhere acts like ENTER
 static bool click_state(State s) {
   switch (s) {
-  case ST_INTRO:
   case ST_STORY_INTRO:
   case ST_STORY_OUTRO:
   case ST_CONTROLS:
@@ -438,15 +436,17 @@ static void handle_state_key(SDL_Scancode sc) {
   }
 
   switch (state) {
-  case ST_INTRO:
+  case ST_MENU: {
+    Menu m = main_menu();
+    main_menu_index = menu_nav(sc, m.count, main_menu_index);
     if (enter) {
-      blip();
-      main_menu_index = 0;
-      set_state(ST_MENU);
+      m.items[main_menu_index].action();
+    } else if (esc) {
+      act_quit();
     }
 #if FORTRESS_DEBUG_TOOLS
     else if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_9) {
-      // debug: a number key on the title screen warps to that level
+      // debug: a number key in the main menu warps to that level
       int n = sc - SDL_SCANCODE_1 + 1;
       if (n <= LEVEL_COUNT) {
         audio_play(SND_START, 1, 1);
@@ -454,16 +454,6 @@ static void handle_state_key(SDL_Scancode sc) {
       }
     }
 #endif
-    break;
-  case ST_MENU: {
-    Menu m = main_menu();
-    main_menu_index = menu_nav(sc, m.count, main_menu_index);
-    if (enter) {
-      m.items[main_menu_index].action();
-    } else if (esc) {
-      blip();
-      set_state(ST_INTRO);
-    }
     break;
   }
   case ST_DIFFICULTY:
@@ -522,11 +512,15 @@ static void handle_state_key(SDL_Scancode sc) {
       blip();
       choose_difficulty(0);
     } else if (esc) {
-      set_state(ST_INTRO);
+      main_menu_index = 0;
+      set_state(ST_MENU);
     }
     break;
   case ST_VICTORY:
-    if (enter || esc) set_state(ST_INTRO);
+    if (enter || esc) {
+      main_menu_index = 0;
+      set_state(ST_MENU);
+    }
     break;
   default: break;
   }
@@ -964,16 +958,16 @@ static void menu_background(void) {
   comic_draw_cover(&comic_art, fb, clock_time);
 }
 
-static void menu_footer(const char *action) {
+static void menu_footer(const char *action, const char *back) {
   gfx_fill_rect(fb, 40, 357, 560, 1, rgba(180, 159, 119, .23f));
   if (gamepad && gamepad_active) {
     char hint[128];
-    snprintf(hint, sizeof hint, "D-PAD  SELECT     %s  %s     %s  BACK", gamepad_button_name(SDL_GAMEPAD_BUTTON_SOUTH),
-             action, gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST));
+    snprintf(hint, sizeof hint, "D-PAD  SELECT     %s  %s     %s  %s", gamepad_button_name(SDL_GAMEPAD_BUTTON_SOUTH),
+             action, gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST), back);
     text_align(hint, 42, 378, 9, "#b4b6b1", ALIGN_LEFT);
   } else {
     char hint[128];
-    snprintf(hint, sizeof hint, "ARROWS / MOUSE  SELECT     ENTER / CLICK  %s     ESC  BACK", action);
+    snprintf(hint, sizeof hint, "ARROWS / MOUSE  SELECT     ENTER / CLICK  %s     ESC  %s", action, back);
     text_align(hint, 42, 378, 9, "#b4b6b1", ALIGN_LEFT);
   }
 }
@@ -1003,21 +997,6 @@ static void screen_card(const char *title) {
   ui_rule(fb, 150, 118, 340);
 }
 
-static void draw_intro(void) {
-  menu_background();
-  float width = draw_wordmark(42, 164, 42, ALIGN_LEFT, "#ebe0c9");
-  ui_rule(fb, 42, 185, width);
-  font_draw(fb, "Betrayed. Imprisoned. Still alive.", 42, 219, 13, FONT_REGULAR, ALIGN_LEFT, rgb(188, 194, 191));
-  font_draw(fb, "An entire estate between you and freedom.", 42, 241, 12, FONT_REGULAR, ALIGN_LEFT, rgb(150, 162, 165));
-  float pulse = .8f + .2f * sinf(clock_time * 2);
-  gfx_fill_rect(fb, 42, 280, 225, 35, rgba(13, 20, 26, .82f));
-  gfx_fill_rect(fb, 42, 280, 2, 35, rgba(205, 174, 119, pulse));
-  char hint[64];
-  snprintf(hint, sizeof hint, "%s  MAIN MENU",
-           gamepad && gamepad_active ? gamepad_button_name(SDL_GAMEPAD_BUTTON_SOUTH) : "ENTER");
-  text_align(hint, 56, 302, 11, "#e5d4b2", ALIGN_LEFT);
-}
-
 static void draw_story(void) {
   comic_draw(&comic_art, fb, &comic);
   bool last = comic.panel == COMIC_PANELS - 1;
@@ -1038,7 +1017,7 @@ static void draw_main_menu(void) {
   ui_rule(fb, MAIN_MENU_SPAN.x, 116, MAIN_MENU_SPAN.width);
   draw_menu(main_menu(), main_menu_index, MAIN_MENU_SPAN);
   if (notice_timer > 0) text_align(notice, 320, 342, 11, "#ecdbb7", ALIGN_LEFT);
-  menu_footer("CONFIRM");
+  menu_footer("CONFIRM", "QUIT");
 }
 
 static void draw_difficulty(void) {
@@ -1062,7 +1041,7 @@ static void draw_difficulty(void) {
     text("RETURN TO THE MAIN MENU", 462, 223, 13, "#d5c7ac");
   }
   text_align("Your difficulty stays with you for the whole escape.", 42, 331, 11, "#9ba6a8", ALIGN_LEFT);
-  menu_footer("BEGIN");
+  menu_footer("BEGIN", "BACK");
 }
 
 static void draw_controls(void) {
@@ -1216,7 +1195,7 @@ static void draw_game_over(void) {
   snprintf(buf, sizeof buf, "%d ENEMIES DEFEATED", session.total_kills);
   text(buf, W / 2, 271, 10, "#a1afb3");
   control_hint("ENTER  /  PLAY AGAIN", "%s  /  PLAY AGAIN", 310, 12, "#d8c098");
-  snprintf(buf, sizeof buf, "%s  /  TITLE SCREEN",
+  snprintf(buf, sizeof buf, "%s  /  MAIN MENU",
            gamepad && gamepad_active ? gamepad_button_name(SDL_GAMEPAD_BUTTON_EAST) : "ESC");
   text(buf, W / 2, 338, 10, "#9eafb5");
 }
@@ -1237,14 +1216,13 @@ static void draw_victory(void) {
                            {"SECRETS", secrets}, {"LIVES LEFT", lives}, {"FINAL SCORE", score}};
   stat_rows(rows, 6, 150, 26, 13);
 
-  control_hint("ENTER  /  TITLE SCREEN", "%s  /  TITLE SCREEN", 337, 12, "#d8c098");
+  control_hint("ENTER  /  MAIN MENU", "%s  /  MAIN MENU", 337, 12, "#d8c098");
 }
 
 static void render(void) {
   switch (state) {
   case ST_LOADING: draw_center_screen("#101018", "LOADING..."); break;
   case ST_ERROR: draw_error(); break;
-  case ST_INTRO: draw_intro(); break;
   case ST_STORY_INTRO:
   case ST_STORY_OUTRO: draw_story(); break;
   case ST_MENU: draw_main_menu(); break;
@@ -1313,7 +1291,7 @@ static bool load_levels(void) {
 }
 
 #if FORTRESS_DEBUG_TOOLS
-// debug: --level N skips the title screen and starts on that level
+// debug: --level N skips the main menu and starts on that level
 static int warp_arg(int argc, char **argv) {
   for (int i = 1; i + 1 < argc; i++) {
     if (!strcmp(argv[i], "--level") || !strcmp(argv[i], "-l")) {
@@ -1375,7 +1353,7 @@ int main(int argc, char **argv) {
       new_game(warp - 1, selected_difficulty);
     else
 #endif
-      set_state(ST_INTRO);
+      set_state(ST_MENU);
   }
 
   Uint64 last = SDL_GetTicksNS();
