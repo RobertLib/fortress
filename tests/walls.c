@@ -68,13 +68,14 @@ static void test_weapons_and_movement(void) {
       CHECK(g->wall_health[cell] == BREAKABLE_WALL_HEALTH);
       g->player.x = 3.5f;
     }
-    int ammo = g->player.ammo, shots = 0;
-    while (game_cell(g, 4, 1) == '8' && shots < 5) {
+    int ammo = g->player.ammo, attacks = 0;
+    while (game_cell(g, 4, 1) == '8' && attacks < 5) {
       shoot(g);
       if (weapon != WEAPON_DAGGER) CHECK(g->wall_health[cell] > 0); // damage on arrival
-      tick(g, 50);
-      shots++;
+      tick(g, 100);
+      attacks++;
     }
+    int shots = attacks * (weapon == WEAPON_ARBALEST ? 3 : 1);
     CHECK(game_cell(g, 4, 1) == '.' && shots >= 3 && shots <= 5);
     CHECK(g->player.ammo == ammo - (weapon == WEAPON_DAGGER ? 0 : shots));
     CHECK(!game_is_blocked(g, 4.5f, 1.5f, g->player.radius, NULL));
@@ -182,8 +183,8 @@ static void rewrite_save(const char *path, bool legacy) {
   fclose(file);
   if (legacy) {
     data[8] = 1;
-    size -= 4; // remove the v4 camera easing field; this arena has no walls or pendulums
-  } else data[size - 16] = BREAKABLE_WALL_HEALTH + 1; // invalid last wall health
+    size -= 8; // remove v4 camera easing and v6 burst count; no walls or pendulums here
+  } else data[size - 20] = BREAKABLE_WALL_HEALTH + 1; // invalid last wall health
   uint32_t checksum = 2166136261u;
   for (long i = 0; i < size - 4; i++) checksum = (checksum ^ data[i]) * 16777619u;
   for (int i = 0; i < 4; i++) data[size - 4 + i] = (uint8_t)(checksum >> (i * 8));

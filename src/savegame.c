@@ -8,7 +8,7 @@
 
 // Explicit little-endian fields: no struct padding, native enums or pointers
 // reach disk. Bump the version when the schema or gameplay interpretation changes.
-#define SAVE_VERSION 5
+#define SAVE_VERSION 6
 #define SAVE_LIMIT (16 * 1024 * 1024)
 #define TIME_LIMIT 100000000.0f
 static const char MAGIC[8] = {'F', 'R', 'T', 'S', 'A', 'V', 'E', '\0'};
@@ -308,6 +308,10 @@ static void transfer_game(Codec *c, Game *g) {
     F(w->attack_timer, 0, 1.5f); T(w->step_timer); T(w->path_timer);
     F(w->next_x, 0, lv->w); F(w->next_y, 0, lv->h); B(w->has_target);
     if (w->state != WARDEN_DORMANT && (w->x < 1 || w->y < 1 || w->x >= lv->w - 1 || w->y >= lv->h - 1)) c->ok = false;
+  }
+  if (c->version >= 6) {
+    I(g->burst_remaining, 0, 2);
+    if (g->burst_remaining && (p->weapon != WEAPON_ARBALEST || p->ammo <= 0)) c->ok = false;
   }
 }
 

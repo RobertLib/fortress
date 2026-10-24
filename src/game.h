@@ -155,6 +155,7 @@ typedef struct Game {
   float message_timer;
   float fire_timer;
   bool fire_held;
+  int burst_remaining; // bolts still to fire in the current repeater burst
   float weapon_anim_timer;
   bool player_dead, completed, show_map;
 } Game;

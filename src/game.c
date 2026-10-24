@@ -11,14 +11,16 @@ typedef struct WeaponSpec {
   float rate;
   int dmg_lo, dmg_hi;
   float range;
-  bool automatic, uses_ammo;
+  int burst_size;
+  float burst_interval;
+  bool uses_ammo;
   SoundId sound;
 } WeaponSpec;
 
 static const WeaponSpec WEAPONS[WEAPON_COUNT] = {
-    [WEAPON_DAGGER] = {0.45f, 8, 16, 1.7f, false, false, SND_DAGGER},
-    [WEAPON_CROSSBOW] = {0.42f, 10, 20, 24, false, true, SND_CROSSBOW},
-    [WEAPON_ARBALEST] = {0.12f, 8, 16, 24, true, true, SND_ARBALEST},
+    [WEAPON_DAGGER] = {0.45f, 8, 16, 1.7f, 1, 0, false, SND_DAGGER},
+    [WEAPON_CROSSBOW] = {0.42f, 10, 20, 24, 1, 0, true, SND_CROSSBOW},
+    [WEAPON_ARBALEST] = {0.5f, 8, 16, 24, 3, 0.4f, true, SND_ARBALEST},
 };
 
 static const DifficultySettings DIFFICULTIES[DIFFICULTY_COUNT] = {
@@ -641,6 +643,7 @@ static void update_player(Game *g, float dt, Input *in) {
     if (in->weapon != WEAPON_ARBALEST || p->has_arbalest) {
       if ((int)p->weapon != in->weapon) {
         p->weapon = (WeaponKind)in->weapon;
+        g->burst_remaining = 0;
         audio_play(SND_BLIP, 1, 1);
       }
     }
@@ -761,20 +764,25 @@ static void update_weapon(Game *g, float dt, const Input *in) {
   p->weapon_frame = g->weapon_anim_timer > 0 ? (g->weapon_anim_timer > 0.08f ? 1 : 2) : 0;
 
   const WeaponSpec *spec = &WEAPONS[p->weapon];
-  bool want_fire = in->fire && (spec->automatic || !g->fire_held);
+  bool want_fire = g->burst_remaining > 0 || (in->fire && !g->fire_held);
   g->fire_held = in->fire;
   if (!want_fire || g->fire_timer > 0) return;
 
   if (spec->uses_ammo && p->ammo <= 0) {
+    g->burst_remaining = 0;
     audio_play(SND_EMPTY, 1, 1);
     g->fire_timer = 0.3f;
     if (p->has_arbalest || p->weapon == WEAPON_CROSSBOW) game_say(g, "OUT OF BOLTS — SWITCH TO DAGGER!", 2.2f);
     return;
   }
 
-  g->fire_timer = spec->rate;
+  // A trigger press commits the whole burst, even after the trigger is released.
+  if (!g->burst_remaining) g->burst_remaining = spec->burst_size;
+  g->burst_remaining--;
   g->weapon_anim_timer = 0.16f;
   if (spec->uses_ammo) p->ammo--;
+  if (spec->uses_ammo && p->ammo == 0) g->burst_remaining = 0;
+  g->fire_timer = g->burst_remaining > 0 ? spec->burst_interval : spec->rate;
   audio_play(spec->sound, 0.9f, 1);
   if (spec->uses_ammo) horror_noise(g, p->x, p->y, 1.5f);
   alert_nearby(g, p->x, p->y, 9);

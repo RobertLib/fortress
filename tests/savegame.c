@@ -100,6 +100,8 @@ static void test_full_snapshot(void) {
   game->kills = game->treasure = game->secrets_found = 1;
   game->show_map = true;
   game->fire_timer = 0.2f;
+  game->fire_held = true;
+  game->burst_remaining = 2;
   game->weapon_anim_timer = 0.12f;
   game->player.weapon_frame = 1;
   game->items[0] = (Item){8.5f, 6.5f, ITEM_BOLTS_DROP};
@@ -136,15 +138,17 @@ static void test_full_snapshot(void) {
   CHECK(game->projectile_count == 3 && game->projectiles[0].target == &game->enemies[1]);
   CHECK(game->time == 75.25f && game->kills == 1 && game->secrets_found == 1);
   CHECK(!strcmp(game->message, "SNAPSHOT") && game->message_timer == 2);
+  CHECK(game->burst_remaining == 2 && game->fire_held && game->fire_timer == 0.2f);
   CHECK(savegame_write(COPY, game, err, sizeof err));
   same_files(SLOT, COPY);
 
   // Advancing a restored combat snapshot must make exactly the same choices.
   Input input = {.weapon = -1};
-  for (int i = 0; i < 30; i++) game_update(game, 0.01f, &input);
+  for (int i = 0; i < 70; i++) game_update(game, 0.01f, &input);
+  CHECK(game->player.ammo == 35 && game->burst_remaining == 0);
   CHECK(savegame_write(COPY, game, err, sizeof err));
   load();
-  for (int i = 0; i < 30; i++) game_update(game, 0.01f, &input);
+  for (int i = 0; i < 70; i++) game_update(game, 0.01f, &input);
   save();
   same_files(SLOT, COPY);
 }
@@ -166,6 +170,28 @@ static void rehash(uint8_t *data, size_t size) {
   for (int i = 0; i < 4; i++) data[size - 4 + i] = (uint8_t)(hash >> (8 * i));
 }
 
+static void test_legacy_repeater_save(void) {
+  fresh_game(0, DIFFICULTY_NORMAL);
+  game->player.weapon = WEAPON_ARBALEST;
+  game->player.has_arbalest = true;
+  game->fire_held = true;
+  save();
+  size_t size;
+  uint8_t *data = SDL_LoadFile(SLOT, &size);
+  CHECK(data && size > 8 && data[8] == 6);
+  // Version 5 ends before the new pending-burst count.
+  data[8] = 5;
+  size -= 4;
+  rehash(data, size);
+  write_file(SLOT, data, size);
+  SDL_free(data);
+  load();
+  CHECK(game->burst_remaining == 0 && game->player.weapon == WEAPON_ARBALEST);
+  Input input = {.weapon = -1, .fire = true};
+  for (int i = 0; i < 30; i++) game_update(game, 0.01f, &input);
+  CHECK(game->player.ammo == 16);
+}
+
 static void test_bad_files_and_failed_save(void) {
   fresh_game(0, DIFFICULTY_NORMAL);
   save();
@@ -177,8 +203,8 @@ static void test_bad_files_and_failed_save(void) {
   uint8_t *data = malloc(size);
   CHECK(data);
   // Unsupported version, invalid level, difficulty, score, NaN position,
-  // invalid item count. Recompute checksums to exercise field validation too.
-  const size_t offsets[] = {8, 12, 28, 32, 72, 140};
+  // invalid item and burst counts. Recompute checksums to exercise field validation too.
+  const size_t offsets[] = {8, 12, 28, 32, 72, 140, size - 8};
   for (size_t i = 0; i < sizeof offsets / sizeof offsets[0]; i++) {
     memcpy(data, original, size);
     memset(data + offsets[i], 0xff, 4);
@@ -254,6 +280,7 @@ int main(void) {
   random_seed(12345);
   for (int i = 0; i < 2; i++) CHECK(level_parse(&levels[i], ARENA, err, sizeof err));
   test_full_snapshot();
+  test_legacy_repeater_save();
   test_bad_files_and_failed_save();
   game_destroy(game);
   game = NULL;

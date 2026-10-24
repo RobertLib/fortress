@@ -162,6 +162,11 @@ from an older build; older saves on unchanged custom maps remain supported.
 | `F5` / `F9` | save / load game |
 | `Esc` | pause |
 
+The repeating crossbow fires three bolts per trigger press, spaced 0.4 seconds
+apart, followed by a 0.5-second recovery. Release and press again for the next
+burst. Releasing the trigger lets the current burst finish; switching weapons
+cancels its remaining shots. Each bolt uses one round of ammunition.
+
 ### Gamepad
 
 SDL-compatible gamepads work alongside the keyboard and mouse. Connect one
