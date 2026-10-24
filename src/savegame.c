@@ -165,6 +165,17 @@ static uint32_t level_signature(const Level *lv) {
     for (int y = 0; y < lv->h; y++)
       for (int x = 0; x < lv->w; x++) real(c, level_ceiling_at(lv, x, y), -LEVEL_MAX_HEIGHT - 1, LEVEL_MAX_HEIGHT + 1);
   }
+  if (lv->world.cells) {
+    u32(c, 0x574f524cu);
+    for (int i = 0; i < lv->w * lv->h; i++) {
+      u32(c, lv->world.cells[i].outside); u32(c, lv->world.cells[i].ground); u32(c, lv->world.cells[i].authored);
+    }
+    u32(c, lv->world.prop_count);
+    for (int i = 0; i < lv->world.prop_count; i++) {
+      const WorldProp *p = &lv->world.props[i];
+      u32(c, p->x); u32(c, p->y); u32(c, p->kind);
+    }
+  }
   const HorrorLayout *h = &lv->horror;
   if (h->chapter) {
     u32(c, h->chapter);

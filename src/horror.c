@@ -547,11 +547,13 @@ static void update_ambience(Game *g, float dt, bool safe) {
   h->ambient_timer = 21 + lcg_next(&r) * 25;
   static const SoundId sounds[] = {SND_HORROR_WIND, SND_HORROR_KNOCK, SND_HORROR_SCRAPE, SND_HORROR_STEPS, SND_HORROR_BREATH};
   int kind = (h->ambient_cycle + g->level->horror.chapter) % 5;
+  bool outside = world_outside(g->level, (int)g->player.x, (int)g->player.y);
   for (int attempt = 0; attempt < 32; attempt++) {
     float angle = lcg_next(&r) * 2 * (float)M_PI, distance = 3 + lcg_next(&r) * 4;
     int x = (int)floorf(g->player.x + cosf(angle) * distance), y = (int)floorf(g->player.y + sinf(angle) * distance);
     if (!dry_cell(g->level, x, y)) continue;
-    sound_at(g, sounds[kind], x + .5f, y + .5f, kind == 0 ? .3f : .65f, .85f + lcg_next(&r) * .2f);
+    SoundId sound = outside ? (kind == 4 ? SND_HORROR_BELL : SND_HORROR_WIND) : sounds[kind];
+    sound_at(g, sound, x + .5f, y + .5f, outside ? .28f : kind == 0 ? .3f : .65f, .85f + lcg_next(&r) * .2f);
     break;
   }
 }

@@ -69,7 +69,7 @@ static void test_chapters_and_validation(void) {
     char *text = SDL_LoadFile(path, NULL);
     CHECK(text);
     Level lv; parse(&lv, text); SDL_free(text);
-    CHECK(lv.horror.chapter == n && lv.horror.note_count == 2 && lv.horror.haven_count == 2);
+    CHECK(lv.horror.chapter == n && lv.horror.note_count == 2 + lv.world.monk_count && lv.horror.haven_count >= 3);
     CHECK(lv.horror.scene_count >= 3 && lv.horror.trace_count >= 5 && lv.key_count == 3);
     Session s = {.lives = 3, .next_life = 40000};
     Game *g = game_create(&lv, n - 1, &s, NULL);

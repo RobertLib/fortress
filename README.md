@@ -1,6 +1,6 @@
 # Fortress
 
-A retro first-person action game set in a medieval fortress — a software
+A retro first-person action game set across a medieval fortress and its estate — a software
 raycasting engine written in C on top of SDL3, with no other dependencies.
 It combines a complete painted art set with a custom vector font and synthesized sound. Torchlit stone corridors fade into darkness. Behind
 the remaining men-at-arms, something older drags its chains through the fortress.
@@ -76,16 +76,33 @@ painted cinematic scenes with readable captions and gentle camera movement.
 
 Run `./build/visual_tests --screenshots` from the repository root to render the
 complete presentation and contact sheets into `build/art-*.bmp`. The test
-checks all 532 asset slots, premultiplied alpha, distinct animation frames,
+checks all 586 asset slots, premultiplied alpha, distinct animation frames,
 material mips and asset ownership. See [the coverage and verification guide](docs/art-direction.md)
 and [artwork sources and reproduction](assets/README.md).
 
 ## The Game
 
-Fight through 5 floors of the fortress. On each floor, find **3 keys**
-that unlock the **GATE** to the next floor. You have 3 lives; every
+Explore five chapters across prison corridors, a village, an abbey,
+a walled park, a forest cemetery and the upper keep. Each chapter has **3 keys**
+that unlock the **GATE** to the next chapter. You have 3 lives; every
 40,000 points earns an extra life. After dying you retry the floor with
 a crossbow and a basic supply of bolts.
+
+Each chapter includes a required objective in its outdoor district, two
+return connections, wells and named landmarks. Enter the village inn and
+cottages, speak with six peaceful monks, search Saint Alden's church and its
+infirmary, cross the park's pond bridge and follow Blackwood to the keeper's
+grave. Press **E / Space / gamepad Use** near a monk to speak; press again to
+close the conversation. Reading pauses the world. Monks stand near white
+candles, which protect against the Jailer. Wells are solid landmarks.
+
+Outdoor spaces have an open night sky, longer moonlit visibility, local
+grass, earth, cobble, gravel and leaf-litter surfaces, and wind and distant
+bells. Roofs occlude the sky when entering buildings. The automap fits the
+larger chapters, distinguishes outdoor ground and marks explored monks.
+See [the story and world design](docs/story-and-world.md) and
+[geometry and verification](docs/level-design.md). Generate exterior and
+dialogue previews with `./build/world_tests --screenshots`.
 
 Choose **EASY**, **NORMAL** or **HARD** after selecting **NEW GAME**. Use
 the arrow keys or mouse, then Enter or a click to start; Esc or **BACK**
@@ -107,9 +124,11 @@ selection leaves any run available through **CONTINUE** intact.
 
 ### Story comics
 
-Starting a new game plays a three-panel animated prologue: betrayal,
-broken chains and a stolen crossbow. Clearing the final floor plays an
-epilogue of the last gate opening and the escape into the night, followed
+Starting a new game plays a three-panel animated prologue: punishment for
+opening the grain stores, broken chains and a stolen crossbow. The prison
+encompasses the whole estate; each opened gate loosens the keeper's oath.
+Clearing the final chapter plays an epilogue of the last gate opening,
+the oath breaking and the village's release, followed
 by the final statistics. Story panels and the title use painted artwork in the same visual style.
 
 Panels advance automatically with slow camera movement, rain and drifting dust. **Enter**, **Space**,
@@ -142,7 +161,7 @@ Failed saves keep the previous slot. Missing, damaged, unsupported or
 map-incompatible saves display a message and leave the current run intact.
 Hauntings, extinguished lights, read notes, pending encounters and the Jailer's
 position and pursuit state are saved too. An event that already happened stays
-finished after loading. The rebuilt campaign maps require a new run when moving
+finished after loading. The expanded campaign maps require a new run when moving
 from an older build; older saves on unchanged custom maps remain supported.
 
 ### Controls
@@ -228,8 +247,8 @@ swing a fist at close quarters, and can open doors.
 
 ### The haunted fortress
 
-Each floor has its own authored hauntings, two handwritten story fragments
-and two refuges marked by **white candles**. Approach a note and press the use
+Each chapter has authored hauntings, two handwritten story fragments,
+monk conversations and three or four refuges marked by **white candles**. Approach a note and press the use
 button to read it; use again to fold it. Reading pauses movement, enemies,
 projectiles, poison and the world clock. Notes gradually reveal the keeper's
 oath and the reason for your betrayal.
@@ -237,8 +256,8 @@ oath and the reason for your betrayal.
 Distant knocking, dragging iron, fading footsteps, breath and wind punctuate
 long stretches of silence. These sounds have positions in the world and are
 muffled by walls. Ambient hauntings wait during nearby combat and in refuges,
-so real attack warnings remain audible. Higher floors have fewer soldiers and
-more evidence of what has taken their place.
+so real attack warnings remain audible. Outdoor spaces use wind and distant
+bells; interiors retain the closer, less identifiable sounds.
 
 Taking a key tolls a distant bell, dims nearby flames and can leave an explored
 door open on the journey back. Some torches stay weak afterwards; white candles
@@ -429,11 +448,37 @@ Neighbouring ceilings may differ sharply, forming lintels and the lower roofs
 of side aisles. Ceilings occlude sight, sprites and projectiles at their actual
 elevations, and edits invalidate saves for that map.
 
-The campaign source plans are in [tools/author_campaign.py](tools/author_campaign.py).
+The interior source plans are in [tools/author_campaign.py](tools/author_campaign.py),
+with outdoor districts in [tools/author_world.py](tools/author_world.py).
 They specify every room, corridor, stair flight and object without randomness.
 Run `python3 tools/author_campaign.py` to export all five text maps, or pass a
 floor number to export only that floor. Direct edits to the text maps are also
 possible; exporting again replaces them from the source plans.
+
+Outdoor and authored furnishing directives use integer tile coordinates:
+
+```text
+@outside 10 4 12 10
+@terrain grass 10 4 12 10
+@terrain gravel 14 4 2 10
+@prop well 18 9
+@prop oak 11 5
+@monk 12 10 BROTHER ANSELM|The church key lies beside the altar.|Follow the white candles.
+@landmark 15 9 8 THE CLOISTER
+@objective Recover three keys from the cistern and church.
+@destination The service gate leads to the garden ward.
+```
+
+`@outside x y width height` removes the rendered roof and defaults to grass.
+Apply `@terrain kind x y width height` afterwards to select `stone`, `grass`,
+`earth`, `cobble`, `gravel` or `leaves`. Directed terrain also reserves its
+cells from automatic furnishings, including when selecting indoor stone.
+`@prop kind x y` supports oak, pine, well, grave, cross, bench, altar, table,
+chair, candelabra, statue and urn. Props require unoccupied dry floor;
+monks also require `@horror` and an available story-text slot. A `|` starts a
+new dialogue paragraph. Landmarks use a finite radius from 1 to 32 tiles.
+Terrain and prop edits invalidate incompatible saves; legacy maps without
+world directives keep their existing save signatures.
 
 Run `./build/architecture_tests` to check door frames, maze structure and routes.
 It walks all six orders of collecting the three keys using the actual movement,

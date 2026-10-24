@@ -12,23 +12,23 @@ static const struct {
   const char *title, *line[2];
   float duration;
 } PANELS[COMIC_KIND_COUNT][COMIC_PANELS] = {
-    {{"BETRAYAL", {"Betrayed by the men you trusted, you were left to rot", "behind the walls of the fortress."}, 6.5f},
+    {{"BETRAYAL", {"You opened the lord's grain stores to a starving village.", "Your reward was a cell. Tonight, the village needs you again."}, 6.5f},
      {"A WEAK LINK",
       {"Tonight, a rusted link gives way. You slip your chains.",
        "Below the stones, something answers the sound of iron."},
       7},
      {"THE WAY OUT",
-      {"Five floors stand between you and the night.", "Three keys to each gate. White candles bar the Jailer."},
+      {"Village, abbey, gardens, graves: the whole estate is a prison.", "Open five gates. Three keys to each. White candles bar the Jailer."},
       8}},
     {{"THE LAST GATE",
       {"The last three keys turn. Iron groans against stone.", "The final gate can no longer hold you."},
       6.5f},
      {"INTO THE NIGHT",
-      {"The chains fall silent as you cross the bridge.", "Ahead lies an open road, beneath a sky without bars."},
+      {"The chains fall silent as you carry the keys across the bridge.", "Behind you, five open gates release the keeper from his oath."},
       7},
      {"FREE",
-      {"Let the fortress keep its secrets. Your chains lie broken.",
-       "For the first time in a long time, the next step is yours."},
+      {"The abbey bell sounds once. The village doors open.",
+       "The road is yours. The people you helped have a future again."},
       8}},
 };
 

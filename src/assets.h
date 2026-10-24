@@ -92,6 +92,8 @@ typedef struct Assets {
   Image *walls_dark[WT_COUNT]; // faces along the y axis
   Image *floors[SURFACE_THEME_COUNT][SURFACE_MIPS];
   Image *ceilings[SURFACE_THEME_COUNT][SURFACE_MIPS];
+  Image *grounds[GROUND_COUNT - 1][SURFACE_MIPS];
+  Image *sky;
   EnemySprites enemies[ENEMY_TYPE_COUNT];
   Image *items[ITEM_KIND_COUNT]; // ITEM_BOLTS_DROP shares the quiver sprite
   Image *sparkle;

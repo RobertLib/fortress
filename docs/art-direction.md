@@ -17,6 +17,8 @@ The game retains its 640 × 400 raycasting presentation.
 | World | 256 px limestone, moss, timber, brick, windows, banners, arrow slits, doors, bars, gate, levers and three masonry damage stages |
 | Portal | Painted antique mirror with local animated distortion inside its frame |
 | Floors and ceilings | Five themed material pairs, each with nine mip levels |
+| Outdoor ground and sky | Five local ground materials with mipmaps; directional night panorama and roof occlusion |
+| Estate props | Painted oak, fir, roofed well, headstone, cross, bench, altar and peaceful monk; isolated alpha atlas |
 | Soldiers | Guard, knight and captain; eleven poses per family including firing, melee, injury and death |
 | Animals | Hound, rat and spider: stand and two strides from four sides, plus injury and death; four bat flight frames and dedicated falling frames |
 | Horror | Four Jailer poses, prisoner, shadow, readable parchment, notes, candles and floor traces |
@@ -44,11 +46,13 @@ ctest --test-dir build --output-on-failure
 make release
 ```
 
-The artwork check visits all 532 image slots, verifies nonempty images and
+The artwork check visits all 586 image slots, verifies nonempty images and
 premultiplied alpha, checks distinct locomotion and weapon frames, validates
 mip sizes, renders all presentation states and checks shared-image cleanup.
 The existing gameplay checks cover walls, water, pits, stairs, pendulums,
 story, save/load, difficulty and gamepad controls against the new art.
+`./build/world_tests --screenshots` adds views of the five outdoor districts,
+their buildings, monks and dialogue, with separate roof/sky and terrain tests.
 
 Contact sheets are written to `build/art-enemy-poses.bmp`,
 `build/art-world-inventory.bmp`, `build/art-effects-and-weapons.bmp` and

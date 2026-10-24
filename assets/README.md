@@ -22,6 +22,7 @@ All square atlas cells are 256 × 256. Sprite atlases contain real alpha.
 | `rat_death.bmp` | 3 × 1 | Dedicated clean rat injury, falling and dead poses |
 | `equipment.bmp` | 4 × 1 | Crossbow, repeating crossbow, dagger and bolt; HUD icons, pickup and projectile source |
 | `props.bmp` | 4 × 4 | Table, chair, wardrobe, chest; armor, statue, urn, fountain; candelabra, chains, barrel, powder barrel; charred debris, shield, sword, fireplace |
+| `outdoors.bmp` | 2 × 4 | Oak, fir; well, headstone; stone cross, bench; altar, living monk |
 | `items.bmp` | 4 × 2 | Key, potion, bread, quiver; treasure, note, candles, pressure plate |
 | `horror.bmp` | 3 × 2 | Jailer idle, two strides, attack, prisoner, shadow |
 | `fixtures.bmp` | 3 × 2 | Nobleman, noblewoman, bishop; torch, pendulum axe, parchment |
@@ -48,6 +49,13 @@ to avoid matte fringes, and verifies exact BMP alpha round trips. Story cells
 are cropped to 16:9; material cells remain square. Packed PNG previews go to
 `build/*-atlas.png`. CMake copies only runtime BMPs next to each executable,
 including after an artwork-only change.
+
+The outdoor family was generated and then edited with the built-in tool to
+give every sprite an isolated cell. Its final source is `source/outdoors.png`;
+both exact prompts and the final grid are recorded in
+[outdoors-prompts.json](outdoors-prompts.json). Grass, earth, cobbles, gravel,
+leaf litter and the directional night panorama are deterministic materials
+in `src/materials.c` and need no extra runtime files.
 
 ## Runtime details
 

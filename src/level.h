@@ -9,6 +9,7 @@
 #include "common.h"
 #include "gfx.h"
 #include "horror.h"
+#include "world.h"
 
 #define LEVER_MAX_DOORS 16
 
@@ -89,6 +90,7 @@ typedef struct Hanging {
 
 typedef struct Level {
   HorrorLayout horror;
+  WorldLayout world;
   char name[64];
   Color floor_color, ceil_color;
   SurfaceTheme surface_theme;

@@ -93,6 +93,7 @@ float level_floor(const Level *lv, float x, float y) {
 }
 
 float level_ceiling_at(const Level *lv, int x, int y) {
+  if (world_outside(lv, x, y)) return LEVEL_MAX_HEIGHT + 1;
   if (lv->ceilings && x >= 0 && y >= 0 && x < lv->w && y < lv->h) {
     float z = lv->ceilings[y * lv->w + x];
     if (isfinite(z)) return z;
@@ -511,6 +512,12 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   }
   free(rows);
 
+  lv->start_x = player_x; lv->start_y = player_y;
+  if (!world_configure(lv, text, err, err_size)) {
+    free(plates); free(secrets); level_free(lv); return false;
+  }
+  if (lv->world.cells) lv->has_ceilings = true;
+
   // Every war hound is leashed to the nearest man-at-arms within earshot
   // (4 cells): it heels to him, springs when he fights and barks him awake
   // in turn. A hound with no soldier nearby just guards its own ground.
@@ -725,6 +732,8 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   // open floor — corridors and crossings never pass that test. Openness-first
   // ordering fills the biggest halls; the hash keeps ties stable.
   uint8_t *spawn = calloc((size_t)cells, 1);
+  for (int y = 0; y < h; y++) for (int x = 0; x < w; x++)
+    if (world_reserved(lv, x, y)) spawn[y * w + x] = 1;
   if (has_player) spawn[(int)floorf(player_y) * w + (int)floorf(player_x)] = 1;
   for (int i = 0; i < lv->item_count; i++)
     spawn[(int)floorf(lv->items[i].y) * w + (int)floorf(lv->items[i].x)] = 1;
@@ -776,7 +785,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   }
   qsort(spots, (size_t)spot_count, sizeof(TableSpot), cmp_table);
 
-  const int deco_cap = cells + 64;
+  const int deco_cap = cells + 64 + WORLD_PROPS;
   lv->decorations = malloc(sizeof(Decoration) * deco_cap);
   Decoration *decos = lv->decorations;
 
@@ -834,6 +843,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
       for (int d = 0; d < 4; d++) {
         int dx = CARDINAL[d][0], dy = CARDINAL[d][1];
         int fx = x + dx, fy = y + dy;
+        if (world_reserved(lv, fx, fy)) continue;
         if (grid[fy * w + fx] != '.' || spawn[fy * w + fx]) continue;
         if (!is_floor(lv, fx + dx, fy + dy)) continue;
         char flank_a = grid[(y + dx) * w + (x - dy)];
@@ -1139,6 +1149,21 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
     level_free(lv);
     return false;
   }
+  if (lv->world.monk_count && (!lv->horror.chapter || lv->horror.note_count + lv->world.monk_count > HORROR_NOTES)) {
+    snprintf(err, err_size, "Monks require a horror chapter and available dialogue slots");
+    level_free(lv); return false;
+  }
+  for (int i = 0; i < lv->world.monk_count; i++) {
+    Monk *m = &lv->world.monks[i];
+    m->note = lv->horror.note_count++;
+    HorrorNote *note = &lv->horror.notes[m->note];
+    note->x = m->x; note->y = m->y;
+    snprintf(note->text, sizeof note->text, "%s", m->text);
+  }
+  for (int i = 0; i < lv->world.prop_count; i++) {
+    WorldProp *p = &lv->world.props[i];
+    add_deco(lv, p->x + .5, p->y + .5, world_prop_radius(p->kind), 0, p->kind);
+  }
   // hearths feed the wall/floor light model exactly like torches do
   lv->fire_lights = malloc(sizeof(Torch) * (fireplaces + 1));
   for (int d = 0; d < lv->decoration_count; d++) {
@@ -1149,6 +1174,7 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
 }
 
 void level_free(Level *lv) {
+  free(lv->world.cells);
   free(lv->grid);
   free(lv->heights);
   free(lv->ceilings);

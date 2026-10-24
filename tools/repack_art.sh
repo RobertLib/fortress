@@ -25,3 +25,4 @@ for animal in hound rat spider; do
 done
 ./build/pack_art assets/source/rat_death.png assets/rat_death.bmp 3 1 rat_death build/rat-death-atlas.png
 ./build/pack_art assets/source/equipment.png assets/equipment.bmp 4 1 props build/equipment-atlas.png
+./build/pack_art assets/source/outdoors.png assets/outdoors.bmp 2 4 props build/outdoors-atlas.png

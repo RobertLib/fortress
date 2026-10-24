@@ -218,16 +218,12 @@ static void test_rendering(bool screenshots) {
 static void test_shipped_levels(void) {
   static const int dirs[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
   for (int n = 1; n <= LEVEL_COUNT; n++) {
-    char path[32], text[8192], err[128];
+    char path[32], err[128];
     snprintf(path, sizeof path, "levels/%d.txt", n);
-    FILE *file = fopen(path, "rb");
-    CHECK(file);
-    size_t len = fread(text, 1, sizeof text - 1, file);
-    CHECK(!ferror(file) && feof(file));
-    fclose(file);
-    text[len] = 0;
+    char *text = SDL_LoadFile(path, NULL); CHECK(text);
     Level lv;
     CHECK(level_parse(&lv, text, err, sizeof err));
+    SDL_free(text);
     CHECK(lv.pit_count >= 1 && lv.key_count == 3);
     Session session = {.next_life = 40000};
     Game *g = game_create(&lv, n - 1, &session, NULL);

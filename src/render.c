@@ -112,9 +112,13 @@ static Tint surface_tint(const Game *g, float x, float y, float dist) {
   if (light > 0.015f) tint_add(&t, 255, 161, 69, minf(0.25f, light * 0.25f));
   float glow = key_light(g, x, y);
   if (glow > 0.02f) tint_add(&t, 255, 214, 92, minf(0.1f, glow * 0.1f));
-  float fog = maxf(0, fog_amount(dist) - light * 0.42f - glow * 0.3f);
+  bool outside = world_outside(g->level, (int)floorf(x), (int)floorf(y));
+  float fog = maxf(0, (outside ? minf(.84f, maxf(0, (dist - 3) / 27)) : fog_amount(dist)) - light * 0.42f - glow * 0.3f);
   if (fog > 0.02f) tint_add(&t, FOG.r, FOG.g, FOG.b, fog);
-  if (g->level->horror.chapter) {
+  if (outside) {
+    t.k *= .88f;
+    tint_add(&t, 32, 48, 57, .09f);
+  } else if (g->level->horror.chapter) {
     // Local contrast, a cool unlit distance and a readable area at the feet.
     float brightness = clampf(.54f + light * .52f + maxf(0, 1 - dist / 2) * .19f, .54f, 1);
     t.k *= brightness; t.r *= brightness; t.g *= brightness; t.b *= brightness;
@@ -538,10 +542,13 @@ static void sector_plane(Renderer *r, Image *fb, const Game *g, int x, float rx,
     float u = wx - cx, v = wy - cy;
     float footprint = TEX * maxf(dist * hypotf(rx, ry) / fabsf(offset), 1.32f * dist / W);
     int mip = clampi((int)log2f(maxf(1, footprint)), 0, SURFACE_MIPS - 1);
-    const Image *tex = ceiling ? r->assets->ceilings[lv->surface_theme][mip] : r->assets->floors[lv->surface_theme][mip];
+    GroundKind ground = world_ground(lv, cx, cy);
+    const Image *tex = ceiling ? r->assets->ceilings[lv->surface_theme][mip] :
+                       ground ? r->assets->grounds[ground - 1][mip] : r->assets->floors[lv->surface_theme][mip];
     int tx = mini(tex->w - 1, (int)(u * tex->w)), ty = mini(tex->h - 1, (int)(v * tex->h));
     Tint tint = plane_tint(r, lv->w + 1, cx, cy, u, v);
-    fb->px[(size_t)y * fb->w + x] = plane_color(tex->px[ty * tex->w + tx], palette, &tint);
+    Color local_palette = !ceiling && ground ? rgb(1.13f, 1.13f, 1.13f) : palette;
+    fb->px[(size_t)y * fb->w + x] = plane_color(tex->px[ty * tex->w + tx], local_palette, &tint);
     r->depth[index] = dist;
     r->floor_mask[index] = !ceiling;
   }
@@ -592,8 +599,9 @@ static void render_sectors(Renderer *r, Image *fb, const Game *g) {
       float exit = minf(r->zbuffer[x], minf(side_x, side_y));
       float floor = level_floor_at(g->level, cx, cy);
       float ceiling = level_ceiling_at(g->level, cx, cy);
+      bool outside = world_outside(g->level, cx, cy);
       sector_plane(r, fb, g, x, rx, ry, enter, exit, floor, false);
-      sector_plane(r, fb, g, x, rx, ry, enter, exit, ceiling, true);
+      if (!outside) sector_plane(r, fb, g, x, rx, ry, enter, exit, ceiling, true);
       if (exit >= r->zbuffer[x]) break;
       int side;
       if (side_x < side_y) { side_x += dx; cx += sx; side = 0; }
@@ -603,8 +611,15 @@ static void render_sectors(Renderer *r, Image *fb, const Game *g) {
       float next_ceiling = level_ceiling_at(g->level, cx, cy);
       if (next != floor)
         sector_riser(r, fb, g, x, rx, ry, exit, side, minf(floor, next), maxf(floor, next));
-      if (next_ceiling != ceiling)
+      bool next_outside = world_outside(g->level, cx, cy);
+      if (next_ceiling != ceiling && !outside && !next_outside)
         sector_riser(r, fb, g, x, rx, ry, exit, side, minf(ceiling, next_ceiling), maxf(ceiling, next_ceiling));
+      else if (outside != next_outside) {
+        float eave = outside ? next_ceiling : ceiling;
+        // Only the edge of a real roof exists at a threshold; never erect a
+        // wall from its lintel all the way to the exterior's physics ceiling.
+        sector_riser(r, fb, g, x, rx, ry, exit, side, eave, eave + .125f);
+      }
       enter = exit;
     }
   }
@@ -1112,6 +1127,7 @@ static void collect_sprites(Renderer *r, const Game *g) {
   sprite_count = 0;
   const HorrorLayout *h = &lv->horror;
   for (int i = 0; i < h->note_count; i++) {
+    if (world_monk_note(lv, i)) continue;
     Sprite *s = add_sprite(h->notes[i].x + .5f, h->notes[i].y + .5f, as->horror_note, .28f);
     s->has_z = true; s->z_center = .11f;
   }
@@ -1241,7 +1257,8 @@ static void collect_sprites(Renderer *r, const Game *g) {
       continue;
     }
     if (!as->decor[d->kind]) continue; // wall boxes are drawn as quads, not billboards
-    float scale = d->kind == DECO_TABLE    ? 0.7f
+    float scale = d->kind >= DECO_OAK ? world_prop_scale(d->kind)
+                  : d->kind == DECO_TABLE    ? 0.7f
                   : d->kind == DECO_ARMOR  ? 0.78f
                   : d->kind == DECO_STATUE ? 0.72f
                   : d->kind == DECO_URN    ? 0.5f
@@ -1585,7 +1602,8 @@ static void render_horror_text(Renderer *r, Image *fb, const Game *g) {
   if (index < 0) {
     if (horror_near_note(g) >= 0 && !g->player_dead) {
       gfx_fill_rect(fb, 142, VIEW_H - 31, 356, 22, rgba(7, 10, 13, .85f));
-      font_draw(fb, "USE - READ THE PRISONER'S NOTE", W / 2, VIEW_H - 16, 11, FONT_BOLD, ALIGN_CENTER, rgb(226, 210, 171));
+      const Monk *monk = world_monk_note(g->level, horror_near_note(g));
+      font_draw(fb, monk ? "USE - SPEAK WITH THE MONK" : "USE - READ THE PRISONER'S NOTE", W / 2, VIEW_H - 16, 11, FONT_BOLD, ALIGN_CENTER, rgb(226, 210, 171));
     }
     return;
   }
@@ -1593,7 +1611,8 @@ static void render_horror_text(Renderer *r, Image *fb, const Game *g) {
   gfx_fill_rect(fb, 61, 36, 520, 250, rgba(0, 0, 0, .6f));
   gfx_blit(fb, r->assets->note_page, 0, 0, TEX, TEX, 58, 32, 520, 250, 1);
   gfx_fill_rect(fb, 80, 79, 472, 1, rgb(135, 109, 76));
-  font_draw(fb, "WORDS LEFT BEHIND", W / 2, 64, 18, FONT_BOLD, ALIGN_CENTER, rgb(92, 44, 34));
+  const Monk *monk = world_monk_note(g->level, index);
+  font_draw(fb, monk ? monk->name : "WORDS LEFT BEHIND", W / 2, 64, 18, FONT_BOLD, ALIGN_CENTER, rgb(92, 44, 34));
   // Word-wrap the short handwritten fragments; | starts a new paragraph.
   const char *text = g->level->horror.notes[index].text;
   char line[224] = {0};
@@ -1622,7 +1641,7 @@ static void render_horror_text(Renderer *r, Image *fb, const Game *g) {
     }
     p = end + 1;
   }
-  font_draw(fb, "USE - FOLD THE NOTE", W / 2, 263, 10, FONT_BOLD, ALIGN_CENTER, rgb(112, 72, 50));
+  font_draw(fb, monk ? "USE - END CONVERSATION" : "USE - FOLD THE NOTE", W / 2, 263, 10, FONT_BOLD, ALIGN_CENTER, rgb(112, 72, 50));
 }
 
 // ------------------------------------------------------------------ 3D view
@@ -1641,6 +1660,21 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     for (int x = 0; x < W; x++) row[x] = c;
   }
 
+  if (g->level->world.cells) {
+    const Image *sky = as->sky;
+    for (int x = 0; x < W; x++) {
+      float camera = 2.0f * x / W - 1;
+      float angle = atan2f(p->dir_y + p->plane_y * camera, p->dir_x + p->plane_x * camera);
+      float u = angle / (2 * (float)M_PI) + 1;
+      int tx = (int)(u * sky->w) % sky->w;
+      for (int y = 0; y < VIEW_H / 2; y++) {
+        float elevation = atan2f(VIEW_H / 2.0f - y - .5f, VIEW_H);
+        int ty = clampi((int)((1 - elevation / .48f) * (sky->h - 1)), 0, sky->h - 1);
+        fb->px[(size_t)y * fb->w + x] = sky->px[ty * sky->w + tx];
+      }
+    }
+  }
+
   for (int x = 0; x < W; x++) {
     float camera_x = 2.0f * x / W - 1;
     float ray_x = p->dir_x + p->plane_x * camera_x;
@@ -1653,6 +1687,11 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     float near = maxf(0, hit.dist - .001f);
     float base = level_floor(g->level, p->x + ray_x * near, p->y + ray_y * near);
     float ceiling = level_ceiling(g->level, p->x + ray_x * near, p->y + ray_y * near);
+    if (world_outside(g->level, (int)floorf(p->x + ray_x * near), (int)floorf(p->y + ray_y * near))) {
+      int wx = (int)floorf(p->x + ray_x * (hit.dist + .001f));
+      int wy = (int)floorf(p->y + ray_y * (hit.dist + .001f));
+      ceiling = maxf(base + 1.25f, level_ceiling_at(g->level, wx, wy));
+    }
     const Image *upper = (hit.side == 1 ? as->walls_dark : as->walls)[WT_STONE];
     draw_wall_column(r, fb, tex, upper, tex_column(tex, hit.wall_x), x, base, ceiling, &tint, hit.dist, true);
   }
@@ -1705,6 +1744,13 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(0, 0, 0, fall * fall));
   }
   render_flashes(fb, g);
+  const Landmark *landmark = world_landmark(g->level, p->x, p->y);
+  if (landmark && g->horror.reading < 0) {
+    float width = font_measure(landmark->name, 9, FONT_BOLD);
+    gfx_fill_rect(fb, 13, 10, width + 18, 22, rgba(4, 11, 16, .70f));
+    gfx_fill_rect(fb, 13, 10, 1, 22, rgba(188, 166, 116, .65f));
+    font_draw(fb, landmark->name, 22, 25, 9, FONT_BOLD, ALIGN_LEFT, rgb(203, 196, 170));
+  }
   render_horror_text(r, fb, g);
   image_reset_clip(fb);
 }
@@ -1713,7 +1759,7 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
 
 void render_map(Renderer *r, Image *fb, const Game *g, const char *close_button) {
   const Level *lv = g->level;
-  int cs = mini(8, (VIEW_H - 40) / lv->h);
+  int cs = maxi(1, mini(8, mini((VIEW_H - 40) / lv->h, (W - 56) / lv->w)));
   float mw = (float)(lv->w * cs), mh = (float)(lv->h * cs);
   float ox = W / 2.0f - mw / 2, oy = (VIEW_H - mh) / 2;
   gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(3, 8, 13, .78f));
@@ -1750,6 +1796,11 @@ void render_map(Renderer *r, Image *fb, const Game *g, const char *close_button)
       if (cell == '.' && lv->has_heights) {
         float z = level_floor_at(lv, x, y);
         c = rgb(clampf(36 + z * 18, 15, 95), clampf(28 + z * 15, 12, 80), clampf(18 + z * 12, 8, 65));
+      }
+      if (cell == '.' && world_outside(lv, x, y)) {
+        GroundKind ground = world_ground(lv, x, y);
+        c = ground == GROUND_GRASS ? rgb(40, 60, 43) :
+            ground == GROUND_EARTH || ground == GROUND_LEAVES ? rgb(65, 53, 40) : rgb(64, 70, 67);
       }
       gfx_fill_rect(fb, ox + x * cs, oy + y * cs, cs - 0.5f, cs - 0.5f, c);
       if (level_is_open(cell) && lv->has_heights) {
@@ -1795,6 +1846,12 @@ void render_map(Renderer *r, Image *fb, const Game *g, const char *close_button)
     gfx_line(fb, x - s->dx * cs * .4f, y - s->dy * cs * .4f,
              x + s->dx * cs * .4f, y + s->dy * cs * .4f, 1.5f, blade);
     gfx_fill_rect(fb, x - 1.5f, y - 1.5f, 3, 3, blade);
+  }
+  // Peaceful inhabitants appear only after their cells have been explored.
+  for (int i = 0; i < lv->world.monk_count; i++) {
+    const Monk *m = &lv->world.monks[i];
+    if (!g->visited[m->y * lv->w + m->x]) continue;
+    ui_diamond(fb, ox + (m->x + .5f) * cs, oy + (m->y + .5f) * cs, 2, rgb(219, 204, 157));
   }
   // player arrow
   const Player *p = &g->player;
@@ -1875,7 +1932,7 @@ void render_hud(Renderer *r, Image *fb, const Game *g) {
   }
   snprintf(buf, sizeof buf, "%d / 3 COLLECTED", p->keys);
   hud_text(fb, buf, 309, y + 71, 8, p->keys == 3 ? gold : muted);
-  hud_text(fb, "FLOOR", 420, y + 24, 8, muted);
+  hud_text(fb, "CHAPTER", 420, y + 24, 8, muted);
   snprintf(buf, sizeof buf, "%02d", g->level_index + 1);
   hud_text(fb, buf, 418, y + 50, 25, cream);
   snprintf(buf, sizeof buf, "OF %02d", LEVEL_COUNT);

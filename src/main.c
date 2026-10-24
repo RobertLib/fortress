@@ -1008,7 +1008,7 @@ static void draw_intro(void) {
   float width = draw_wordmark(42, 164, 42, ALIGN_LEFT, "#ebe0c9");
   ui_rule(fb, 42, 185, width);
   font_draw(fb, "Betrayed. Imprisoned. Still alive.", 42, 219, 13, FONT_REGULAR, ALIGN_LEFT, rgb(188, 194, 191));
-  font_draw(fb, "Five floors between you and freedom.", 42, 241, 12, FONT_REGULAR, ALIGN_LEFT, rgb(150, 162, 165));
+  font_draw(fb, "An entire estate between you and freedom.", 42, 241, 12, FONT_REGULAR, ALIGN_LEFT, rgb(150, 162, 165));
   float pulse = .8f + .2f * sinf(clock_time * 2);
   gfx_fill_rect(fb, 42, 280, 225, 35, rgba(13, 20, 26, .82f));
   gfx_fill_rect(fb, 42, 280, 2, 35, rgba(205, 174, 119, pulse));
@@ -1126,10 +1126,12 @@ static void draw_level_start(void) {
   ui_emblem(fb, W / 2, 68, 32);
   snprintf(buf, sizeof buf, "CHAPTER %02d / %02d", game->level_index + 1, LEVEL_COUNT);
   text(buf, W / 2, 117, 11, "#a7b2b5");
-  title_text(game->level->name, W / 2.0f, 165, 36, "#e8dcc4");
+  title_text(game->level->name, W / 2.0f, 165, 32, "#e8dcc4");
   ui_rule(fb, 164, 187, 312);
-  font_draw(fb, "Find three keys. Open the gate.", W / 2, 222, 14, FONT_REGULAR, ALIGN_CENTER,
+  font_draw(fb, game->level->world.objective[0] ? game->level->world.objective : "Find three keys. Open the gate.", W / 2, 219, 12, FONT_REGULAR, ALIGN_CENTER,
             rgb(179, 190, 193));
+  if (game->level->world.destination[0])
+    font_draw(fb, game->level->world.destination, W / 2, 239, 10, FONT_REGULAR, ALIGN_CENTER, rgb(155, 170, 173));
   snprintf(buf, sizeof buf, "%d LIVES    /    %06d SCORE    /    %s", session.lives, session.score,
            game_difficulty_settings(session.difficulty)->name);
   text(buf, W / 2, 258, 10, "#b5a17c");
@@ -1168,7 +1170,7 @@ static void draw_died_overlay(void) {
   char lives[48];
   snprintf(lives, sizeof lives, "%d LIVES REMAIN", session.lives);
   text(lives, W / 2, 181, 12, "#a9b5b7");
-  control_hint("ENTER  /  TRY THIS FLOOR AGAIN", "%s  /  TRY THIS FLOOR AGAIN", 224, 12, "#d4bd96");
+  control_hint("ENTER  /  TRY THIS CHAPTER AGAIN", "%s  /  TRY THIS CHAPTER AGAIN", 224, 12, "#d4bd96");
 }
 
 static void stat_rows(const char *rows[][2], int n, float y0, float step, float size) {
@@ -1184,7 +1186,7 @@ static int percent(int part, int whole) { return whole ? (int)round_half_up(100.
 
 static void draw_level_complete(void) {
   char title[48], time[16], kills[48], treasure[48], secrets[32], bonus[24], score[24];
-  snprintf(title, sizeof title, "FLOOR %02d CLEARED", game->level_index + 1);
+  snprintf(title, sizeof title, "CHAPTER %02d CLEARED", game->level_index + 1);
   screen_card(title);
 
   format_time(time, sizeof time, game->time);
@@ -1200,8 +1202,8 @@ static void draw_level_complete(void) {
   stat_rows(rows, 6, 150, 26, 13);
 
   bool last = game->level_index + 1 >= LEVEL_COUNT;
-  control_hint(last ? "ENTER  /  CONTINUE" : "ENTER  /  THE NEXT FLOOR",
-               last ? "%s  /  CONTINUE" : "%s  /  THE NEXT FLOOR", 337, 12, "#d8c098");
+  control_hint(last ? "ENTER  /  CONTINUE" : "ENTER  /  THE NEXT CHAPTER",
+               last ? "%s  /  CONTINUE" : "%s  /  THE NEXT CHAPTER", 337, 12, "#d8c098");
 }
 
 static void draw_game_over(void) {

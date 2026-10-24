@@ -212,6 +212,65 @@ static Image *surface(const Image *atlas, SurfaceTheme theme, bool ceiling) {
     }
   return im;
 }
+static Image *ground_material(GroundKind kind) {
+  Image *im = image_new(TEX, TEX);
+  for (int y = 0; y < TEX; y++) for (int x = 0; x < TEX; x++) {
+    float u = (x + .5f) / TEX, v = (y + .5f) / TEX;
+    // Periodic noise: filtering and wrapping never expose seams.
+    float n = 0;
+    for (int octave = 0; octave < 3; octave++) {
+      float f = (float)(2 << octave), px = u * f, py = v * f;
+      int ix = (int)px, iy = (int)py, period = (int)f;
+      float a = px - ix, b = py - iy;
+      a = a * a * (3 - 2 * a); b = b * b * (3 - 2 * b);
+      float aa = hash(ix % period, iy % period, 721 + kind);
+      float ab = hash((ix + 1) % period, iy % period, 721 + kind);
+      float ba = hash(ix % period, (iy + 1) % period, 721 + kind);
+      float bb = hash((ix + 1) % period, (iy + 1) % period, 721 + kind);
+      n += ((aa * (1 - a) + ab * a) * (1 - b) + (ba * (1 - a) + bb * a) * b - .5f) * (20.0f / (octave + 1));
+    }
+    float speck = hash(x, y, 821 + kind), r, g, b;
+    if (kind == GROUND_GRASS) {
+      float blade = hash(x / 2, y / 7, 715) > .68f ? 9 : 0;
+      r = 49 + n + blade; g = 64 + n * 1.3f + blade; b = 36 + n * .7f;
+    } else if (kind == GROUND_EARTH) {
+      r = 77 + n + speck * 8; g = 62 + n * .8f; b = 45 + n * .65f;
+    } else if (kind == GROUND_LEAVES) {
+      float leaf = hash(x / 4, y / 6, 133);
+      float litter = leaf > .62f ? 16 : leaf < .25f ? -12 : 0;
+      r = 62 + n + litter; g = 57 + n * .9f + litter * .75f; b = 32 + n * .65f + litter * .35f;
+    } else if (kind == GROUND_GRAVEL) {
+      float pebble = hash(x / 3, y / 3, 129) * 22;
+      r = 85 + n + pebble; g = 83 + n + pebble; b = 72 + n + pebble;
+    } else {
+      float row = floorf(v * 5), px = fmodf(u * 5 + fmodf(row, 2) * .5f, 1), py = fmodf(v * 5, 1);
+      float edge = minf(minf(px, 1 - px), minf(py, 1 - py));
+      float mortar = clampf(edge * 20, 0, 1), stone = hash((int)floorf(u * 5 + fmodf(row, 2) * .5f) % 5, (int)row, 92) * 18;
+      r = 40 + mortar * (48 + stone) + n; g = 42 + mortar * (46 + stone) + n; b = 39 + mortar * (40 + stone) + n;
+    }
+    im->px[y * TEX + x] = pack_argb(255, clampf(r, 0, 255), clampf(g, 0, 255), clampf(b, 0, 255));
+  }
+  return im;
+}
+static Image *night_sky(void) {
+  Image *im = image_new(1024, 256);
+  for (int y = 0; y < im->h; y++) for (int x = 0; x < im->w; x++) {
+    float u = x / (float)im->w, v = y / (float)im->h;
+    float angle = u * (float)M_PI * 2;
+    float cloud = noise(12 + cosf(angle) * 4, 17 + sinf(angle) * 4 + v * 3, 170);
+    float veil = clampf((cloud - .38f) * 2, 0, .75f) * (1 - v * .45f);
+    float r = 13 + v * 13 + veil * 27, g = 23 + v * 15 + veil * 30, b = 34 + v * 16 + veil * 29;
+    float moon = hypotf((u - .19f) * 5.2f, (v - .30f));
+    float glow = expf(-moon * moon * 320) * 24;
+    r += glow; g += glow; b += glow;
+    if (moon < .032f) { float craters = noise(x * .32f, y * .32f, 531) * 24; r = 193 - craters; g = 202 - craters; b = 193 - craters; }
+    if (v < .65f && hash(x, y, 712) > .9991f && veil < .28f) { r += 42; g += 47; b += 48; }
+    float ridge = .91f + sinf(angle * 7) * .013f + sinf(angle * 13 + 2) * .009f;
+    if (v > ridge) { r = 13; g = 23; b = 27; }
+    im->px[y * im->w + x] = pack_argb(255, r, g, b);
+  }
+  return im;
+}
 static void mips(Image **list, Image *base) {
   list[0] = base;
   for (int m = 1; m < SURFACE_MIPS; m++) {
@@ -313,6 +372,8 @@ void materials_build(Assets *a, const Image *limestone, const Image *atlas, cons
     mips(a->floors[theme], surface(atlas, (SurfaceTheme)theme, false));
     mips(a->ceilings[theme], surface(atlas, (SurfaceTheme)theme, true));
   }
+  for (int kind = 1; kind < GROUND_COUNT; kind++) mips(a->grounds[kind - 1], ground_material((GroundKind)kind));
+  a->sky = night_sky();
   for (int kind = 0; kind < BOX_KIND_COUNT; kind++) {
     BoxTextures *b = &a->boxes[kind];
     b->front = box_face(atlas, props, (BoxKind)kind, 0);

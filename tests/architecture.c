@@ -358,15 +358,17 @@ static void test_campaign(const Assets *assets, bool screenshots) {
     if (!parsed) fprintf(stderr, "Floor %d: %s\n", n, err);
     CHECK(parsed); SDL_free(text);
     CHECK(lv.has_heights && lv.has_ceilings && lv.key_count == 3);
-    CHECK(lv.horror.chapter == n && lv.horror.note_count == 2 && lv.horror.haven_count == 2);
+    CHECK(lv.horror.chapter == n && lv.horror.note_count >= 3 && lv.horror.haven_count >= 3);
+    CHECK(lv.world.cells && lv.world.monk_count >= 1 && lv.world.landmark_count >= 2);
     int open = 0, narrow = 0;
     for (int y = 1; y < lv.h-1; y++) for (int x = 1; x < lv.w-1; x++) {
       if (!passage(lv.grid[y*lv.w+x])) continue;
+      if (world_outside(&lv, x, y)) continue;
       int exits = passage(lv.grid[y*lv.w+x-1]) + passage(lv.grid[y*lv.w+x+1]) +
                   passage(lv.grid[(y-1)*lv.w+x]) + passage(lv.grid[(y+1)*lv.w+x]);
       open++; narrow += exits <= 2;
     }
-    CHECK(narrow * 2 >= open); // Retain a maze, rather than connecting broad arenas.
+    CHECK(narrow >= 100 && narrow * 3 >= open); // Long passages contrast with the church and houses.
     for (int i = 0; i < lv.door_count; i++) {
       DoorSpawn *d = &lv.doors[i]; int axis = door_axis(&lv, d->x, d->y);
       if (!axis) fprintf(stderr, "Floor %d: unframed/dead-end door at %d,%d\n", n, d->x, d->y);
@@ -385,7 +387,11 @@ static void test_campaign(const Assets *assets, bool screenshots) {
     for (int i = 0; i < g->door_count; i++) g->doors[i].open = 1;
     uint8_t *seen = walk_routes(g);
     for (int i = 0; i < lv.item_count; i++) CHECK(seen[(int)lv.items[i].y*lv.w+(int)lv.items[i].x]);
-    for (int i = 0; i < lv.horror.note_count; i++) CHECK(seen[lv.horror.notes[i].y*lv.w+lv.horror.notes[i].x]);
+    for (int i = 0; i < lv.horror.note_count; i++) {
+      int at = lv.horror.notes[i].y*lv.w+lv.horror.notes[i].x;
+      if (world_monk_note(&lv, i)) CHECK(seen[at-1] || seen[at+1] || seen[at-lv.w] || seen[at+lv.w]);
+      else CHECK(seen[at]);
+    }
     for (int i = 0; i < lv.horror.haven_count; i++) CHECK(seen[lv.horror.havens[i].y*lv.w+lv.horror.havens[i].x]);
     free(seen); game_destroy(g);
     if (screenshots) campaign_previews(&lv, n, assets);

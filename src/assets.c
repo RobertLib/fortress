@@ -259,7 +259,7 @@ bool assets_build(Assets *a) {
                 {"props.bmp", 4, 4},      {"items.bmp", 4, 2},    {"horror.bmp", 3, 2},      {"fixtures.bmp", 3, 2},
                 {"weapons.bmp", 3, 3},    {"combat.bmp", 4, 4},   {"materials.bmp", 4, 4},   {"effects.bmp", 4, 3},
                 {"hound_walk.bmp", 3, 4}, {"rat_walk.bmp", 3, 4}, {"spider_walk.bmp", 3, 4}, {"rat_death.bmp", 3, 1},
-                {"equipment.bmp", 4, 1}};
+                {"equipment.bmp", 4, 1}, {"outdoors.bmp", 2, 4}};
   enum { ATLAS_COUNT = sizeof sheets / sizeof sheets[0] };
   Image *atlas[ATLAS_COUNT] = {0};
   for (int i = 0; i < ATLAS_COUNT; i++) {
@@ -390,6 +390,7 @@ bool assets_build(Assets *a) {
   a->decor[DECO_CHAINS] = art_cell(atlas[4], 4, 9);
   a->decor[DECO_CANDELABRA] = candelabra;
   a->decor[DECO_CANDLES] = candles;
+  for (int i = 0; i < 8; i++) a->decor[DECO_OAK + i] = art_cell(atlas[17], 2, i);
   for (int f = 0; f < 4; f++)
     a->warden[f] = art_cell(atlas[6], 3, f);
   a->prisoner = art_cell(atlas[6], 3, 4);

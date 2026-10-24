@@ -1,6 +1,25 @@
 # Campaign geometry and routes
 
-All five floor plans are newly authored. They retain the three-key horror maze
+The campaign now crosses an estate as well as its interior floors. See
+[the complete story and world design](story-and-world.md) for the narrative,
+chapter progression, combat pacing and implementation boundaries. Outdoor
+districts are authored in `tools/author_world.py` and exported together with
+the interior plans by `tools/author_campaign.py`.
+
+| Chapter | Expanded size | Required district | Two connections |
+| --- | --- | --- | --- |
+| The Outer Ward | 66 × 33 | Village green, well, cottages and inn key | Market arch and north lane stair |
+| The Silent Abbey | 68 × 35 | Church, altar key, cloister and infirmary | Pump stair and lower drain ascent |
+| The Garden Ward | 70 × 35 | Park, pond bridge and gardener's lodge key | East stair and south service lane |
+| Blackwood Graves | 68 × 35 | Churchyard, vigil chapel and forest grave key | Reliquary stair and receiving-cell passage |
+| The Last Bell | 72 × 37 | Upper court and bell warden's house key | Tower path and armoury supply lane |
+
+Each district has a required key, a well, monks, additional supplies and
+landmarks. Local ground materials include grass, earth, cobbles, gravel and
+leaf litter. Roofs occlude a directional night sky. The dimensions below
+describe the retained interior plans, before the district extension.
+
+All five interior floor plans are explicitly authored. They retain the three-key horror maze
 loop, but replace the old tile arrangements and global height bands with local
 stairs, galleries, lowered chambers and carefully framed connections.
 
@@ -70,7 +89,7 @@ again replaces them from the source plans.
 Run `ctest --test-dir build --output-on-failure`. The architecture regression:
 
 - Rejects example floating and dead-end doors and checks every campaign door.
-- Requires substantial enclosed passages rather than broad connected arenas.
+- Requires substantial enclosed passages alongside the new open districts.
 - Completes all six key orders on every floor, then walks back to and uses the
   gate with real movement, use input, door timing, stair traversal and pickups.
 - Keeps barrels and furniture solid; secret walls and breaches stay closed,
@@ -91,3 +110,7 @@ complete plans and every door both closed and open. `./build/stair_tests
 rendered by the actual game engine in `build/architecture-floor-N-V.bmp`,
 `build/architecture-map-N.bmp`, `build/maze-door-N-DD-S.bmp` and
 `build/stairs-floor-N.bmp`.
+
+`./build/world_tests --screenshots` adds outdoor, building, monk and dialogue
+views in `build/world-N-*.bmp`. Its separate regressions cover roof/sky
+occlusion, terrain, peaceful dialogue, map validation and save compatibility.

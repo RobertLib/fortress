@@ -1,5 +1,5 @@
 ; FORTRESS: authored maze, rooms and routes in tools/author_campaign.py.
-@name THE VAULT
+@name BLACKWOOD GRAVES
 @surfaces vault
 @floor #3c3f42
 @ceil #15171a
@@ -27,10 +27,16 @@
 ; Western ossuary breach through the burial partition: 6,19 -> 10,19 -> 10,18 -> 15,18
 ; Eastern ossuary breach and short service stair: 23,18 -> 27,18 -> 27,14
 ; Exit throat: 37,20 -> 40,20
+; Northern churchyard and burial road: 43,3 to 65,16
+; Blackwood forest and southern clearing: 43,17 to 65,31
+; Cemetery gate approach: 51,14 to 55,20
+; Funerary chapel and abandoned vigil: 57,5 to 63,9
+; Reliquary stair emerges among the graves: 38,13 -> 43,13
+; Receiving cell returns by the old forest road: 37,22 -> 43,22
 @haven 35 21 1.15
 @haven 18 2 1.15
 @note 36 21 There is no gold in the oldest vault. Only names cut into the stone.|I found mine among them. The date beside it is tomorrow. The scratch marks are still warm.
-@note 19 2 The lord paid his soldiers with keys taken from the dead. Each opened a gate that should have stayed shut.|Your betrayal was no accident. They needed someone alive to carry the keys upward.
+@note 19 2 Every key passed from a dead keeper to a living soldier. The gates stayed locked.|The oath binds the whole estate. Open every gate, then carry the last keys beyond the walls.
 @scene armor 34 19 33 21 1 36 21
 @scene shadow 15 13 19 16 0
 @scene knock 9 27 11 29 1
@@ -40,6 +46,122 @@
 @trace scratch 19 2
 @trace chains 1 16
 @trace chains 21 21
+@haven 58 6 1.15
+@outside 45 3 19 1
+@outside 44 4 12 12
+@outside 43 5 1 10
+@outside 65 5 1 10
+@outside 56 11 9 5
+@outside 40 13 3 1
+@outside 45 16 19 16
+@outside 44 18 1 13
+@outside 64 18 1 13
+@outside 43 19 1 11
+@outside 65 19 1 11
+@outside 40 22 3 1
+@terrain stone 41 0 27 3
+@terrain stone 41 3 2 10
+@terrain gravel 43 3 23 1
+@terrain stone 66 3 2 32
+@terrain gravel 43 4 13 9
+@terrain stone 56 4 9 7
+@terrain gravel 65 4 1 13
+@terrain gravel 56 11 9 6
+@terrain cobble 40 13 4 1
+@terrain gravel 44 13 12 1
+@terrain stone 41 14 2 8
+@terrain gravel 43 14 8 3
+@terrain earth 51 14 5 7
+@terrain leaves 43 17 8 5
+@terrain leaves 56 17 10 8
+@terrain earth 51 21 4 10
+@terrain leaves 55 21 1 4
+@terrain cobble 40 22 4 1
+@terrain leaves 44 22 7 10
+@terrain stone 41 23 2 12
+@terrain leaves 43 23 1 9
+@terrain earth 55 25 10 3
+@terrain leaves 65 25 1 7
+@terrain leaves 55 28 10 4
+@terrain leaves 51 31 4 1
+@terrain stone 43 32 23 3
+@prop grave 45 6
+@prop grave 48 6
+@prop grave 51 6
+@prop grave 45 9
+@prop grave 48 9
+@prop grave 51 9
+@prop grave 46 12
+@prop grave 49 12
+@prop grave 61 13
+@prop grave 64 13
+@prop cross 53 5
+@prop cross 62 26
+@prop altar 60 6
+@prop well 47 16
+@prop pine 45 19
+@prop pine 48 21
+@prop pine 45 25
+@prop pine 47 29
+@prop pine 51 29
+@prop pine 56 19
+@prop pine 59 17
+@prop pine 63 18
+@prop pine 57 23
+@prop pine 60 30
+@prop pine 64 23
+@prop pine 64 29
+@prop oak 50 18
+@prop oak 44 28
+@prop oak 58 29
+@prop bench 58 8
+@prop pine 44 18
+@prop pine 47 18
+@prop pine 53 18
+@prop pine 62 17
+@prop pine 65 20
+@prop pine 65 24
+@prop pine 65 28
+@prop pine 44 23
+@prop pine 44 26
+@prop pine 46 21
+@prop pine 47 23
+@prop pine 49 23
+@prop pine 50 21
+@prop pine 49 27
+@prop pine 49 30
+@prop pine 53 30
+@prop pine 56 30
+@prop pine 58 31
+@prop pine 62 30
+@prop pine 63 28
+@prop pine 59 22
+@prop pine 61 20
+@prop pine 62 23
+@prop pine 55 22
+@prop pine 56 25
+@prop pine 58 27
+@prop pine 54 28
+@prop oak 46 30
+@prop oak 60 18
+@prop oak 64 21
+@prop oak 55 20
+@prop oak 46 24
+@prop oak 50 26
+@prop oak 59 24
+@prop pine 44 4
+@prop pine 54 4
+@prop pine 65 5
+@prop pine 65 9
+@prop candelabra 59 6
+@prop candelabra 61 6
+@monk 58 7 BROTHER TOMAS|The missing keeper was buried beneath the stone cross in Blackwood. His key was never returned.|The grave road and forest path meet again at the receiving cell. Take its gate to the keep. Do not follow a voice off the path.
+@landmark 49 10 9 SAINT ALDENS CHURCHYARD
+@landmark 60 7 5 THE VIGIL CHAPEL
+@landmark 55 25 11 BLACKWOOD
+@landmark 62 26 3 THE KEEPERS GRAVE
+@objective Find the burial keys in crypt, ossuary and Blackwood.
+@destination The receiving gate climbs to the warlords keep.
 @height 29 5 8 6 0.25
 @height 3 7 6 2 -0.25
 @height 28 7 1 1 0.125
@@ -84,10 +206,14 @@
 @height 26 30 2 3 -0.25
 @ceiling 17 1 5 3 1.375
 @ceiling 2 2 3 3 1.25
+@ceiling 42 2 25 2 1.75
 @ceiling 5 3 1 1 1
 @ceiling 6 3 5 1 1.125
 @ceiling 10 4 1 3 1.125
 @ceiling 15 4 6 1 1.125
+@ceiling 42 4 14 9 1.75
+@ceiling 56 4 9 6 2.5
+@ceiling 65 4 2 29 1.75
 @ceiling 15 5 1 9 1.125
 @ceiling 20 5 1 3 1.125
 @ceiling 30 5 6 6 2.125
@@ -108,17 +234,24 @@
 @ceiling 12 9 3 1 1.125
 @ceiling 1 10 1 4 1.125
 @ceiling 2 10 1 1 0.75
+@ceiling 56 10 4 1 2.5
+@ceiling 60 10 1 1 1
+@ceiling 61 10 4 1 2.5
 @ceiling 26 11 2 1 1.125
 @ceiling 32 11 1 1 2.125
+@ceiling 56 11 9 22 1.75
 @ceiling 27 12 1 7 1.125
 @ceiling 32 12 1 3 1.125
 @ceiling 16 13 4 1 1.125
 @ceiling 36 13 2 1 1.625
+@ceiling 39 13 4 1 1.375
+@ceiling 43 13 13 20 1.75
 @ceiling 1 14 1 1 0.75
 @ceiling 19 14 1 1 0.875
 @ceiling 28 14 4 1 1.125
 @ceiling 33 14 2 1 1.125
 @ceiling 36 14 1 2 1.625
+@ceiling 42 14 1 8 1.75
 @ceiling 1 15 1 3 1.125
 @ceiling 15 15 2 9 1.25
 @ceiling 18 15 3 9 2
@@ -139,7 +272,9 @@
 @ceiling 38 20 3 1 1.125
 @ceiling 28 21 1 3 1.125
 @ceiling 7 22 3 1 1.125
+@ceiling 38 22 5 1 1.375
 @ceiling 9 23 1 2 1.125
+@ceiling 42 23 1 10 1.75
 @ceiling 18 24 1 1 0.75
 @ceiling 23 24 1 5 1.125
 @ceiling 28 24 1 1 0.75
@@ -155,38 +290,38 @@
 @ceiling 14 29 2 1 1.125
 @ceiling 25 29 1 1 0.75
 @ceiling 24 30 4 3 1.125
-44444444444444444444444444444444444444444
-44444444444444444.....4444444444444444444
-44T..4L4444444444H...A4444444444444444444
-44.M.Z.....444444.....4444444444444444444
-44..T44444.4444......44444444444444444444
-4444444444.4444.4444.444444444......44444
-4444444444A.444.4444.44444444.A5...G.4444
-4444....444.444.4444........D.....K..D.44
-444.5.A..44.444.444444444.444..Q...^.4.44
-444.>>>Q.D......444444444.444.....5H.4.44
-4.DH===..444444.444444444.4444......44.44
-4.4.SK.5.444444.444444444...4444B44444.44
-4.44....4444444.44444444444.4444.44444.44
-4.4444444444444.....4444444.4444.444...44
-4%44444444444444444R4444444........4.4444
-4.4444444444444444...444444.444444...4444
-4.444444444444444....q44444.444444.444444
-4......4444444445.....V4444.444444D444444
-444444.444....8...555...8...4444......444
-444444.....4444...555.A.44444444.H..A.444
-444444.44444444...555...4444...D...P....X
-444444.444444444.!....544444.444......444
-444444....4444444....F4.4444.444......444
-444444444.44444444...44.4444.444444444444
-444444444.44444444D4444.4444D444444444444
-444444444D444444...4444......444444444444
-4444444.....4444.444444.44444444444444444
-444444.5A.y..444.444444.44444444444444444
-444444.FY..q.444.444444...L44444444444444
-444444....Kw.D...44444444Z444444444444444
-444444..SAH5.44444444444....4444444444444
-4444444.....444444444444T...4444444444444
-444444444444444444444444...T4444444444444
-44444444444444444444444444444444444444444
-44444444444444444444444444444444444444444
+44444444444444444444444444444444444444444222222222222222222222222222
+44444444444444444.....4444444444444444444222222222222222222222222222
+44T..4L4444444444H...A4444444444444444444222222222222222222222222222
+44.M.Z.....444444.....44444444444444444442222...................2222
+44..T44444.4444......44444444444444444444222............111111111222
+4444444444.4444.4444.444444444......4444422.............1.......1.22
+4444444444A.444.4444.44444444.A5...G.444422.............1.......1.22
+4444....444.444.4444........D.....A..D.4422.......v.....1.......1.22
+444.5.A..44.444.444444444.444..Q...^.4.4422.............1..F..H.1.22
+444.>>>Q.D......444444444.444.....5H.4.4422.............1.......1.22
+4.DH===..444444.444444444.4444......44.4422.............1111D1111.22
+4.4.SK.5.444444.444444444...4444B44444.4422.......................22
+4.44....4444444.44444444444.4444.44444.4422.......................22
+4.4444444444444.....4444444.4444.444.................A............22
+4%44444444444444444R4444444........4.444422.......................22
+4.4444444444444444...444444.444444...4444222.....................222
+4.444444444444444....q44444.444444.4444442222...................2222
+4......4444444445.....V4444.444444D4444442222...................2222
+444444.444....8...555...8...4444......444222.....................222
+444444.....4444...555.A.44444444.H..A.44422.......................22
+444444.44444444...555...4444...D...P....X22.......................22
+444444.444444444.!....544444.444......44422.......................22
+444444....4444444....F4.4444.444..................................22
+444444444.44444444...44.4444.44444444444422.......................22
+444444444.44444444D4444.4444D44444444444422.......................22
+444444444D444444...4444......44444444444422.....W............S....22
+4444444.....4444.444444.4444444444444444422....................K..22
+444444.5A.y..444.444444.4444444444444444422..................A....22
+444444.FY..q.444.444444...L4444444444444422.......................22
+444444....Kw.D...44444444Z44444444444444422.......................22
+444444..SAH5.44444444444....4444444444444222.....................222
+4444444.....444444444444T...44444444444442222...................2222
+444444444444444444444444...T4444444444444222222222222222222222222222
+44444444444444444444444444444444444444444222222222222222222222222222
+44444444444444444444444444444444444444444222222222222222222222222222

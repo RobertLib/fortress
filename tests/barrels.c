@@ -1,4 +1,5 @@
 #include "game.h"
+#include <SDL3/SDL.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -238,15 +239,11 @@ static void test_shipped_levels(void) {
   for (int n = 1; n <= LEVEL_COUNT; n++) {
     char path[32];
     snprintf(path, sizeof path, "levels/%d.txt", n);
-    FILE *file = fopen(path, "rb");
-    CHECK(file);
-    char text[8192], err[128];
-    size_t len = fread(text, 1, sizeof text - 1, file);
-    CHECK(!ferror(file) && feof(file));
-    text[len] = 0;
-    fclose(file);
+    char err[128];
+    char *text = SDL_LoadFile(path, NULL); CHECK(text);
     Level lv;
     CHECK(level_parse(&lv, text, err, sizeof err));
+    SDL_free(text);
     int powder = 0, ordinary = 0;
     for (int i = 0; i < lv.barrel_count; i++) {
       const BarrelSpawn *b = &lv.barrels[i];

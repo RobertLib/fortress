@@ -129,6 +129,7 @@ class Map:
             '; FORTRESS: authored maze, rooms and routes in tools/author_campaign.py.',
             f'@name {self.name}', f'@surfaces {self.theme}', f'@floor {self.colors[0]}', f'@ceil {self.colors[1]}',
             f'@start {self.start}', f'@horror {self.number}', *self.design, *self.story,
+            *getattr(self, 'world', []),
             *self.regions(self.z, 'height'), *self.regions(self.c, 'ceiling'),
             *(''.join(row) for row in self.g), '',
         ])
@@ -397,7 +398,7 @@ def vault():
     m.thing('H',(33,19),(3,10),(17,2),(10,30),(35,9));m.thing('F',(21,22),(7,28))
     m.haven(35,21);m.haven(18,2)
     m.note(36,21,'There is no gold in the oldest vault. Only names cut into the stone.|I found mine among them. The date beside it is tomorrow. The scratch marks are still warm.')
-    m.note(19,2,'The lord paid his soldiers with keys taken from the dead. Each opened a gate that should have stayed shut.|Your betrayal was no accident. They needed someone alive to carry the keys upward.')
+    m.note(19,2,'Every key passed from a dead keeper to a living soldier. The gates stayed locked.|The oath binds the whole estate. Open every gate, then carry the last keys beyond the walls.')
     m.scene('armor 34 19 33 21 1 36 21');m.scene('shadow 15 13 19 16 0');m.scene('knock 9 27 11 29 1')
     m.trace('blood',(34,16),(34,15));m.trace('scratch',(36,21),(19,2));m.trace('chains',(1,16),(21,21))
     return m
@@ -470,6 +471,7 @@ def keep():
 
 
 if __name__ == '__main__':
+    from author_world import expand
     builders = {1: guardhouse, 2: cellars, 3: barracks, 4: vault, 5: keep}
     for n in map(int, sys.argv[1:] or builders):
-        builders[n]().write()
+        expand(builders[n]()).write()
