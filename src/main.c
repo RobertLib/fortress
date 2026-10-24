@@ -313,6 +313,15 @@ static bool safe_to_autosave(void) {
     if ((p->kind==SHOT_HOSTILE || p->kind==SHOT_TRAP || p->kind==SHOT_AT_PLAYER) &&
         hypotf(p->x-game->player.x,p->y-game->player.y)<8) return false;
   }
+  // An imminent volley is unsafe before its first projectile exists, too.
+  // Defer nearby saves for the short trigger/firing interval, even if the
+  // player has just stepped aside from the arrow's path.
+  for (int i=0;i<game->trap_count;i++) {
+    const Trap *trap=&game->traps[i];
+    if ((trap->state==TRAP_TRIGGERED || trap->state==TRAP_FIRING) &&
+        hypotf(trap->spawn->origin_x-game->player.x,trap->spawn->origin_y-game->player.y)<=
+          HOSTILE_PROJECTILE_RANGE+game->player.radius+.12f) return false;
+  }
   for (int i=0;i<game->level->pendulum_count;i++) {
     const PendulumSpawn *p=&game->level->pendulums[i];
     if (hypotf(p->x+.5f-game->player.x,p->y+.5f-game->player.y)<1.5f) return false;
@@ -881,7 +890,7 @@ static void on_gamepad_button(SDL_GamepadButton button) {
       if (game->horror.reading<0 && !game->show_map) campaign_brace_door(game);
       break;
     case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
-      if (game->horror.reading<0) { game->campaign.journal=true; game->show_map=false; clear_input(); }
+      if (game->horror.reading<0 && game->level->campaign.enabled) { game->campaign.journal=true; game->show_map=false; clear_input(); }
       break;
     default: break;
     }
@@ -971,7 +980,7 @@ static void on_key_down(SDL_Scancode sc) {
     clear_input(); return;
   }
   if (state==ST_PLAYING && game && game->horror.reading<0) {
-    if (action==ACTION_JOURNAL) { game->campaign.journal=true; game->show_map=false; clear_input(); return; }
+    if (action==ACTION_JOURNAL && game->level->campaign.enabled) { game->campaign.journal=true; game->show_map=false; clear_input(); return; }
     if (action==ACTION_DECOY && !game->show_map) { campaign_throw_decoy(game); return; }
     if (action==ACTION_BRACE && !game->show_map) { campaign_brace_door(game); return; }
   }

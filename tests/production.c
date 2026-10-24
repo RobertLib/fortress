@@ -93,6 +93,18 @@ static void progression(void) {
 static void tactical_tools(void) {
   reset_fixture(); position(play,4.5,5.5,1,0);
   Door *door=game_door_at(play,5,5); CHECK(door);
+  // A nearly shut leaf may already be opening or still closing. Neither
+  // animation may consume a brace and promise protection it cannot provide.
+  game_open_door(play,door,false);
+  campaign_brace_door(play);
+  CHECK(play->campaign.braces==1 && !campaign_door_braced(play,(int)(door-play->doors)));
+  ticks(play,2); CHECK(door->open>0 && door->open<.05f);
+  campaign_brace_door(play); CHECK(play->campaign.braces==1);
+  ticks(play,70); CHECK(door->state==DOOR_OPEN && door->open==1);
+  for (int i=0;i<600 && !(door->state==DOOR_CLOSING && door->open<=.05f);i++) ticks(play,1);
+  CHECK(door->state==DOOR_CLOSING && door->open>0 && door->open<=.05f);
+  campaign_brace_door(play); CHECK(play->campaign.braces==1);
+  ticks(play,10); CHECK(door->state==DOOR_CLOSED);
   campaign_brace_door(play); CHECK(play->campaign.braces==0 && campaign_door_braced(play,(int)(door-play->doors)));
   game_open_door(play,door,false); CHECK(door->state==DOOR_CLOSED);
   char *path=user_file("production-tools.dat"),err[128];
@@ -209,6 +221,66 @@ static void preferences_and_saves(void) {
   game->player.health=5; restart_level(); CHECK(state==ST_LEVEL_START && game->player.health==100);
   preferences_defaults();
   puts("Options persistence, malformed options, rebinding, manual slots, story checkpoints and arcade retries passed.");
+}
+static void autosave_trap_safety(void) {
+  new_game(0,DIFFICULTY_NORMAL); begin_level();
+  for (int i=0;i<game->enemy_count;i++) { game->enemies[i].hp=0; game->enemies[i].state=ES_DEAD; }
+  game->horror.calm_timer=10000;
+  game->player.health=61; game->campaign.checkpoint_requested=true; autosave_game(.1f);
+  SaveInfo info;
+  CHECK(savegame_inspect(slot_path(3),levels,levels_loaded,&info) && info.health==61);
+  CHECK(game->trap_count>0);
+  Trap *trap=&game->traps[0]; const TrapSpawn *spawn=trap->spawn;
+  position(game,spawn->x+.5f,spawn->y+.5f,1,0);
+  game->player.health=75; game->campaign.checkpoint_requested=true; autosave_timer=90;
+  input_focused=true; update(.01f);
+  CHECK(trap->state==TRAP_TRIGGERED && game->projectile_count==0);
+  CHECK(!safe_to_autosave() && autosave_timer>=90 && game->campaign.checkpoint_requested);
+  CHECK(savegame_inspect(slot_path(3),levels,levels_loaded,&info) && info.health==61);
+  trap->timer=.001f; update(.01f);
+  CHECK(trap->state==TRAP_FIRING && game->projectile_count==0 && !safe_to_autosave());
+  CHECK(savegame_inspect(slot_path(3),levels,levels_loaded,&info) && info.health==61);
+  // Escaping the hazard must allow the deferred progress to be saved again.
+  position(game,game->level->start_x,game->level->start_y,1,0);
+  for (int i=0;i<100;i++) update(.01f);
+  CHECK(!game->player_dead && safe_to_autosave());
+  CHECK(autosave_timer<90 && !game->campaign.checkpoint_requested);
+  CHECK(savegame_inspect(slot_path(3),levels,levels_loaded,&info) && info.health==75);
+  puts("Triggered and firing traps defer autosaves, preserve the safe slot and allow saving after escape.");
+}
+static void journal_and_map_input(void) {
+  preferences_defaults(); set_state(ST_PLAYING);
+  CHECK(preferences_bind(ACTION_MAP,SDL_SCANCODE_K));
+  on_key_down(SDL_SCANCODE_K); CHECK(game->show_map);
+  on_key_down(SDL_SCANCODE_TAB); CHECK(game->show_map);
+  on_key_down(SDL_SCANCODE_K); CHECK(!game->show_map);
+  // Compare the actual rendered hint with an explicit label for the rebound
+  // key; controller labels must still override the keyboard binding.
+  Image *actual=image_new(W,H),*expected=image_new(W,H);
+  render_map(NULL,actual,game,NULL); render_map(NULL,expected,game,"K");
+  CHECK(!memcmp(actual->px,expected->px,(size_t)W*H*sizeof(uint32_t)));
+  image_fill(actual,0); render_map(NULL,actual,game,"TRIANGLE");
+  CHECK(memcmp(actual->px,expected->px,(size_t)W*H*sizeof(uint32_t)));
+  image_free(actual); image_free(expected);
+
+  Level custom; char err[128];
+  CHECK(level_parse(&custom,"111111111\n1P......1\n111111111\n",err,sizeof err));
+  CHECK(!custom.campaign.enabled);
+  Game *previous=game; Session custom_session={.lives=3,.next_life=40000};
+  game=game_create(&custom,0,&custom_session,NULL);
+  preferences_defaults(); preferences_get()->autosave=false;
+  set_state(ST_PLAYING); input_focused=true;
+  on_key_down(SDL_SCANCODE_W); on_key_down(SDL_SCANCODE_TAB);
+  float x=game->player.x;
+  on_key_down(SDL_SCANCODE_I); update(.05f);
+  CHECK(!game->campaign.journal && game->show_map && input.forward);
+  CHECK(game->time>0 && game->player.x>x);
+  x=game->player.x;
+  on_gamepad_button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT); update(.05f);
+  CHECK(!game->campaign.journal && game->show_map && input.forward && game->player.x>x);
+  game_destroy(game); level_free(&custom); game=previous; game_activate(game);
+  clear_input(); preferences_defaults();
+  puts("Rebound automap input and hints, controller labels and custom-map journal input passed.");
 }
 static void authored_campaign(void) {
   char *path=user_file("production-chapter.dat"),err[128]; CHECK(path);
@@ -365,7 +437,8 @@ static void screenshots(void) {
   image_free(fb); fb=NULL; renderer_free(&renderer); assets_free(&assets); comic_art_free(&comic_art);
 }
 int main(int argc,char **argv) {
-  CHECK(SDL_Init(0)); fixture_map(); progression(); tactical_tools(); soldier_combat(); preferences_and_saves(); authored_campaign(); retry_statistics();
+  CHECK(SDL_Init(0)); fixture_map(); progression(); tactical_tools(); soldier_combat(); preferences_and_saves();
+  autosave_trap_safety(); journal_and_map_input(); authored_campaign(); retry_statistics();
   if (argc>1 && !strcmp(argv[1],"--screenshots")) screenshots();
   game_destroy(play); level_free(&fixture); game_destroy(game);
   for (int i=0;i<levels_loaded;i++) level_free(&levels[i]);

@@ -2244,7 +2244,8 @@ void render_map(Renderer *r, Image *fb, const Game *g, const char *close_button)
   }
   gfx_fill_poly(fb, pts, 3, color_parse("#ffd23c"));
   char hint[64];
-  snprintf(hint, sizeof hint, "MAP — %s TO CLOSE", close_button ? close_button : "TAB");
+  snprintf(hint, sizeof hint, "MAP — %s TO CLOSE", close_button ? close_button :
+           SDL_GetScancodeName((SDL_Scancode)preferences_get()->keys[ACTION_MAP]));
   font_draw(fb, hint, W / 2.0f, oy + mh + 6, 10, FONT_REGULAR, ALIGN_CENTER, color_parse("#a89878"));
 }
 

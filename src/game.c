@@ -1106,7 +1106,7 @@ static void update_projectiles(Game *g, float dt) {
           break;
         }
       }
-      if (a->dist > 14) dead = true;
+      if (a->dist > HOSTILE_PROJECTILE_RANGE) dead = true;
     }
     if (!dead) g->projectiles[kept++] = *a;
   }

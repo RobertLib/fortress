@@ -109,7 +109,8 @@ concealed treasury. Rewards happen once per chapter. Hidden relics grant
 permanent benefits for the run: quieter footsteps, steadier aim, stronger
 potions, longer Jailer staggers and resistance to venom. **I** opens the paused
 field journal with mechanisms, errands and relic effects. Explored mechanisms
-are marked on the map and turn green when finished.
+are marked on the map and turn green when finished. The journal and tactical
+tools are available on maps with campaign objectives.
 
 **Q** throws a limited noise decoy; break sight so pursuers investigate it.
 **B** braces a nearby closed wooden door for ten seconds. Each chapter begins
@@ -190,9 +191,10 @@ working directory.
 
 Story mode writes a fresh chapter checkpoint on entry and autosaves important
 progress, or after ninety seconds, when health and nearby threats allow it.
-Projectiles, poison, nearby enemies, swinging traps and Jailer encounters defer
-autosaving. A safe interaction with the last bell saves the preparation before
-the pursuit. Automatic saving can be disabled; manual slots remain available.
+Projectiles, poison, nearby enemies, triggered arrow traps, swinging blades and
+Jailer encounters defer autosaving. A safe interaction with the last bell saves
+the preparation before the pursuit. Automatic saving can be disabled; manual
+slots remain available.
 Options and keyboard bindings persist in `options.cfg`. For portable testing,
 `FORTRESS_USER_DATA=/existing/directory` isolates both saves and options.
 

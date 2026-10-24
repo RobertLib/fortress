@@ -227,7 +227,7 @@ void campaign_brace_door(Game *g) {
   if (!s->braces) { game_say(g,"NO DOOR BRACES LEFT",2); return; }
   for (int d=0;d<g->door_count;d++) {
     Door *door=&g->doors[d];
-    if (door->kind!='D' || !near(g,door->x,door->y,1.8f,true) || door->open>.05f) continue;
+    if (door->kind!='D' || door->state!=DOOR_CLOSED || !near(g,door->x,door->y,1.8f,true) || door->open>.05f) continue;
     if (campaign_door_braced(g,d)) { game_say(g,"THIS DOOR IS ALREADY BRACED",2); return; }
     for (int i=0;i<CAMPAIGN_BRACES;i++) if (s->brace[i].remaining<=0) {
       s->brace[i]=(DoorBrace){d,10}; s->braces--;
