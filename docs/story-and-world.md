@@ -23,10 +23,11 @@ vězeňské budovy samy o sobě nepředstavují únik. Sebrání klíčů jej pr
 střelba a hluk mu pomáhají hledat hráče. Kuše jej zadrží, ale nezabije.
 Bílé svíce omezují jeho pohyb.
 
-Otevření všech uzávěrů a odnesení posledních klíčů přes most ruší účel
-přísahy. Finále je útěk, nikoli souboj s nesmrtelným protivníkem. Zvon
-opatství v epilogu spojuje osobní svobodu hráče s osudem lidí, kvůli kterým
-se do vězení dostal.
+Otevření uzávěrů, uvolnění dvou posledních přísahových zámků a zazvonění
+s posledními třemi klíči zahájí útěk. Žalářník se v tomto finále vrací,
+dokud hráč nedoběhne k bráně nad trůnem. Nezískává zranitelnost ani ukazatel
+zdraví. Závěrečný zvon spojuje osobní svobodu hráče s osudem lidí, kvůli
+kterým se do vězení dostal.
 
 ### Jak hráč příběh poznává
 
@@ -65,9 +66,39 @@ přístupy do staršího okruhu. Žádný klíč nevyžaduje tajné dveře, tele
 ani rozbití zdi. Obě tajné skrýše a oba průlomy v každé kapitole zůstávají
 nepovinnými odměnami a zkratkami.
 
+Každá kapitola navíc vyžaduje vlastní postup zapsaný v deníku:
+
+1. Podhradí: šest sekund pracovat s navijákem u východní brány. Hráč musí
+   zůstat poblíž, může se však během práce bránit.
+2. Opatství: obnovit oba ventily a potom zazvonit u oltáře. Ventily skutečně
+   odvodní část cisterny; zmizí zpomalování vodou i šplouchání.
+3. Zahrady: porazit kapitána a převzít jeho pečeť u stolu v obsazeném domku.
+4. Pohřebiště: přečíst tři hroby v určeném pořadí: voják, dítě, správce.
+5. Horní hrad: uvolnit dva přísahové zámky, shromáždit klíče a zazvonit.
+
 Východ každé kapitoly leží na opačné straně mapy od začátku. Vstupní
 místnosti neobsahují výstupní bránu; rozhovory a popis následujícího cíle
-ukazují na její nové umístění. Každá brána stále vyžaduje všechny tři klíče.
+ukazují na její nové umístění. Každá brána vyžaduje všechny tři klíče
+i dokončený postup kapitoly. Klíče zůstávají sbíratelné v libovolném pořadí.
+
+### Dobrovolné příběhové úkoly a odměny
+
+Matthias hledá soupis obilí, Anselm ukradený relikviář, Pavel zahradnickou
+knihu, Tomáš pamětní stuhu a Benedikt správcovu závěť. Předmět hráč
+automaticky sebere při přiblížení a vrátí při rozhovoru. Mnich změní
+dialog, přidá zdraví, osm šípů, dvě návnady a jednu závoru a otevře konkrétní
+tajnou pokladnici. Zásoby mají horní limity. Odměna i otevření jsou jednorázové
+a ukládají se; úkoly nejsou podmínkou odchodu z kapitoly.
+
+V tajných skrýších je pět relikvií. Postupně dávají tišší kroky, přesnější
+zamíření kuší, silnější léčivé lektvary, delší zadržení Žalářníka a poloviční
+poškození jedem. Získané účinky se přenášejí do dalších kapitol. Deník
+vysvětluje jejich účinky a odděluje objevené relikvie od nedokončených úkolů.
+
+Klávesa Q odhodí sedmisekundovou hlučnou návnadu. Ztráta výhledu na hráče
+je podmínkou účinného odvedení pozornosti. B dočasně zajistí zavřené dřevěné
+dveře na deset sekund. Funguje proti vojákům i Žalářníkovi. Začátek kapitoly
+dává dvě návnady a jednu závoru; nejde o neomezené schopnosti.
 
 ### Rytmus, boj a zásoby
 
@@ -100,7 +131,11 @@ materiály a mipmapy. Povrch cesty je čitelný i v automapě. Název místního
 orientačního bodu se objevuje v rohu pohledu; prozkoumaní mniši jsou
 označeni světlým bodem. Automapa se vejde i do šířky rozšířených úrovní.
 
-Nové čtvrti mají ručně určené vybavení. Kostel nepřebírá fontánu, jídelní
+Nové čtvrti mají ručně určené vybavení, šikmé střechy a okna na skutečných
+vnějších stěnách. Kostel doplňují vysoká lomená okna a opěrné pilíře,
+obytné domy dřevěné okenice. Déšť, listí nebo popel se vykreslují v otevřených
+prostorech se zakrýváním geometrií. Kapitoly mají jemně odlišné barvy mlhy.
+Kostel nepřebírá fontánu, jídelní
 stoly a řetězy z automatického vybavování síní: vlastní oltář, kříž,
 svícny, lavice, sochy a sloupy určují jeho osu. Vesnice používá hrázděné
 stěny a malé obytné místnosti. Hřbitov střídá náhrobky s kříži, les hustší
@@ -110,6 +145,9 @@ aby se kolem stromů neobjevovaly útržky sousedního spritu.
 
 Venkovní ambient používá vítr a vzdálený zvon. Interiéry zachovávají
 klepání, škrábání a kroky. Boj a hon Jailerem mají před ambientem přednost.
+Pět původních hudebních motivů má klidnou a napjatou vrstvu. Přechody jsou
+plynulé; útočiště bez boje hudbu utlumí. Čtení, pauza a ztráta fokusu ji
+rovněž ztiší. Hudba i efekty mají vlastní hlasitost.
 
 ## Ověření a hranice realizace
 

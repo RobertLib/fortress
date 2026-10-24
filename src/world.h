@@ -7,11 +7,15 @@
 #define WORLD_PROPS 256
 #define WORLD_MONKS 8
 #define WORLD_LANDMARKS 16
+#define WORLD_ROOFS 16
+#define WORLD_FACADES 128
 
 typedef struct WorldCell { uint8_t outside, ground, authored; } WorldCell;
 typedef struct WorldProp { int x, y; DecoKind kind; } WorldProp;
 typedef struct Monk { int x, y, note; char name[40], text[224]; } Monk;
 typedef struct Landmark { int x, y; float radius; char name[48]; } Landmark;
+typedef struct WorldRoof { int x,y,w,h,axis,slate; float eave,ridge; } WorldRoof;
+typedef struct WorldFacade { int x,y,dx,dy; HangKind kind; } WorldFacade;
 typedef struct WorldLayout {
   WorldCell *cells; // NULL on legacy maps; indexed exactly like the level grid
   WorldProp props[WORLD_PROPS];
@@ -20,6 +24,10 @@ typedef struct WorldLayout {
   int monk_count;
   Landmark landmarks[WORLD_LANDMARKS];
   int landmark_count;
+  WorldRoof roofs[WORLD_ROOFS];
+  int roof_count;
+  WorldFacade facades[WORLD_FACADES];
+  int facade_count;
   char objective[96], destination[64];
 } WorldLayout;
 

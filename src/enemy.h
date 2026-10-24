@@ -52,6 +52,9 @@ typedef struct EnemyStats {
 } EnemyStats;
 
 typedef struct Enemy {
+  bool tactical;
+  float tactic_timer, shield_pressure;
+  bool charge_hit;
   float x, y;
   EnemyType type;
   const EnemyStats *stats;
@@ -82,6 +85,9 @@ typedef struct Enemy {
 void enemy_init(Enemy *e, const EnemySpawn *spawn);
 void enemy_update(Enemy *e, struct Game *game, float dt);
 void enemy_hit(Enemy *e, struct Game *game, int dmg);
+void enemy_hit_player(Enemy *e, struct Game *game, int dmg, WeaponKind weapon);
+void enemy_hit_from(Enemy *e, struct Game *game, int dmg, WeaponKind weapon,float source_x,float source_y);
+bool enemy_shield_raised(const Enemy *e);
 void enemy_wake(Enemy *e, struct Game *game, bool silent);
 bool enemy_dead(const Enemy *e);
 const Image *enemy_sprite(const Enemy *e, const Assets *assets, const struct Player *viewer);

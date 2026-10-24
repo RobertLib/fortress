@@ -23,7 +23,9 @@ Each exit stands on the far side of its chapter from the player start:
 the eastern end of the village north lane, the southeast cloister, beyond
 the northwest barrack sleeping ward, beyond the western flooded crypt,
 and above the keep's throne stair. The entry rooms have no exit gates.
-All gates still require three keys; the district connections remain loops.
+All gates require three keys and the chapter's mechanisms; the district
+connections remain loops. [The production upgrade](production-upgrade.md)
+documents their map directives, state and verification.
 
 All five interior floor plans are explicitly authored. They retain the three-key horror maze
 loop, but replace the old tile arrangements and global height bands with local
@@ -98,7 +100,8 @@ Run `ctest --test-dir build --output-on-failure`. The architecture regression:
 - Requires substantial enclosed passages alongside the new open districts.
 - Requires exactly one exit, separated from the start by at least half the
   map's width or height.
-- Completes all six key orders on every floor, then walks to and uses the
+- Completes all six key orders on every floor, walks to and operates each
+  required mechanism in prerequisite order, then walks to and uses the
   gate with real movement, use input, door timing, stair traversal and pickups.
 - Keeps barrels and furniture solid; secret walls and breaches stay closed,
   and mirrors are unused during those thirty full routes.

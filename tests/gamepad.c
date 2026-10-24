@@ -124,7 +124,7 @@ static void test_menus(SDL_Joystick *joystick) {
   CHECK(state == ST_MENU && running);
   set_state(ST_DIED);
   tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
-  CHECK(state == ST_LEVEL_START);
+  CHECK(state == ST_PLAYING); // Story rules restore the safe checkpoint directly.
   set_state(ST_LEVEL_COMPLETE);
   tap(joystick, SDL_GAMEPAD_BUTTON_SOUTH);
   CHECK(state == ST_LEVEL_START && game->level_index == 1);

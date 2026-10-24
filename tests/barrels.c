@@ -186,7 +186,7 @@ static void test_other_arrows(void) {
     Game *g = f.game;
     aim_along_row(g, 6.5f);
     if (trap)
-      g->projectiles[g->projectile_count++] = (Projectile){1.5f, 2.5f, 1, 0, 0, 0.44f, SHOT_TRAP, NULL, 0, 0};
+      g->projectiles[g->projectile_count++] = (Projectile){1.5f, 2.5f, 1, 0, 0, 0.44f, SHOT_TRAP, NULL, 0, 0, WEAPON_CROSSBOW};
     else
       game_loose_bolt(g, 1.5f, 2.5f, 1, 0, SHOT_AT_PLAYER, NULL, 15);
     tick(g, 40);
@@ -202,7 +202,7 @@ static void test_full_projectile_pool(void) {
   aim_along_row(g, 1.5f);
   g->projectile_count = MAX_PROJECTILES;
   for (int i = 0; i < MAX_PROJECTILES; i++)
-    g->projectiles[i] = (Projectile){1.5f, 1.5f, 0, -1, 0, 0.44f, SHOT_MISS, NULL, 0, 0};
+    g->projectiles[i] = (Projectile){1.5f, 1.5f, 0, -1, 0, 0.44f, SHOT_MISS, NULL, 0, 0, WEAPON_CROSSBOW};
   shoot(g);
   CHECK(g->barrels[0].destroyed);
   teardown(&f);

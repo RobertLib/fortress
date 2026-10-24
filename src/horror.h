@@ -52,6 +52,7 @@ typedef struct HorrorState {
   int opened_door[3];
   float blackout, ambient_timer, calm_timer, tension;
   float noise_x, noise_y, noise_timer;
+  float noise_radius;
   bool was_safe;
   Warden warden;
   // Transient BFS scratch, never serialized. Each game owns its own buffers.

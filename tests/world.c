@@ -33,6 +33,8 @@ static void validation(void) {
     "@prop oak 3 3\n@prop grave 3 3", "@monk 3 3 BROTHER", "@monk 3 3 |Hello",
     "@monk 3 3 BROTHER|", "@landmark 3 3 nan GARDEN", "@landmark 3 3 0 GARDEN",
     "@landmark 0 0 3 GARDEN", "@objective", "@destination",
+    "@roof 3 3 4 4 2 nan 0 0", "@roof 3 3 4 4 3 2 0 0", "@roof 3 3 99 4 2 3 0 0",
+    "@facade 4 4 1 1 glass", "@facade 4 4 1 0 glass", "@facade 0 4 1 0 dragon",
   };
   char text[2048],err[160];
   for (size_t i=0;i<sizeof bad/sizeof bad[0];i++) {
@@ -105,6 +107,30 @@ static void rendering(const Assets *assets) {
   image_free(fb); renderer_free(&r); game_destroy(g); level_free(&lv);
 }
 
+static void pitched_roofs(const Assets *assets) {
+  Level lv; parse(&lv,COURT); lv.world.roof_count=1;
+  lv.world.roofs[0]=(WorldRoof){.x=8,.y=3,.w=3,.h=5,.eave=1,.ridge=2.4f};
+  Session session={.lives=3,.next_life=40000}; Game *g=game_create(&lv,0,&session,NULL);
+  Renderer r; renderer_init(&r,assets); Image *fb=image_new(SCREEN_W,SCREEN_H); r.eye_z=.5f;
+  aim(g,1.5f,5.5f,1,0);
+  for (int i=0;i<SCREEN_W*VIEW_H;i++) r.depth[i]=INFINITY;
+  render_roofs(&r,fb,g); int covered=0;
+  for (int i=0;i<SCREEN_W*VIEW_H;i++) { CHECK(!isnan(r.depth[i])); covered+=isfinite(r.depth[i]); }
+  CHECK(covered>500 && fabsf(r.depth[100*SCREEN_W+SCREEN_W/2]-6.5f)<.01f);
+  image_fill(fb,0xff123456);
+  for (int i=0;i<SCREEN_W*VIEW_H;i++) r.depth[i]=2;
+  render_roofs(&r,fb,g);
+  for (int i=0;i<SCREEN_W*VIEW_H;i++) CHECK(fb->px[i]==0xff123456 && r.depth[i]==2);
+  // Clip faces crossing the camera plane from inside and beside the roof.
+  for (int axis=0;axis<2;axis++) for (int angle=0;angle<8;angle++) {
+    lv.world.roofs[0].axis=axis;
+    aim(g,8.01f,4.99f,cosf(angle*.7854f),sinf(angle*.7854f));
+    for (int i=0;i<SCREEN_W*VIEW_H;i++) r.depth[i]=INFINITY;
+    render_roofs(&r,fb,g);
+    for (int i=0;i<SCREEN_W*VIEW_H;i++) CHECK(!isnan(r.depth[i]) && r.depth[i]>0);
+  }
+  image_free(fb); renderer_free(&r); game_destroy(g); level_free(&lv);
+}
 static void solid_architecture(const Assets *assets, bool shots) {
   Level lv; parse(&lv, COURT);
   lv.decoration_count=lv.wall_box_count=lv.hanging_count=lv.torch_count=lv.fire_light_count=0;
@@ -277,7 +303,7 @@ int main(int argc,char **argv) {
   CHECK(SDL_Init(0)); random_seed(9187);
   Assets assets; CHECK(assets_build(&assets));
   bool shots=argc>1&&!strcmp(argv[1],"--screenshots");
-  validation(); rendering(&assets); solid_architecture(&assets,shots);
+  validation(); rendering(&assets); pitched_roofs(&assets); solid_architecture(&assets,shots);
   distant_wall_lighting(&assets,shots); campaign(&assets,shots);
   assets_free(&assets); SDL_Quit(); puts("Outdoor terrain, roofs, peaceful monks, dialogue and save compatibility passed.");
   return 0;

@@ -77,7 +77,7 @@ painted cinematic scenes with readable captions and gentle camera movement.
 
 Run `./build/visual_tests --screenshots` from the repository root to render the
 complete presentation and contact sheets into `build/art-*.bmp`. The test
-checks all 586 asset slots, premultiplied alpha, distinct animation frames,
+checks all 614 asset slots, premultiplied alpha, distinct animation frames,
 material mips and asset ownership. See [the coverage and verification guide](docs/art-direction.md)
 and [artwork sources and reproduction](assets/README.md).
 
@@ -85,9 +85,12 @@ and [artwork sources and reproduction](assets/README.md).
 
 Explore five chapters across prison corridors, a village, an abbey,
 a walled park, a forest cemetery and the upper keep. Each chapter has **3 keys**
-that unlock the **GATE** to the next chapter. You have 3 lives; every
-40,000 points earns an extra life. After dying you retry the floor with
-a crossbow and a basic supply of bolts.
+that unlock the **GATE** to the next chapter, together with a different authored
+objective: a gate winch, cistern drainage and abbey bell, a captain's seal,
+ordered burial inscriptions, then the two oath locks and final bell.
+**STORY** rules are the default: death restores a safe automatic save without
+a lives limit. **ARCADE** rules, chosen in Options before a new game, give three
+lives, an extra life every 40,000 points, and fresh equipment on a chapter retry.
 
 Each chapter includes a required objective in its outdoor district, two
 return connections, wells and named landmarks. Enter the village inn and
@@ -97,18 +100,36 @@ grave. Press **E / Space / gamepad Use** near a monk to speak; press again to
 close the conversation. Reading pauses the world. Monks stand near white
 candles, which protect against the Jailer. Wells are solid landmarks.
 
+Five monks also offer optional errands. Bring back the grain tally, reliquary,
+ledger, memorial ribbon or keeper's testament to receive supplies and open a
+concealed treasury. Rewards happen once per chapter. Hidden relics grant
+permanent benefits for the run: quieter footsteps, steadier aim, stronger
+potions, longer Jailer staggers and resistance to venom. **I** opens the paused
+field journal with mechanisms, errands and relic effects. Explored mechanisms
+are marked on the map and turn green when finished.
+
+**Q** throws a limited noise decoy; break sight so pursuers investigate it.
+**B** braces a nearby closed wooden door for ten seconds. Each chapter begins
+with two decoys and one brace; errands replenish them. The Jailer remains
+unkillable. In the last chapter, collect three keys and release both oath locks
+before sounding the bell: it begins the final escape and repeated pursuit.
+
 Outdoor spaces have an open night sky, longer moonlit visibility, local
 grass, earth, cobble, gravel and leaf-litter surfaces, and wind and distant
 bells. Roofs occlude the sky when entering buildings. The automap fits the
 larger chapters, distinguishes outdoor ground and marks explored monks.
+Pitched roofs, arched church windows, shutters, buttresses and furnishing
+clusters distinguish buildings. Rain, drifting leaves or ash and chapter-specific
+fog palettes reinforce each district. Five original two-stem musical motifs
+crossfade with danger and fall silent in refuges; effect and music gains are separate.
 See [the story and world design](docs/story-and-world.md) and
 [geometry and verification](docs/level-design.md). Generate exterior and
 dialogue previews with `./build/world_tests --screenshots`.
 
 Choose **EASY**, **NORMAL** or **HARD** after selecting **NEW GAME**. Use
 the arrow keys or mouse, then Enter or a click to start; Esc or **BACK**
-returns to the menu. Normal is selected by default and keeps the original
-balance. Later runs remember your last choice while the game stays open.
+returns to the menu. Normal is the default baseline for enemy health and
+damage. Later runs remember your last choice while the game stays open.
 
 | Difficulty | Enemy health | Damage taken | Starting bolts | Bolt pickups |
 |---|---:|---:|---:|---:|
@@ -146,7 +167,10 @@ The pause menu also offers **SAVE GAME** and **LOAD GAME**; **LOAD GAME**
 is available from the main menu, including after restarting the game.
 F9 also works after death or game over.
 
-There is **one save slot**, replaced each time you save. It preserves the
+**SAVE SLOTS** offers three manual slots, an autosave and a chapter checkpoint,
+with chapter, difficulty, health and ammunition previews. F5/F9 use the selected
+manual slot (slot 1 on startup). Automatic slots are read-only in the browser.
+They preserve the
 current floor, position, health, weapons, ammunition, keys, difficulty,
 score and lives, along with enemies, pickups, doors, levers, traps, barrels,
 damaged and broken walls, arrows in flight and the explored map. Saving is available while alive on
@@ -154,9 +178,18 @@ an unfinished floor. Starting a new game leaves the saved slot intact.
 **CONTINUE** resumes the run currently in memory; **LOAD GAME** restores
 the last position written to disk.
 
-Saves are written as `savegame.dat` in the per-user application data folder
+Saves are written as `savegame.dat`, `savegame-2.dat`, `savegame-3.dat`,
+`autosave.dat` and `checkpoint.dat` in the per-user application data folder
 returned by `SDL_GetPrefPath("Fortress", "Fortress")`, independently of the
 working directory.
+
+Story mode writes a fresh chapter checkpoint on entry and autosaves important
+progress, or after ninety seconds, when health and nearby threats allow it.
+Projectiles, poison, nearby enemies, swinging traps and Jailer encounters defer
+autosaving. A safe interaction with the last bell saves the preparation before
+the pursuit. Automatic saving can be disabled; manual slots remain available.
+Options and keyboard bindings persist in `options.cfg`. For portable testing,
+`FORTRESS_USER_DATA=/existing/directory` isolates both saves and options.
 
 Failed saves keep the previous slot. Missing, damaged, unsupported or
 map-incompatible saves display a message and leave the current run intact.
@@ -177,6 +210,8 @@ from an older build; older saves on unchanged custom maps remain supported.
 | `1` / `2` / `3` | dagger, crossbow, repeating crossbow |
 | `Shift` | run |
 | `Tab` | map |
+| `I` | field journal (pauses play) |
+| `Q` / `B` | noise decoy / ten-second door brace |
 | `M` | sound on/off |
 | `F` | fullscreen |
 | `F5` / `F9` | save / load game |
@@ -186,6 +221,21 @@ The repeating crossbow fires three bolts per trigger press, spaced 0.4 seconds
 apart, followed by a 0.5-second recovery. Release and press again for the next
 burst. Releasing the trigger lets the current burst finish; switching weapons
 cancels its remaining shots. Each bolt uses one round of ammunition.
+
+On campaign maps, weapon damage is consistent: dagger 14, crossbow 18,
+repeating crossbow 12 per bolt, with ranged falloff. A rear dagger attack on an
+unaware soldier deals four times its normal damage without a gunshot alarm.
+The repeating crossbow can break a knight's shield guard with successive hits;
+flanking or attacking during his windup avoids the shield. Impacts distinguish
+metal from flesh and confirm a hit at the reticle.
+
+**OPTIONS** is available from the title and pause menus. Adjust brightness,
+weapon motion, camera shake, reading text (100–150%), sound effects, music,
+mouse sensitivity, hints and saving. Rebind movement, fire, use, run, map,
+journal and both tools; assigning an occupied key swaps the two actions.
+Reserved menu/system keys remain available. Reading-size changes affect notes
+and conversations, with a preview in Options. Tab or controller shoulders
+select an options page; arrows adjust its selected value.
 
 ### Gamepad
 
@@ -204,6 +254,9 @@ button labels matched to its layout.
 | `LB` / `RB` or `L1` / `R1` | previous / next weapon (skips weapons you do not own) |
 | Hold `LT` / `L2` or press and hold the left stick | run |
 | `Y` / Triangle, View / Back or the touchpad button | toggle map |
+| `X` / Square | throw a noise decoy |
+| D-pad left / right in play | brace a door / field journal |
+| Shoulders in the journal | previous / next page |
 | Start / Menu / Options | pause / resume |
 | D-pad up/down or left stick | select menu items |
 
@@ -226,9 +279,13 @@ ways to jump straight to a chosen level. These are unavailable in
 
 ### Enemies
 
-- **Guard** (leather armor, kettle hat) — patrols, weak
-- **Knight** (plate armor, great helm) — tough, hits hard
-- **Captain** (red tabard with a plume) — fast and accurate
+- **Guard** (leather armor, kettle hat) — keeps crossbow distance, visibly aims,
+  and retreats when pressed. His arrows fly toward their release-time aim and can be dodged.
+- **Knight** (plate armor, great helm, sword and shield) — blocks frontal hits,
+  lowers his shield for a telegraphed charge, commits to its direction and
+  exposes himself during recovery. Flank or suppress his guard.
+- **Captain** (red tabard with a plume) — flanks, aims faster and sounds a horn
+  to rally nearby soldiers.
 - **Bat swarm** — flies over everything and swoops in to bite
 - **War hound** — fast melee runner; one placed near a soldier heels to
   him as its handler, barks him awake when it spots you, and trots back
@@ -242,6 +299,9 @@ ways to jump straight to a chosen level. These are unavailable in
   on you on its thread as you pass, and climbs back up when it loses you.
   Hunting, it scuttles in bursts. Doors stop spiders too
 
+Soldiers have painted front, rear and side locomotion views. Unalerted soldiers
+watch in their facing direction; alerted soldiers investigate the last sight
+or an unseen decoy and eventually return when they lose the trail.
 Enemies patrol, and once they spot you (or hear a crossbow shot) they
 raise the alarm and give chase — they stop to shoot, pull a knife or
 swing a fist at close quarters, and can open doors.
@@ -285,6 +345,10 @@ and you can slip through him, even in a narrow corridor. A message marks this
 escape window. Chains and a message announce his arrival before the hunt begins.
 The white candles protect against
 the Jailer; other enemies and traps can still hurt you there.
+
+The final bell changes the encounter rhythm: the Jailer keeps returning until
+you cross the last gate. Relics, decoys, door braces, sight-breaking loops and
+refuges offer preparation and counterplay instead of a health-bar boss fight.
 
 ### Barrels
 

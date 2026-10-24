@@ -56,7 +56,7 @@ static void test_intro(void) {
   act_continue();
   CHECK(state == ST_PLAYING);
   restart_level();
-  CHECK(state == ST_LEVEL_START);
+  CHECK(state == ST_PLAYING); // Checkpoint retry does not replay the prologue.
   choose_difficulty(2);
   start_difficulty(DIFFICULTY_EASY);
   CHECK(state == ST_LEVEL_START && game->level_index == 2);

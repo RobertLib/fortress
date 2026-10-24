@@ -114,7 +114,7 @@ static void test_enemies_and_arrows(void) {
   Input in = {.weapon = -1};
   for (int trap = 0; trap < 2; trap++) {
     g->projectile_count = 1;
-    g->projectiles[0] = (Projectile){3.5f, 2.5f, 1, 0, 0, 0.44f, trap ? SHOT_TRAP : SHOT_MISS, NULL, 0, 0};
+    g->projectiles[0] = (Projectile){3.5f, 2.5f, 1, 0, 0, 0.44f, trap ? SHOT_TRAP : SHOT_MISS, NULL, 0, 0, WEAPON_CROSSBOW};
     game_update(g, 0.2f, &in);
     CHECK(g->projectile_count == 1 && g->projectiles[0].x > 5);
   }

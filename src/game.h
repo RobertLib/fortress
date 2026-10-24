@@ -40,6 +40,9 @@ const DifficultySettings *game_difficulty_settings(Difficulty difficulty);
 // Totals carried across the floors of one run.
 typedef struct Session {
   Difficulty difficulty;
+  uint32_t relics;
+  int run_id; // identifies matching automatic saves after loading a manual slot
+  bool arcade;
   int score, lives, next_life;
   int total_kills, total_treasure, total_enemies, max_treasure;
   int total_secrets_found, max_secrets;
@@ -106,7 +109,7 @@ typedef struct Pendulum {
 // roll has already settled: one bound for its target homes in on it and
 // delivers the damage on arrival, a miss flies on into the masonry.
 // Any arrow can be intercepted by a barrel or damage cracked masonry.
-typedef enum { SHOT_TRAP, SHOT_MISS, SHOT_AT_PLAYER, SHOT_AT_ENEMY, SHOT_AT_WARDEN } ShotKind;
+typedef enum { SHOT_TRAP, SHOT_MISS, SHOT_AT_PLAYER, SHOT_AT_ENEMY, SHOT_AT_WARDEN, SHOT_HOSTILE } ShotKind;
 
 typedef struct Projectile {
   float x, y, dir_x, dir_y, dist;
@@ -115,9 +118,11 @@ typedef struct Projectile {
   Enemy *target; // SHOT_AT_ENEMY
   int dmg; // damage on arrival; zero uses WALL_BOLT_DAMAGE against masonry
   float slope; // vertical travel per horizontal unit for non-homing bolts
+  WeaponKind weapon;
 } Projectile;
 
 typedef struct Game {
+  CampaignState campaign;
   HorrorState horror;
   const Level *level;
   int level_index;
@@ -157,7 +162,11 @@ typedef struct Game {
   bool fire_held;
   int burst_remaining; // bolts still to fire in the current repeater burst
   float weapon_anim_timer;
+  float hit_confirm, impact_timer, impact_x, impact_y;
+  bool impact_metal;
   bool player_dead, completed, show_map;
+  bool controller_input;
+  char controller_use[20],controller_decoy[20];
 } Game;
 
 Game *game_create(const Level *level, int level_index, Session *session, const Persist *persist);

@@ -45,6 +45,7 @@ class District:
         dx, dy = door
         m.g[dy][ox+dx] = '.'
         m.door(ox+dx, dy, axis)
+        self.lines.append(f'@roof {ox+x1} {y1} {x2-x1+1} {y2-y1+1} {ceiling+.125} {min(4.875,ceiling+1.125)} 1 {int(wall!="3")}')
 
     def connect(self, name, interior, exterior):
         ix, iy = interior; ex, ey = exterior
@@ -82,6 +83,23 @@ class District:
 
     def finish(self):
         m = self.m
+        # Windows are authored against genuine exterior faces, spaced away
+        # from doors. They are perspective-correct wall details, not billboards.
+        for roof in [line.split() for line in self.lines if line.startswith('@roof ')] :
+            _,rx,ry,rw,rh,eave,_,_,_=roof
+            rx,ry,rw,rh=int(rx),int(ry),int(rw),int(rh)
+            kind='glass' if float(eave)>3 else 'shutter'
+            faces=[]
+            # Tall church windows flank the central portal symmetrically;
+            # ordinary houses retain the closer three-cell rhythm.
+            for x in range(rx+(4 if kind=='glass' else 2),rx+rw-1,6 if kind=='glass' else 3):
+                faces.extend([(x,ry,0,-1),(x,ry+rh-1,0,1)])
+            for y in range(ry+2,ry+rh-1,3): faces.extend([(rx,y,-1,0),(rx+rw-1,y,1,0)])
+            for x,y,dx,dy in faces:
+                if not (0<x+dx<m.w-1 and 0<y+dy<m.h-1): continue
+                if m.g[y][x] not in '123456' or m.g[y+dy][x+dx]!='.' or not self.sky[y+dy][x+dx]: continue
+                if any(m.g[yy][xx] in 'DR' for yy in range(max(0,y-2),min(m.h,y+3)) for xx in range(max(0,x-2),min(m.w,x+3))): continue
+                self.lines.append(f'@facade {x} {y} {dx} {dy} {kind}')
         lines = []
         sky = [[1 if cell else None for cell in row] for row in self.sky]
         for directive in m.regions(sky, 'outside'): lines.append(directive.rsplit(' ', 1)[0])
@@ -129,7 +147,7 @@ def village(d):
     d.monk(9, 9, 'BROTHER MATTHIAS', 'You opened the grain stores for us. The lord called it treason.|The innkeeper hid a key in his room. The abbey stair gate stands at the far eastern end of the north lane. Follow the white candles.')
     d.landmark(12, 20, 12, 'VILLAGE WELL'); d.landmark(18, 7, 5, 'THE EMPTY INN')
     d.landmark(24, 6, 3, 'ABBEY STAIR GATE')
-    d.lines += ['@objective Search the guardhouse and village. Recover three gate keys.',
+    d.lines += ['@objective Raise the village gate winch and recover three gate keys.',
                 '@destination The far east lane gate descends to the abbey cistern.']
 
 
@@ -164,7 +182,7 @@ def abbey(d):
     d.thing('S', (18, 19)); d.thing('G', (23, 22)); d.thing('v', (19, 12))
     d.landmark(15, 9, 8, 'CHURCH OF SAINT ALDEN'); d.landmark(17, 24, 10, 'THE HERB CLOISTER'); d.landmark(6, 26, 4, 'INFIRMARY')
     d.landmark(24, 30, 3, 'GARDEN SERVICE GATE')
-    d.lines += ['@objective Search the cistern and church. Break the abbey gate seal.',
+    d.lines += ['@objective Restore the two drain valves. Ring the bell and recover three keys.',
                 '@destination The southeast cloister gate leads to the garden ward.']
 
 
@@ -193,7 +211,7 @@ def park(d):
     d.monk(9,6,'BROTHER PAVEL', 'These paths once fed the village, before the lord locked the grain away.|The gardener carried a key to his lodge. Cross the pond or circle the orchard, then seek the burial gate beyond the northwest barrack ward.')
     d.thing('H',(5,27)); d.thing('F',(18,8)); d.thing('A',(14,15),(22,26)); d.thing('G',(18,14)); d.thing('c',(19,14)); d.thing('s',(18,7))
     d.landmark(10,15,12,'THE WALLED PARK'); d.landmark(19,20,5,'THE STONE BRIDGE'); d.landmark(20,7,4,'GARDENERS LODGE')
-    d.lines += ['@objective Recover the garrison keys from barracks, armoury and park.',
+    d.lines += ['@objective Defeat the captain, claim his seal and recover three garrison keys.',
                 '@destination The northwest barrack gate opens onto the old vault road.']
 
 
@@ -220,7 +238,7 @@ def graves(d):
     d.monk(17,7,'BROTHER TOMAS', 'The missing keeper was buried beneath the stone cross in Blackwood. His key was never returned.|The gate to the keep lies beyond the flooded crypt at the far western end. Do not follow a voice off the path.')
     d.thing('A',(12,13),(20,27)); d.thing('H',(21,8)); d.thing('F',(18,8)); d.thing('W',(7,25)); d.thing('S',(20,25)); d.thing('v',(9,7))
     d.landmark(8,10,9,'SAINT ALDENS CHURCHYARD'); d.landmark(19,7,5,'THE VIGIL CHAPEL'); d.landmark(14,25,11,'BLACKWOOD'); d.landmark(21,26,3,'THE KEEPERS GRAVE')
-    d.lines += ['@objective Find the burial keys in crypt, ossuary and Blackwood.',
+    d.lines += ['@objective Read the three burial inscriptions in order. Recover the gate keys.',
                 '@destination The western crypt gate climbs to the warlords keep.']
 
 
@@ -242,11 +260,92 @@ def last_bell(d):
     d.landmark(12,16,12,'THE LAST BELL COURT'); d.landmark(20,8,5,'BELL WARDENS HOUSE')
     # The final approach is an exposed rampart, beyond the occupied nave.
     for y in range(4): d.sky[y][24]=True
-    d.lines += ['@objective Take the final keys through the gate above the throne.',
+    d.lines += ['@objective Release two oath locks, sound the last bell and escape with the keys.',
                 '@destination Beyond the last gate: the bridge and the open road.']
+
+
+def composition(d):
+    m=d.m
+    if m.number==1:
+        d.prop('oak',(3,21),(23,17)); d.prop('bench',(11,22),(16,24))
+        d.prop('urn',(15,10),(21,10)); d.prop('table',(16,21)); d.prop('chair',(17,20))
+        d.thing('q',(15,21),(16,22))
+    elif m.number==2:
+        # Stone buttresses break the nave's long exterior walls and frame
+        # the entrance; all existing doors and processional routes stay open.
+        for x,y in [(7,4),(7,10),(7,13),(23,4),(23,10),(23,13),(10,15),(20,15)]:
+            assert m.g[y][d.x+x]=='.' and (x,y) not in d.props
+            m.wall(d.x+x,y,'1'); m.c[y][d.x+x]=3.375
+        d.prop('urn',(12,22),(16,22),(12,27),(16,27)); d.prop('bench',(14,24),(15,28))
+        d.prop('statue',(10,13),(20,13))
+    elif m.number==3:
+        d.prop('bench',(22,15),(11,23)); d.prop('urn',(17,9),(22,9)); d.prop('statue',(11,11))
+    elif m.number==4:
+        d.prop('urn',(16,8),(22,8)); d.prop('bench',(11,15))
+    else:
+        d.prop('candelabra',(14,6),(14,9)); d.prop('statue',(22,28)); d.prop('bench',(7,21))
+
+
+def production(d):
+    """Gameplay authored alongside the district, with checked physical positions."""
+    m=d.m
+    d.lines.append('@campaign 1')
+    def station(x,y,kind,requires,duration,name,hint,local=True):
+        wx=d.x+x if local else x
+        assert m.g[y][wx]=='.' and (not local or (x,y) not in d.props), (m.number,'mechanism',wx,y)
+        d.lines.append(f'@mechanism {wx} {y} {kind} {requires} {duration} {name}|{hint}')
+    if m.number==1:
+        d.thing('g',(24,10))
+        station(24,8,'winch',0,6,'RAISE THE VILLAGE GATE WINCH','THE WINCH IS RELEASED. FIND THE KEYS AND TAKE THE EAST GATE.')
+        errand=(7,26,0,'GRAIN TALLY',
+                'You fed this village. Find our grain tally in the cooper cottage, southwest of the well. I can spare supplies.|Work the winch beside the far eastern gate, then carry three keys through it.',
+                'The tally proves where the grain went.|I have released the hidden guardhouse store. Take medicine, bolts, two decoys and a door brace. Raise the eastern gate winch and bring three keys.')
+    elif m.number==2:
+        station(8,9,'valve',0,3,'OPEN THE WEST DRAIN VALVE','THE WEST VALVE IS OPEN. RESTORE THE NORTHERN PUMP VALVE.',False)
+        station(32,8,'valve',1,3,'OPEN THE NORTHERN PUMP VALVE','THE CISTERN DRAINS. RING THE BELL AT SAINT ALDENS ALTAR.',False)
+        station(16,7,'bell',3,0,'RING SAINT ALDENS BELL','THE ABBEY SEAL IS BROKEN. TAKE THREE KEYS TO THE SOUTHEAST GATE.')
+        d.lines.append('@drain 16 11 9 10 3')
+        errand=(21,12,0,'STOLEN RELIQUARY',
+                'Two valves drain the cistern: one in the western antechamber, one in the north pump house. Then ring the altar bell.|Our stolen reliquary lies in the church southeast aisle. Bring it back.',
+                'The reliquary belongs where the first keeper swore his oath.|I have released the crypt treasury. Take medicine, bolts, two decoys and a brace. White candles remind him whom he swore to protect.')
+    elif m.number==3:
+        # The garrison command must be a real encounter, not an invisible flag.
+        assert m.g[7][d.x+18]=='s'
+        m.g[7][d.x+18]='O'
+        station(19,8,'seal',0,0,'CLAIM THE CAPTAINS GARRISON SEAL','THE GARRISON SEAL IS YOURS. TAKE THREE KEYS TO THE NORTHWEST GATE.')
+        errand=(22,8,0,'GARDENERS LEDGER',
+                'The captain has taken the gardeners lodge. Defeat him, then claim his seal at the desk.|Bring me the ledger from the east side of his room. These gardens once fed the village.',
+                'These are the families still waiting outside the walls.|I have opened the concealed officers cache. Take bolts, medicine, two decoys and a brace. Seek the burial gate beyond the northwest barrack ward.')
+    elif m.number==4:
+        station(4,7,'grave',0,0,'READ THE SOLDIERS BURIAL INSCRIPTION','FIRST: THE SOLDIER. NEXT FIND THE CHILD BENEATH THE EASTERN CROSS.')
+        station(10,10,'grave',1,0,'READ THE CHILDS BURIAL INSCRIPTION','SECOND: THE CHILD. LAST FIND THE KEEPER IN SOUTHERN BLACKWOOD.')
+        station(21,25,'grave',3,0,'RELEASE THE KEEPERS BURIAL SEAL','THE KEEPER IS REMEMBERED. TAKE THREE KEYS TO THE WESTERN CRYPT GATE.')
+        errand=(21,7,0,'MEMORIAL RIBBON',
+                'Read the graves in this order: soldier in the northwest, child to the east, keeper beneath the southern forest cross.|A memorial ribbon remains by the chapel east wall. Bring it to me.',
+                'Someone still remembers the dead. That is stronger than the lords command.|The receiving treasury is open. Take supplies for the keep. Its gate lies beyond the flooded crypt at the far western end.')
+    else:
+        station(7,27,'winch',0,2,'RELEASE THE GATE WARDENS OATH LOCK','THE FIRST SEAL BREAKS. FIND ITS TWIN IN THE BELL WARDENS HOUSE.')
+        station(21,9,'winch',1,2,'RELEASE THE BELL WARDENS OATH LOCK','BOTH SEALS ARE BROKEN. SOUND THE BELL BESIDE THE ALTAR.')
+        station(20,8,'oath',3,0,'SOUND THE LAST BELL','THE OATH IS BROKEN. ESCAPE THROUGH THE GATE ABOVE THE THRONE.')
+        errand=(5,25,0,'KEEPERS TESTAMENT',
+                'Two oath seals remain: one in the southwest lodge, one in the bell wardens house. Break them, then sound the last bell.|Bring the testament from the southwest lodge before you begin the escape.',
+                'He swore to protect people, never to imprison them.|I have released the old chapel treasury. Take supplies, release the oath locks and sound the bell. Run to the gate above the throne when the chains answer.')
+    x,y,monk,name,request,thanks=errand
+    assert len(request)<224 and len(thanks)<224
+    assert m.g[y][d.x+x]=='.' and (x,y) not in d.props, (m.number,'errand',x,y)
+    d.lines.append(f'@errand {d.x+x} {y} {monk} {name}~{request}~{thanks}')
+    door_x,door_y=[(4,19),(5,31),(15,4),(5,3),(5,3)][m.number-1]
+    assert m.g[door_y][door_x]=='Z'
+    d.lines.append(f'@erranddoor {door_x} {door_y}')
+    # A useful, permanent relic accompanies an existing concealed treasury.
+    rx,ry=[(3,18),(3,30),(14,1),(2,2),(3,2)][m.number-1]
+    assert m.g[ry][rx]=='T'
+    d.lines.append(f'@relic {rx} {ry} {m.number-1}')
 
 
 def expand(m):
     d = District(m)
     [village, abbey, park, graves, last_bell][m.number-1](d)
+    composition(d)
+    production(d)
     return d.finish()

@@ -88,6 +88,7 @@ typedef enum {
   SND_WARDEN_STEP,
   SND_WARDEN_CHAIN,
   SND_PARCHMENT,
+  SND_METAL_HIT,SND_FLESH_HIT,SND_RELOAD,SND_CAPTAIN_CALL,SND_STEP_WOOD,SND_STEP_LEAVES,
   SND_COUNT
 } SoundId;
 
@@ -107,6 +108,8 @@ void audio_shutdown(void);
 
 void audio_set_enabled(bool enabled);
 bool audio_enabled(void);
+void audio_set_mix(int effects,int music);
+void audio_set_scene(int chapter,float danger,bool shelter,bool active);
 
 // Positional sounds use this to muffle sources behind walls; NULL disables it.
 void audio_set_occlusion(OcclusionFn fn, void *ctx);

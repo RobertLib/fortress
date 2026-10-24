@@ -113,6 +113,7 @@ bad:
 void horror_init(Game *g) {
   HorrorState *h = &g->horror;
   h->reading = -1;
+  h->noise_radius=11;
   for (int i = 0; i < 3; i++) h->opened_door[i] = -1;
   h->ambient_timer = 12;
   h->calm_timer = 12;
@@ -186,6 +187,7 @@ bool horror_use_note(Game *g) {
   g->horror.reading = n;
   g->show_map = false;
   g->horror.notes_read |= 1u << n;
+  campaign_converse(g,n);
   audio_play(SND_PARCHMENT, .5f, 1);
   return true;
 }
@@ -195,6 +197,7 @@ void horror_noise(Game *g, float x, float y, float seconds) {
   g->horror.noise_x = x;
   g->horror.noise_y = y;
   g->horror.noise_timer = seconds;
+  g->horror.noise_radius=11;
 }
 
 bool horror_warden_solid(const Game *g) {
@@ -239,6 +242,10 @@ static bool segment_hits(float ax, float ay, float bx, float by, float x, float 
 // Test the whole tread, not just its endpoints: an off-centre barrel or
 // soldier can obstruct the passage between two otherwise clear tile centres.
 static bool clear_tread(const Game *g, float ax, float ay, float bx, float by) {
+  for (int i=0;i<g->level->campaign.count;i++) {
+    const Mechanism *m=&g->level->campaign.stations[i];
+    if (m->kind!=MECHANISM_SEAL && segment_hits(ax,ay,bx,by,m->x+.5f,m->y+.5f,.23f)) return false;
+  }
   for (int i = 0; i < g->barrel_count; i++) {
     const Barrel *b = &g->barrels[i];
     if (!b->destroyed && segment_hits(ax, ay, bx, by, b->x, b->y, BARREL_RADIUS)) return false;
@@ -397,7 +404,7 @@ static void update_warden(Game *g, float dt) {
     if (w->state_timer <= 0) w->state = WARDEN_HUNT;
     return;
   }
-  w->remaining = maxf(0, w->remaining - dt);
+  w->remaining = g->campaign.finale ? maxf(w->remaining,12) : maxf(0, w->remaining - dt);
   if (w->remaining <= 0) { fade_warden(g); return; }
   if (w->state == WARDEN_STAGGER) {
     if (w->state_timer <= 0) w->state = WARDEN_HUNT;
@@ -406,7 +413,7 @@ static void update_warden(Game *g, float dt) {
   bool safe = horror_in_haven(g, p->x, p->y);
   float dist = hypotf(w->x - p->x, w->y - p->y);
   bool sees = !safe && dist < 9 && game_line_of_sight(g, w->x, w->y, p->x, p->y);
-  bool hears = !safe && h->noise_timer > 0 && hypotf(w->x - h->noise_x, w->y - h->noise_y) < 11;
+  bool hears = !safe && h->noise_timer > 0 && hypotf(w->x - h->noise_x, w->y - h->noise_y) < h->noise_radius;
   if (sees || hears) {
     w->target_x = sees ? p->x : h->noise_x;
     w->target_y = sees ? p->y : h->noise_y;

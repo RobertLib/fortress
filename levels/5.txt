@@ -89,6 +89,8 @@
 @terrain grass 48 30 8 2
 @terrain grass 56 31 4 1
 @terrain stone 47 32 23 5
+@roof 61 4 8 8 2.875 3.875 1 1
+@roof 48 23 8 7 2.125 3.125 1 0
 @prop well 53 16
 @prop cross 66 7
 @prop oak 50 7
@@ -114,8 +116,31 @@
 @prop statue 60 5
 @landmark 57 16 12 THE LAST BELL COURT
 @landmark 65 8 5 BELL WARDENS HOUSE
-@objective Take the final keys through the gate above the throne.
+@objective Release two oath locks, sound the last bell and escape with the keys.
 @destination Beyond the last gate: the bridge and the open road.
+@prop candelabra 59 6
+@prop candelabra 59 9
+@prop statue 67 28
+@prop bench 52 21
+@campaign 1
+@mechanism 52 27 winch 0 2 RELEASE THE GATE WARDENS OATH LOCK|THE FIRST SEAL BREAKS. FIND ITS TWIN IN THE BELL WARDENS HOUSE.
+@mechanism 66 9 winch 1 2 RELEASE THE BELL WARDENS OATH LOCK|BOTH SEALS ARE BROKEN. SOUND THE BELL BESIDE THE ALTAR.
+@mechanism 65 8 oath 3 0 SOUND THE LAST BELL|THE OATH IS BROKEN. ESCAPE THROUGH THE GATE ABOVE THE THRONE.
+@errand 50 25 0 KEEPERS TESTAMENT~Two oath seals remain: one in the southwest lodge, one in the bell wardens house. Break them, then sound the last bell.|Bring the testament from the southwest lodge before you begin the escape.~He swore to protect people, never to imprison them.|I have released the old chapel treasury. Take supplies, release the oath locks and sound the bell. Run to the gate above the throne when the chains answer.
+@erranddoor 5 3
+@relic 3 2 4
+@facade 63 4 0 -1 shutter
+@facade 66 4 0 -1 shutter
+@facade 61 6 -1 0 shutter
+@facade 68 6 1 0 shutter
+@facade 61 9 -1 0 shutter
+@facade 68 9 1 0 shutter
+@facade 50 29 0 1 shutter
+@facade 53 29 0 1 shutter
+@facade 48 25 -1 0 shutter
+@facade 55 25 1 0 shutter
+@facade 48 28 -1 0 shutter
+@facade 55 28 1 0 shutter
 @height 24 0 1 9 1
 @height 3 1 4 2 0.25
 @height 5 3 1 8 0.25

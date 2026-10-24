@@ -52,6 +52,11 @@ static void inventory(void) {
   for (int t = 0; t < ENEMY_TYPE_COUNT; t++)
     for (int p = 1; p < 3; p++)
       CHECK(signature(assets.enemies[t].pose[0]) != signature(assets.enemies[t].pose[p]));
+  for (int t=ENEMY_GUARD;t<=ENEMY_CAPTAIN;t++) for (int view=0;view<VIEW_COUNT;view++) {
+    for (int frame=1;frame<3;frame++)
+      CHECK(signature(assets.enemies[t].view[0][view])!=signature(assets.enemies[t].view[frame][view]));
+    if (view) CHECK(signature(assets.enemies[t].view[0][0])!=signature(assets.enemies[t].view[0][view]));
+  }
   for (int w = 0; w < WEAPON_COUNT; w++)
     for (int p = 1; p < 3; p++)
       CHECK(signature(assets.weapons[w][0]) != signature(assets.weapons[w][p]));
@@ -218,7 +223,7 @@ static void galleries(void) {
     for (int p = 0; p < POSE_COUNT; p++) {
       char label[64];
       snprintf(label, sizeof label, "%s / %02d", names[t], p);
-      tile(sheet, assets.enemies[t].pose[p], p, t, label);
+      tile(sheet,t==ENEMY_KNIGHT?assets.knight_melee.pose[p]:assets.enemies[t].pose[p],p,t,label);
     }
   save_image(sheet, "enemy-poses");
   image_free(sheet);
@@ -298,10 +303,10 @@ static void galleries(void) {
   }
   save_image(sheet, "effects-and-weapons");
   image_free(sheet);
-  sheet = image_new(8 * 128, 12 * 144);
+  sheet = image_new(8 * 128, 16 * 144);
   image_fill(sheet, 0xff0a1118);
   n = 0;
-  for (int t = ENEMY_DOG; t <= ENEMY_SPIDER; t++)
+  for (int t = ENEMY_GUARD; t <= ENEMY_SPIDER; t++) if (t!=ENEMY_BAT)
     for (int v = 0; v < VIEW_COUNT; v++)
       for (int p = 0; p < 3; p++) {
         char label[64];

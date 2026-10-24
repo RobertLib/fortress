@@ -155,7 +155,7 @@ static void test_save_load(void) {
   f.game->player.step_offset = -.08f;
   game_loose_bolt(f.game, 9.5f, 3.5f, 1, 0, SHOT_MISS, NULL, 0);
   // A second missile below the original z=0 floor exercises the new save bounds.
-  f.game->projectiles[f.game->projectile_count++] = (Projectile){2, 2, 1, 0, 0, -1.5f, SHOT_MISS, NULL, 0, -.125f};
+  f.game->projectiles[f.game->projectile_count++] = (Projectile){2, 2, 1, 0, 0, -1.5f, SHOT_MISS, NULL, 0, -.125f, WEAPON_CROSSBOW};
   CHECK(savegame_write(path, f.game, err, sizeof err));
   f.game->player.x = 1.5f;
   CHECK(savegame_load(path, &f.level, 1, &f.game, &f.session, err, sizeof err));

@@ -2,6 +2,7 @@
 // logic, line-of-sight service and the level statistics.
 
 #include "game.h"
+#include "preferences.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -89,6 +90,7 @@ Game *game_create(const Level *level, int level_index, Session *session, const P
   g->level = level;
   g->level_index = level_index;
   g->session = session;
+  campaign_init(g);
   const DifficultySettings *difficulty = game_difficulty_settings(session->difficulty);
 
   Player *p = &g->player;
@@ -119,6 +121,7 @@ Game *game_create(const Level *level, int level_index, Session *session, const P
   for (int i = 0; i < level->enemy_count; i++) {
     Enemy *e = &g->enemies[i];
     enemy_init(e, &level->enemies[i]);
+    e->tactical=level->campaign.enabled;
     e->hp = scale_amount(e->hp, difficulty->enemy_health);
   }
 
@@ -194,9 +197,11 @@ void game_add_score(Game *g, int n) {
   s->score += n;
   while (s->score >= s->next_life) {
     s->next_life += EXTRA_LIFE_EVERY;
-    s->lives++;
-    audio_play(SND_EXTRA_LIFE, 1, 1);
-    game_say(g, "EXTRA LIFE!", 2.2f);
+    if (s->arcade || !g->level->campaign.enabled) {
+      s->lives++;
+      audio_play(SND_EXTRA_LIFE, 1, 1);
+      game_say(g, "EXTRA LIFE!", 2.2f);
+    }
   }
 }
 
@@ -212,6 +217,7 @@ char game_cell(const Game *g, int x, int y) {
   if (x < 0 || y < 0 || x >= lv->w || y >= lv->h) return '1';
   int cell = y * lv->w + x;
   char kind = lv->grid[cell];
+  if (level_is_water(kind) && campaign_drained(g,x,y)) return '.';
   return kind == '8' && !g->wall_health[cell] ? '.' : kind;
 }
 
@@ -285,6 +291,11 @@ bool game_is_blocked(const Game *g, float x, float y, float r, const Enemy *self
     if (!d->radius) continue;
     if ((d->x - x) * (d->x - x) + (d->y - y) * (d->y - y) < (r + d->radius) * (r + d->radius)) return true;
   }
+  for (int i=0;i<lv->campaign.count;i++) {
+    const Mechanism *m=&lv->campaign.stations[i];
+    if (m->kind==MECHANISM_SEAL) continue;
+    if (sq(m->x+.5f-x)+sq(m->y+.5f-y)<sq(r+.23f)) return true;
+  }
   // Rats scurry underfoot: they slip between everybody's legs and nobody
   // trips over them — only another rat jostles a rat. Whatever is up in
   // the air (a swarm, a spider on its thread) is out of everybody's way.
@@ -348,6 +359,10 @@ bool game_line_of_sight(const Game *g, float x0, float y0, float x1, float y1) {
 
 void game_open_door(Game *g, Door *door, bool by_player) {
   if (door->kind == 'Z') return; // secret walls only answer to their lever
+  if (campaign_door_braced(g,(int)(door-g->doors))) {
+    if (by_player) game_say(g,"THE DOOR IS BRACED - WAIT FOR IT TO GIVE WAY",2);
+    return;
+  }
   if (door->state == DOOR_CLOSED || door->state == DOOR_CLOSING) {
     door->state = DOOR_OPENING;
     Listener l = game_listener(g);
@@ -483,6 +498,7 @@ static void pull_lever(Game *g, int x, int y) {
 
 static void use_action(Game *g) {
   if (horror_use_note(g)) return;
+  if (campaign_use(g)) return;
   const Player *p = &g->player;
   static const float reach[3] = {0.6f, 1.1f, 1.6f};
   for (int i = 0; i < 3; i++) {
@@ -498,6 +514,7 @@ static void use_action(Game *g) {
     }
     if (cell == 'X') {
       if (p->keys >= 3) {
+        if (!campaign_gate_ready(g)) return;
         g->completed = true;
         audio_play(SND_LEVEL_DONE, 1, 1);
       } else {
@@ -546,7 +563,7 @@ static void update_player(Game *g, float dt, Input *in) {
   if (in->turn_right && !in->strafe_mod) rotate_player(p, rot_speed);
   if (in->analog_turn) rotate_player(p, clampf(in->analog_turn, -1, 1) * rot_speed);
   if (in->mouse_dx) {
-    rotate_player(p, in->mouse_dx * 0.0026f);
+    rotate_player(p, in->mouse_dx * 0.0026f * preferences_get()->sensitivity/100.0f);
     in->mouse_dx = 0;
   }
 
@@ -609,8 +626,16 @@ static void update_player(Game *g, float dt, Input *in) {
       audio_play(SND_SPLASH, .4f, 1 + .08f * sinf(p->bob_phase));
     if (hypotf(p->x - start_x, p->y - start_y) > .001f &&
         floorf(before / (float)M_PI) != floorf(p->bob_phase / (float)M_PI)) {
-      if (!wet) audio_play(SND_STEP, in->run ? .65f : .3f, 1);
-      if (in->run || wet) horror_noise(g, p->x, p->y, .7f);
+      if (!wet) {
+        GroundKind ground=world_ground(g->level,(int)p->x,(int)p->y);
+        SoundId step=ground==GROUND_GRASS || ground==GROUND_LEAVES || ground==GROUND_EARTH?SND_STEP_LEAVES:
+          !world_outside(g->level,(int)p->x,(int)p->y) && g->level->surface_theme==SURFACE_BARRACKS?SND_STEP_WOOD:SND_STEP;
+        audio_play(step,in->run?.65f:.3f,1);
+      }
+      if (in->run || wet) {
+        horror_noise(g,p->x,p->y,.7f);
+        if (campaign_has_relic(g,RELIC_QUIET)) { g->horror.noise_timer=.32f; g->horror.noise_radius=4.5f; }
+      }
     }
     p->bob_amount = minf(1, p->bob_amount + dt * 6);
   } else {
@@ -760,8 +785,12 @@ void game_hit_barrel(Game *g, int index) {
 static void update_weapon(Game *g, float dt, const Input *in) {
   Player *p = &g->player;
   g->fire_timer = maxf(0, g->fire_timer - dt);
+  float old_weapon_timer=g->weapon_anim_timer;
   g->weapon_anim_timer = maxf(0, g->weapon_anim_timer - dt);
-  p->weapon_frame = g->weapon_anim_timer > 0 ? (g->weapon_anim_timer > 0.08f ? 1 : 2) : 0;
+  if (g->level->campaign.enabled && old_weapon_timer>.22f && g->weapon_anim_timer<=.22f && p->weapon!=WEAPON_DAGGER)
+    audio_play(SND_RELOAD,.5f,p->weapon==WEAPON_ARBALEST?1.2f:1);
+  float weapon_duration=g->level->campaign.enabled?.42f:.16f;
+  p->weapon_frame = g->weapon_anim_timer > 0 ? (g->weapon_anim_timer > weapon_duration*.65f ? 1 : 2) : 0;
 
   const WeaponSpec *spec = &WEAPONS[p->weapon];
   bool want_fire = g->burst_remaining > 0 || (in->fire && !g->fire_held);
@@ -779,13 +808,13 @@ static void update_weapon(Game *g, float dt, const Input *in) {
   // A trigger press commits the whole burst, even after the trigger is released.
   if (!g->burst_remaining) g->burst_remaining = spec->burst_size;
   g->burst_remaining--;
-  g->weapon_anim_timer = 0.16f;
+  g->weapon_anim_timer = weapon_duration;
   if (spec->uses_ammo) p->ammo--;
   if (spec->uses_ammo && p->ammo == 0) g->burst_remaining = 0;
   g->fire_timer = g->burst_remaining > 0 ? spec->burst_interval : spec->rate;
   audio_play(spec->sound, 0.9f, 1);
   if (spec->uses_ammo) horror_noise(g, p->x, p->y, 1.5f);
-  alert_nearby(g, p->x, p->y, 9);
+  if (!g->level->campaign.enabled || spec->uses_ammo) alert_nearby(g, p->x, p->y, 9);
 
   // hitscan: nearest live enemy or barrel close enough to the view axis
   Enemy *best = NULL;
@@ -800,7 +829,7 @@ static void update_weapon(Game *g, float dt, const Input *in) {
     float forward = dx * p->dir_x + dy * p->dir_y;
     if (forward <= 0) continue;
     float side = fabsf(dx * -p->dir_y + dy * p->dir_x);
-    if (side > e->radius + dist * 0.06f) continue;
+    if (side > e->radius + dist * (campaign_has_relic(g,RELIC_STEADY)?.075f:.06f)) continue;
     if (!game_line_of_sight(g, p->x, p->y, e->x, e->y)) continue;
     best = e;
     best_dist = dist;
@@ -824,13 +853,17 @@ static void update_weapon(Game *g, float dt, const Input *in) {
   if (best) {
     float falloff = best_dist < 4 ? 1 : best_dist < 10 ? 0.75f : 0.55f;
     double roll = spec->dmg_lo + frand() * (spec->dmg_hi - spec->dmg_lo);
+    if (g->level->campaign.enabled) {
+      roll=p->weapon==WEAPON_CROSSBOW?18:p->weapon==WEAPON_ARBALEST?12:14;
+      falloff=best_dist<8?1:best_dist<16?.85f:.7f;
+    }
     dmg = (int)round_half_up(roll * falloff);
   }
   // the dagger strikes home at once; a crossbow looses a bolt that carries
   // the hit to its mark, or flies on along the view into the wall
   if (p->weapon == WEAPON_DAGGER) {
     if (at_warden) horror_hit_warden(g, WARDEN_DAGGER_STAGGER);
-    else if (best) enemy_hit(best, g, dmg);
+    else if (best) enemy_hit_player(best, g, dmg,WEAPON_DAGGER);
     else if (barrel < 0) {
       int x, y;
       if (weapon_wall(g, p->x, p->y, p->dir_x, p->dir_y, spec->range, &x, &y) <= spec->range)
@@ -879,6 +912,7 @@ void game_poison_player(Game *g, int amount) {
   Player *p = &g->player;
   if (g->player_dead || g->completed || amount <= 0) return;
   amount = scale_amount(amount, game_difficulty_settings(g->session->difficulty)->incoming_damage);
+  if (campaign_has_relic(g,RELIC_WARD)) amount=maxi(1,amount/2);
   if (p->venom <= 0) p->venom_timer = VENOM_TICK;
   p->venom = mini(VENOM_MAX, p->venom + amount);
 }
@@ -940,7 +974,7 @@ static void update_traps(Game *g, float dt) {
         if (g->projectile_count < MAX_PROJECTILES)
           g->projectiles[g->projectile_count++] =
               (Projectile){s->origin_x, s->origin_y, s->dir_x, s->dir_y, 0,
-                           level_floor_at(g->level, s->x, s->y) + SHOT_Z, SHOT_TRAP, NULL, 0, 0};
+                           level_floor_at(g->level, s->x, s->y) + SHOT_Z, SHOT_TRAP, NULL, 0, 0,WEAPON_CROSSBOW};
         audio_play_at(SND_ENEMY_SHOT, s->origin_x, s->origin_y, &l, 0.9f, 1.25f);
         t->timer = 0.16f;
         if (--t->shots <= 0) {
@@ -963,15 +997,16 @@ static void land_bolt(Game *g, const Projectile *a) {
   if (a->kind == SHOT_AT_PLAYER)
     game_hurt_player(g, a->dmg);
   else if (a->kind == SHOT_AT_ENEMY)
-    enemy_hit(a->target, g, a->dmg);
+    enemy_hit_from(a->target,g,a->dmg,a->weapon,a->target->x-a->dir_x,a->target->y-a->dir_y);
   else if (a->kind == SHOT_AT_WARDEN)
-    horror_hit_warden(g, WARDEN_STAGGER_TIME);
+    horror_hit_warden(g, WARDEN_STAGGER_TIME+(campaign_has_relic(g,RELIC_VIGIL)?.9f:0));
 }
 
 void game_loose_bolt(Game *g, float x, float y, float aim_x, float aim_y, ShotKind kind, Enemy *target, int dmg) {
   float len = hypotf(aim_x, aim_y);
   if (len == 0) len = 1;
-  Projectile a = {x, y, aim_x / len, aim_y / len, 0, level_floor(g->level, x, y) + SHOT_Z, kind, target, dmg, 0};
+  Projectile a = {x, y, aim_x / len, aim_y / len, 0, level_floor(g->level, x, y) + SHOT_Z, kind, target, dmg, 0,
+                  kind==SHOT_AT_ENEMY?g->player.weapon:WEAPON_CROSSBOW};
   if (g->projectile_count < MAX_PROJECTILES)
     g->projectiles[g->projectile_count++] = a;
   else if (kind == SHOT_MISS) {
@@ -1008,7 +1043,7 @@ static void update_projectiles(Game *g, float dt) {
   int kept = 0;
   for (int i = 0; i < g->projectile_count; i++) {
     Projectile *a = &g->projectiles[i];
-    float travel = (a->kind == SHOT_TRAP ? TRAP_ARROW_SPEED : BOLT_SPEED) * dt;
+    float travel = (a->kind == SHOT_TRAP ? TRAP_ARROW_SPEED : a->kind==SHOT_HOSTILE?11:BOLT_SPEED) * dt;
     int steps = maxi(1, (int)ceilf(travel / 0.05f)); // substeps so fast arrows can't skip a target
     float step = travel / steps;
     bool dead = false;
@@ -1020,7 +1055,7 @@ static void update_projectiles(Game *g, float dt) {
         dead = true;
         break;
       }
-      if (a->kind == SHOT_MISS || a->kind == SHOT_TRAP) a->z += a->slope * step;
+      if (a->kind == SHOT_MISS || a->kind == SHOT_TRAP || a->kind==SHOT_HOSTILE) a->z += a->slope * step;
       a->x += a->dir_x * step;
       a->y += a->dir_y * step;
       a->dist += step;
@@ -1050,22 +1085,23 @@ static void update_projectiles(Game *g, float dt) {
         }
       }
       if (dead) break;
-      if (a->kind != SHOT_TRAP) {
+      if (a->kind != SHOT_TRAP && a->kind!=SHOT_HOSTILE) {
         if (a->dist > BOLT_RANGE) dead = true;
         continue; // bolts strike nothing but their mark
       }
       if (!g->player_dead && fabsf(a->z - level_floor(g->level, p->x, p->y) - SHOT_Z) < .35f &&
           hypotf(p->x - a->x, p->y - a->y) < p->radius + 0.12f) {
-        game_hurt_player(g, 10 + (int)floorf(frand() * 9));
+        game_hurt_player(g,a->kind==SHOT_HOSTILE?a->dmg:10+(int)floorf(frand()*9));
         dead = true;
         break;
       }
       for (int k = 0; k < g->enemy_count; k++) {
         Enemy *e = &g->enemies[k];
+        if (a->kind==SHOT_HOSTILE && e==a->target) continue;
         if (enemy_dead(e)) continue;
         if (fabsf(a->z - level_floor(g->level, e->x, e->y) - (e->flying ? e->fly_height : SHOT_Z)) < .35f &&
             hypotf(e->x - a->x, e->y - a->y) < e->radius + 0.05f) {
-          enemy_hit(e, g, 14 + (int)floorf(frand() * 10));
+          enemy_hit(e,g,a->kind==SHOT_HOSTILE?a->dmg:14+(int)floorf(frand()*10));
           dead = true;
           break;
         }
@@ -1085,10 +1121,12 @@ static bool apply_pickup(Game *g, const Item *it) {
   switch (it->kind) {
   case ITEM_KEY:
     p->keys++;
+    if (g->level->campaign.enabled) g->campaign.checkpoint_requested=true;
     game_add_score(g, 200);
     audio_play(SND_PICKUP_KEY, 1, 1);
     if (p->keys >= 3) {
-      game_say(g, "ALL 3 KEYS FOUND — THE GATE IS OPEN!", 3);
+      game_say(g,g->level->campaign.enabled && g->campaign.done!=(uint32_t)((1<<g->level->campaign.count)-1)?
+        "ALL 3 KEYS FOUND - COMPLETE THE CHAPTER OBJECTIVE":"ALL 3 KEYS FOUND - REACH THE GATE!",3);
       audio_play(SND_EXIT_OPEN, 1, 1);
     } else {
       char msg[32];
@@ -1098,7 +1136,7 @@ static bool apply_pickup(Game *g, const Item *it) {
     return true;
   case ITEM_POTION:
     if (p->health >= 100) return false;
-    p->health = mini(100, p->health + 25);
+    p->health = mini(100, p->health + (campaign_has_relic(g,RELIC_MERCY)?35:25));
     p->venom = 0;
     audio_play(SND_PICKUP_HEALTH, 1, 1);
     return true;
@@ -1160,6 +1198,8 @@ static void decay_fx(Game *g, float dt) {
   g->portal_flash = maxf(0, g->portal_flash - dt * 1.8f);
   g->venom_flash = maxf(0, g->venom_flash - dt * 1.4f);
   g->message_timer = maxf(0, g->message_timer - dt);
+  g->hit_confirm=maxf(0,g->hit_confirm-dt);
+  g->impact_timer=maxf(0,g->impact_timer-dt);
 }
 
 static void mark_visited(Game *g) {
@@ -1197,6 +1237,7 @@ static void update_water_audio(Game *g, float dt) {
 }
 
 void game_update(Game *g, float dt, Input *input) {
+  if (g->campaign.journal) return;
   if (g->horror.reading >= 0 && !g->player_dead && !g->completed) {
     if (input->use) { input->use = false; g->horror.reading = -1; }
     return; // Reading pauses the world, including venom and the pursuer.
@@ -1222,6 +1263,7 @@ void game_update(Game *g, float dt, Input *input) {
   update_traps(g, dt);
   for (int i = 0; i < g->enemy_count; i++) enemy_update(&g->enemies[i], g, dt);
   update_projectiles(g, dt);
+  campaign_update(g,dt);
   horror_update(g, dt);
   mark_visited(g);
   decay_fx(g, dt);

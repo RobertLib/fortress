@@ -13,6 +13,7 @@ GroundKind world_ground(const Level *lv, int x, int y) {
   return lv->world.cells && inside(lv, x, y) ? lv->world.cells[y * lv->w + x].ground : GROUND_STONE;
 }
 bool world_reserved(const Level *lv, int x, int y) {
+  if (campaign_reserved(lv,x,y)) return true;
   if (world_outside(lv, x, y)) return true;
   if (lv->world.cells && inside(lv,x,y) && lv->world.cells[y*lv->w+x].authored) return true;
   for (int i = 0; i < lv->world.prop_count; i++)
@@ -78,9 +79,9 @@ bool world_configure(Level *lv, const char *text, char *err, size_t size) {
     const char *end = strchr(p, '\n');
     size_t n = end ? (size_t)(end - p) : strlen(p);
     // Only own these directives. Legacy and horror parsers own their limits.
-    const char *names[] = {"@outside", "@terrain", "@prop", "@monk", "@landmark", "@objective", "@destination"};
+    const char *names[] = {"@outside", "@terrain", "@prop", "@monk", "@landmark", "@objective", "@destination", "@roof", "@facade"};
     int directive = -1;
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 9; i++) {
       size_t len = strlen(names[i]);
       if (n >= len && !strncmp(p, names[i], len) && (n == len || isspace((unsigned char)p[len]))) directive = i;
     }
@@ -151,6 +152,24 @@ bool world_configure(Level *lv, const char *text, char *err, size_t size) {
             !dry(lv, l->x, l->y) || !isfinite(l->radius) || l->radius < 1 || l->radius > 32 ||
             !printable(value + used, sizeof l->name)) goto bad;
         snprintf(l->name, sizeof l->name, "%s", value + used);
+      } else if (directive==8) {
+        if (w->facade_count==WORLD_FACADES) goto bad;
+        WorldFacade *f=&w->facades[w->facade_count++]; char kind[20];
+        if (sscanf(value,"%d %d %d %d %19s %c",&f->x,&f->y,&f->dx,&f->dy,kind,&extra)!=5 ||
+            !inside(lv,f->x,f->y) || abs(f->dx)+abs(f->dy)!=1 ||
+            !dry(lv,f->x+f->dx,f->y+f->dy) || !strchr("123456",lv->grid[f->y*lv->w+f->x])) goto bad;
+        if (!strcmp(kind,"glass")) f->kind=HANG_GLASS_WINDOW;
+        else if (!strcmp(kind,"shutter")) f->kind=HANG_SHUTTER_WINDOW;
+        else if (!strcmp(kind,"crest")) f->kind=HANG_SHIELD;
+        else goto bad;
+      } else if (directive==7) {
+        if (w->roof_count==WORLD_ROOFS) goto bad;
+        WorldRoof *roof=&w->roofs[w->roof_count++];
+        if (sscanf(value,"%d %d %d %d %f %f %d %d %c",&roof->x,&roof->y,&roof->w,&roof->h,
+            &roof->eave,&roof->ridge,&roof->axis,&roof->slate,&extra)!=8 ||
+            !inside(lv,roof->x,roof->y) || roof->w<3 || roof->h<3 || roof->w>lv->w-roof->x || roof->h>lv->h-roof->y ||
+            !isfinite(roof->eave) || !isfinite(roof->ridge) || roof->eave<.5f || roof->ridge<=roof->eave || roof->ridge>5 ||
+            roof->axis<0 || roof->axis>1 || roof->slate<0 || roof->slate>1) goto bad;
       } else {
         char *dest = directive == 5 ? w->objective : w->destination;
         size_t capacity = directive == 5 ? sizeof w->objective : sizeof w->destination;

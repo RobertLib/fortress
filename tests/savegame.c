@@ -64,6 +64,7 @@ static void test_full_snapshot(void) {
   session.total_secrets_found = 1;
   session.max_secrets = 2;
   session.total_time = 123.5f;
+  session.run_id=90210;
   game->player.x = 2.25f;
   game->player.health = 61;
   game->player.ammo = 37;
@@ -109,7 +110,7 @@ static void test_full_snapshot(void) {
   game_say(game, "SNAPSHOT", 2);
   game_loose_bolt(game, 4, 3.5f, -1, 0, SHOT_AT_ENEMY, &game->enemies[1], 11);
   game_loose_bolt(game, 4, 3.5f, -1, 0, SHOT_AT_PLAYER, NULL, 8);
-  game->projectiles[game->projectile_count++] = (Projectile){5, 6.5f, 1, 0, 1, 0.44f, SHOT_TRAP, NULL, 0, 0};
+  game->projectiles[game->projectile_count++] = (Projectile){5, 6.5f, 1, 0, 1, 0.44f, SHOT_TRAP, NULL, 0, 0, WEAPON_CROSSBOW};
   Session expected_session = session;
   uint64_t rng = random_state();
   save();
@@ -170,6 +171,14 @@ static void rehash(uint8_t *data, size_t size) {
   for (int i = 0; i < 4; i++) data[size - 4 + i] = (uint8_t)(hash >> (8 * i));
 }
 
+static void test_legacy_campaign_save(void) {
+  fresh_game(0,DIFFICULTY_NORMAL); session.run_id=415; session.relics=5; session.arcade=true;
+  game->horror.noise_radius=4.5f; save();
+  size_t size; uint8_t *data=SDL_LoadFile(SLOT,&size); CHECK(data && size>8 && data[8]==8);
+  data[8]=7; size-=4; rehash(data,size); write_file(SLOT,data,size); SDL_free(data);
+  SaveInfo info; CHECK(savegame_inspect(SLOT,levels,2,&info) && info.run_id==0);
+  load(); CHECK(session.run_id==0 && session.relics==5 && session.arcade && game->horror.noise_radius==4.5f);
+}
 static void test_legacy_repeater_save(void) {
   fresh_game(0, DIFFICULTY_NORMAL);
   game->player.weapon = WEAPON_ARBALEST;
@@ -178,10 +187,10 @@ static void test_legacy_repeater_save(void) {
   save();
   size_t size;
   uint8_t *data = SDL_LoadFile(SLOT, &size);
-  CHECK(data && size > 8 && data[8] == 6);
+  CHECK(data && size > 8 && data[8] == 8);
   // Version 5 ends before the new pending-burst count.
   data[8] = 5;
-  size -= 4;
+  size -= 4 + 112 + game->enemy_count*12 + game->projectile_count*4;
   rehash(data, size);
   write_file(SLOT, data, size);
   SDL_free(data);
@@ -280,6 +289,7 @@ int main(void) {
   random_seed(12345);
   for (int i = 0; i < 2; i++) CHECK(level_parse(&levels[i], ARENA, err, sizeof err));
   test_full_snapshot();
+  test_legacy_campaign_save();
   test_legacy_repeater_save();
   test_bad_files_and_failed_save();
   game_destroy(game);

@@ -516,6 +516,9 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   if (!world_configure(lv, text, err, err_size)) {
     free(plates); free(secrets); level_free(lv); return false;
   }
+  if (!campaign_configure(lv, text, err, err_size)) {
+    free(plates); free(secrets); level_free(lv); return false;
+  }
   if (lv->world.cells) lv->has_ceilings = true;
 
   // Every war hound is leashed to the nearest man-at-arms within earshot
@@ -1163,6 +1166,15 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   for (int i = 0; i < lv->world.prop_count; i++) {
     WorldProp *p = &lv->world.props[i];
     add_deco(lv, p->x + .5, p->y + .5, world_prop_radius(p->kind), 0, p->kind);
+  }
+  if (lv->world.facade_count) {
+    Hanging *expanded=realloc(lv->hangings,(size_t)(lv->hanging_count+lv->world.facade_count)*sizeof *expanded);
+    if (!expanded) { snprintf(err,err_size,"Not enough memory for facades"); level_free(lv); return false; }
+    lv->hangings=expanded;
+    for (int i=0;i<lv->world.facade_count;i++) {
+      const WorldFacade *f=&lv->world.facades[i];
+      lv->hangings[lv->hanging_count++]=(Hanging){f->x,f->y,f->dx,f->dy,f->kind,0};
+    }
   }
   // hearths feed the wall/floor light model exactly like torches do
   lv->fire_lights = malloc(sizeof(Torch) * (fireplaces + 1));

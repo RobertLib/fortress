@@ -8,7 +8,7 @@
 
 // Explicit little-endian fields: no struct padding, native enums or pointers
 // reach disk. Bump the version when the schema or gameplay interpretation changes.
-#define SAVE_VERSION 6
+#define SAVE_VERSION 8
 #define SAVE_LIMIT (16 * 1024 * 1024)
 #define TIME_LIMIT 100000000.0f
 static const char MAGIC[8] = {'F', 'R', 'T', 'S', 'A', 'V', 'E', '\0'};
@@ -175,8 +175,24 @@ static uint32_t level_signature(const Level *lv) {
       const WorldProp *p = &lv->world.props[i];
       u32(c, p->x); u32(c, p->y); u32(c, p->kind);
     }
+    if (lv->world.roof_count) {
+      u32(c,0x524f4f46u); u32(c,lv->world.roof_count);
+      for (int i=0;i<lv->world.roof_count;i++) {
+        const WorldRoof *r=&lv->world.roofs[i];
+        u32(c,r->x); u32(c,r->y); u32(c,r->w); u32(c,r->h); u32(c,r->axis); u32(c,r->slate);
+        real(c,r->eave,0,5); real(c,r->ridge,0,5);
+      }
+    }
+    if (lv->world.facade_count) {
+      u32(c,0x46414345u); u32(c,lv->world.facade_count);
+      for (int i=0;i<lv->world.facade_count;i++) {
+        const WorldFacade *f=&lv->world.facades[i];
+        u32(c,f->x); u32(c,f->y); u32(c,(uint32_t)f->dx); u32(c,(uint32_t)f->dy); u32(c,f->kind);
+      }
+    }
   }
   const HorrorLayout *h = &lv->horror;
+  if (lv->campaign.enabled) { u32(c,0x43414d50u); u32(c,lv->campaign.signature); }
   if (h->chapter) {
     u32(c, h->chapter);
     u32(c, h->scene_count);
@@ -268,13 +284,13 @@ static void transfer_game(Codec *c, Game *g) {
     F(a->x, -1, lv->w + 1); F(a->y, -1, lv->h + 1);
     F(a->dir_x, -1.01f, 1.01f); F(a->dir_y, -1.01f, 1.01f);
     F(a->dist, 0, 32); F(a->z, c->version >= 4 ? -LEVEL_MAX_HEIGHT : 0, c->version >= 4 ? LEVEL_MAX_HEIGHT + 1 : 1);
-    I(a->kind, SHOT_TRAP, c->version >= 5 ? SHOT_AT_WARDEN : SHOT_AT_ENEMY);
+    I(a->kind, SHOT_TRAP, c->version>=7?SHOT_HOSTILE:c->version >= 5 ? SHOT_AT_WARDEN : SHOT_AT_ENEMY);
     int target = -1;
     if (!c->reading && a->target) {
       for (int j = 0; j < g->enemy_count; j++) if (a->target == &g->enemies[j]) target = j;
     }
     I(target, -1, g->enemy_count - 1);
-    if (a->kind == SHOT_AT_ENEMY && target < 0) c->ok = false;
+    if ((a->kind == SHOT_AT_ENEMY || a->kind==SHOT_HOSTILE) && target < 0) c->ok = false;
     if (c->reading) a->target = target >= 0 ? &g->enemies[target] : NULL;
     I(a->dmg, 0, INT_MAX);
     if (c->version >= 4) F(a->slope, -1024, 1024);
@@ -306,7 +322,7 @@ static void transfer_game(Codec *c, Game *g) {
     if (h->scenes_changed & ~h->scenes_fired) c->ok = false;
     I(h->notes_read, 0, (1 << lv->horror.note_count) - 1);
     for (int i = 0; i < lv->horror.scene_count; i++) F(h->scene_timer[i], 0, 3.2f);
-    I(h->keys_seen, 0, mini(3, p->keys)); I(h->pending_hunts, 0, h->keys_seen);
+    I(h->keys_seen, 0, mini(3, p->keys)); I(h->pending_hunts, 0, c->version>=7 && lv->campaign.enabled?8:h->keys_seen);
     I(h->ambient_cycle, 0, INT_MAX - 1); I(h->reading, -1, lv->horror.note_count - 1);
     for (int i = 0; i < 3; i++) { F(h->key_x[i], 0, lv->w); F(h->key_y[i], 0, lv->h); }
     for (int i = 0; i < 3; i++) I(h->opened_door[i], -1, g->door_count - 1);
@@ -324,6 +340,32 @@ static void transfer_game(Codec *c, Game *g) {
     I(g->burst_remaining, 0, 2);
     if (g->burst_remaining && (p->weapon != WEAPON_ARBALEST || p->ammo <= 0)) c->ok = false;
   }
+  if (c->version>=7) {
+    I(g->session->relics,0,(1<<CAMPAIGN_RELICS)-1); B(g->session->arcade);
+    CampaignState *s=&g->campaign;
+    I(s->done,0,(1<<lv->campaign.count)-1);
+    I(s->relics_taken,0,(1<<lv->campaign.relic_count)-1);
+    I(s->lessons,0,31); I(s->active,-1,lv->campaign.count-1); F(s->work,0,12);
+    B(s->errand_found); B(s->errand_done); B(s->finale);
+    I(s->decoys,0,5); I(s->braces,0,3);
+    for (int i=0;i<CAMPAIGN_BRACES;i++) {
+      I(s->brace[i].door,-1,g->door_count-1); F(s->brace[i].remaining,0,10);
+      if (s->brace[i].remaining>0 && (s->brace[i].door<0 || g->doors[s->brace[i].door].kind!='D')) c->ok=false;
+    }
+    F(s->decoy_x,0,lv->w); F(s->decoy_y,0,lv->h); F(s->decoy_timer,0,7); T(s->decoy_pulse);
+    T(s->lesson_timer); F(s->objective_flash,0,4);
+    if (s->errand_done && !s->errand_found) c->ok=false;
+    if (s->active>=0 && ((s->done&(1u<<s->active)) || s->work>lv->campaign.stations[s->active].duration)) c->ok=false;
+    for (int i=0;i<lv->campaign.count;i++) if ((s->done&(1u<<i)) &&
+        (s->done&lv->campaign.stations[i].requires)!=(uint32_t)lv->campaign.stations[i].requires) c->ok=false;
+    if (s->finale && (!lv->campaign.enabled || s->done!=(uint32_t)((1<<lv->campaign.count)-1))) c->ok=false;
+    for (int i=0;i<g->enemy_count;i++) {
+      F(g->enemies[i].tactic_timer,0,9); F(g->enemies[i].shield_pressure,0,10); B(g->enemies[i].charge_hit);
+    }
+    for (int i=0;i<g->projectile_count;i++) I(g->projectiles[i].weapon,0,WEAPON_COUNT-1);
+    F(g->horror.noise_radius,0,11);
+  }
+  if (c->version>=8) I(g->session->run_id,0,INT_MAX);
 }
 
 bool savegame_write(const char *path, Game *g, char *err, size_t err_size) {
@@ -362,6 +404,32 @@ bool savegame_write(const char *path, Game *g, char *err, size_t err_size) {
   free(temporary);
   free(c->data);
   return ok || fail(err, err_size, "COULD NOT WRITE SAVED GAME");
+}
+
+bool savegame_inspect(const char *path,const Level *levels,int count,SaveInfo *info) {
+  if (!path || !levels || count<=0 || !info) return false;
+  SDL_IOStream *file=SDL_IOFromFile(path,"rb");
+  if (!file) return false;
+  Sint64 length=SDL_GetIOSize(file);
+  if (length<120 || length>SAVE_LIMIT) { SDL_CloseIO(file); return false; }
+  size_t size=(size_t)length; uint8_t *data=malloc(size);
+  bool read=data && SDL_ReadIO(file,data,size)==size;
+  if (!SDL_CloseIO(file)) read=false;
+  if (!read) { free(data); return false; }
+  Codec c={.data=data,.size=size,.reading=true,.ok=true};
+  char magic[8]; bytes(&c,magic,8); c.version=u32(&c,0);
+  int index=integer(&c,0,0,count-1); uint32_t signature=u32(&c,0);
+  u32(&c,0); u32(&c,0);
+  Session session={0}; transfer_session(&c,&session);
+  for (int i=0;i<6;i++) real(&c,0,-10000,10000);
+  int health=integer(&c,0,1,100),ammo=integer(&c,0,0,99);
+  int run_id=0;
+  if (c.version>=8) { c.pos=size-8; run_id=integer(&c,0,0,INT_MAX); }
+  c.pos=size-4; uint32_t hash=u32(&c,0);
+  bool ok=c.ok && !memcmp(magic,MAGIC,8) && c.version>=1 && c.version<=SAVE_VERSION &&
+    hash==checksum(data,size-4) && signature==level_signature(&levels[index]);
+  if (ok) *info=(SaveInfo){index,health,ammo,session.difficulty,run_id};
+  free(data); return ok;
 }
 
 bool savegame_load(const char *path, const Level *levels, int level_count,

@@ -16,6 +16,8 @@ All square atlas cells are 256 × 256. Sprite atlases contain real alpha.
 | `title.bmp` | 640 × 400 | Fortress title and menu painting |
 | `limestone.bmp` | 256 × 256 | Seamless masonry base |
 | `guard.bmp`, `knight.bmp`, `captain.bmp` | 3 × 4 each | Stand, two strides, aim, fire, pain, three death stages, two melee stages, spare idle |
+| `guard-walk.bmp`, `knight-walk.bmp`, `captain-walk.bmp` | 3 × 4 each | Stand and two strides in front, rear, left and right rows |
+| `knight-melee.bmp` | 3 × 4 | Sword/shield knight: same combat pose order; replaces crossbow poses on campaign maps |
 | `animals.bmp` | 4 × 4 | Original hound, rat and spider directions; four bat flight frames in the last row |
 | `hound_walk.bmp`, `rat_walk.bmp`, `spider_walk.bmp` | 3 × 4 each | Three locomotion poses in front, back, left and right rows |
 | `combat.bmp` | 4 × 4 | Hound, rat, spider and bats in recoil, falling and dead rows; original equipment row. Rat and equipment are superseded by the dedicated sheets below |
@@ -23,6 +25,7 @@ All square atlas cells are 256 × 256. Sprite atlases contain real alpha.
 | `equipment.bmp` | 4 × 1 | Crossbow, repeating crossbow, dagger and bolt; HUD icons, pickup and projectile source |
 | `props.bmp` | 4 × 4 | Table, chair, wardrobe, chest; armor, statue, urn, fountain; candelabra, chains, barrel, powder barrel; charred debris, shield, sword, fireplace |
 | `outdoors.bmp` | 2 × 4 | Oak, fir; well, headstone; stone cross, bench; altar, living monk |
+| `gate-winch.bmp`, `drain-valve.bmp`, `chapel-bell.bmp` | 1 × 1 each | Interactable chapter mechanisms |
 | `items.bmp` | 4 × 2 | Key, potion, bread, quiver; treasure, note, candles, pressure plate |
 | `horror.bmp` | 3 × 2 | Jailer idle, two strides, attack, prisoner, shadow |
 | `fixtures.bmp` | 3 × 2 | Nobleman, noblewoman, bishop; torch, pendulum axe, parchment |
@@ -32,6 +35,15 @@ All square atlas cells are 256 × 256. Sprite atlases contain real alpha.
 | `story.bmp` | 2 × 3, cells 640 × 360 | Betrayal, broken chains, stolen crossbow, final gate, escape, freedom |
 
 ## Preparation
+
+The seven production-upgrade PNG sources are in [source/](source/).
+Their exact built-in `image_gen` prompts are retained in
+[production-prompts.md](production-prompts.md) (three mechanisms),
+[production-character-prompts.json](production-character-prompts.json)
+(three directional soldier sheets) and
+[production-knight-prompt.md](production-knight-prompt.md) (sword/shield combat).
+Arched glass windows and shutters are deterministic material details assembled
+from the existing painted stone and timber; they require no additional atlas.
 
 Normal builds use the committed BMPs. To reproduce all runtime atlases from
 the retained PNGs, run:

@@ -107,7 +107,7 @@ static void test_projectile_and_blast_damage(void) {
 
     g->player.health = 100;
     g->projectiles[g->projectile_count++] =
-        (Projectile){1.8f, 1.5f, -1, 0, 0, 0.44f, SHOT_TRAP, NULL, 0, 0};
+        (Projectile){1.8f, 1.5f, -1, 0, 0, 0.44f, SHOT_TRAP, NULL, 0, 0, WEAPON_CROSSBOW};
     random_seed(12345); // first roll produces a base trap hit of 15
     tick(g, 1);
     CHECK(g->projectile_count == 0 && g->player.health == 100 - trap_damage[d]);

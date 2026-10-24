@@ -249,6 +249,36 @@ static Image *load_atlas(const char *name, int cols, int rows) {
   }
   return im;
 }
+static Image *facade_window(const Image *stone,const Image *wood,bool shutter) {
+  Image *im=image_new(TEX,TEX);
+  for (int y=0;y<TEX;y++) for (int x=0;x<TEX;x++) {
+    float u=(x+.5f)*64/TEX,v=(y+.5f)*64/TEX,dx=fabsf(u-32);
+    float top=shutter?8:5+18*powf(dx/20,1.6f);
+    if (dx>20 || v<top || v>60) continue;
+    bool inside=dx<14 && v>(shutter?13:10+20*powf(dx/14,1.5f)) && v<55;
+    uint32_t source=(shutter?wood:stone)->px[y*TEX+x];
+    float grain=((source>>16)&255)/128.0f;
+    float red=105*grain,green=108*grain,blue=105*grain;
+    if (shutter) { red=73*grain; green=51*grain; blue=32*grain; }
+    if (inside) {
+      int pane=((int)(u/5)+(int)(v/9))%4;
+      float light=.65f+.25f*(1-v/64);
+      static const float colors[4][3]={{53,65,88},{114,72,44},{88,42,44},{48,76,68}};
+      red=colors[pane][0]*light; green=colors[pane][1]*light; blue=colors[pane][2]*light;
+      if (shutter) { red=35; green=31; blue=27; }
+      if (fabsf(u-32)<.55f || fabsf(v-35)<.5f || (!shutter && (fabsf(fmodf(u,5)-2.5f)<.28f || fabsf(fmodf(v,9)-4.5f)<.25f))) {
+        red=21; green=23; blue=22;
+      }
+    } else {
+      float edge=minf(20-dx,minf(v-top,60-v));
+      float shade=edge<.8f?1.3f:edge<1.6f?.6f:1;
+      red*=shade; green*=shade; blue*=shade;
+      if (!shutter && v<34 && fabsf(fmodf(atan2f(u-32,35-v)+3.2f,.28f)-.14f)<.015f) { red*=.5f; green*=.5f; blue*=.5f; }
+    }
+    im->px[y*TEX+x]=pack_argb(255,clampf(red,0,255),clampf(green,0,255),clampf(blue,0,255));
+  }
+  return im;
+}
 bool assets_build(Assets *a) {
   memset(a, 0, sizeof *a);
   art_error[0] = 0;
@@ -259,7 +289,9 @@ bool assets_build(Assets *a) {
                 {"props.bmp", 4, 4},      {"items.bmp", 4, 2},    {"horror.bmp", 3, 2},      {"fixtures.bmp", 3, 2},
                 {"weapons.bmp", 3, 3},    {"combat.bmp", 4, 4},   {"materials.bmp", 4, 4},   {"effects.bmp", 4, 3},
                 {"hound_walk.bmp", 3, 4}, {"rat_walk.bmp", 3, 4}, {"spider_walk.bmp", 3, 4}, {"rat_death.bmp", 3, 1},
-                {"equipment.bmp", 4, 1}, {"outdoors.bmp", 2, 4}};
+                {"equipment.bmp", 4, 1}, {"outdoors.bmp", 2, 4}, {"gate-winch.bmp",1,1},
+                {"drain-valve.bmp",1,1}, {"chapel-bell.bmp",1,1}, {"guard-walk.bmp",3,4},
+                {"knight-walk.bmp",3,4}, {"captain-walk.bmp",3,4}, {"knight-melee.bmp",3,4}};
   enum { ATLAS_COUNT = sizeof sheets / sizeof sheets[0] };
   Image *atlas[ATLAS_COUNT] = {0};
   for (int i = 0; i < ATLAS_COUNT; i++) {
@@ -278,14 +310,19 @@ bool assets_build(Assets *a) {
     return false;
   }
   materials_build(a, limestone, atlas[10], atlas[4]);
+  a->hangings[HANG_GLASS_WINDOW]=facade_window(limestone,a->walls[WT_TIMBER],false);
+  a->hangings[HANG_SHUTTER_WINDOW]=facade_window(limestone,a->walls[WT_TIMBER],true);
   image_free(limestone);
+  for (int i=0;i<3;i++) a->mechanisms[i]=art_cell(atlas[18+i],1,0);
   for (int t = 0; t < 3; t++) {
     for (int p = 0; p < POSE_COUNT; p++)
       a->enemies[t].pose[p] = art_cell(atlas[t], 3, p);
     for (int p = 0; p < 3; p++)
       for (int v = 0; v < VIEW_COUNT; v++)
-        a->enemies[t].view[p][v] = a->enemies[t].pose[p];
+        a->enemies[t].view[p][v] = art_cell(atlas[21+t],3,v*3+p);
   }
+  for (int p=0;p<POSE_COUNT;p++) a->knight_melee.pose[p]=art_cell(atlas[24],3,p);
+  for (int p=0;p<3;p++) for (int v=0;v<VIEW_COUNT;v++) a->knight_melee.view[p][v]=a->enemies[ENEMY_KNIGHT].view[p][v];
   static const int animal_type[] = {ENEMY_DOG, ENEMY_RAT, ENEMY_SPIDER};
   for (int row = 0; row < 3; row++) {
     EnemySprites *e = &a->enemies[animal_type[row]];

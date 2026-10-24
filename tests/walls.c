@@ -104,13 +104,13 @@ static void test_projectile_cover(void) {
       g->barrels[0] = (Barrel){3, 1.5f, false, false, 0};
       shoot(g); // an ordinary barrel stops the bolt first
     } else if (scenario == 2) {
-      g->projectiles[g->projectile_count++] = (Projectile){2, 1.5f, 1, 0, 0, 0.44f, SHOT_TRAP, NULL, 0, 0};
+      g->projectiles[g->projectile_count++] = (Projectile){2, 1.5f, 1, 0, 0, 0.44f, SHOT_TRAP, NULL, 0, 0, WEAPON_CROSSBOW};
     } else if (scenario == 3) {
       game_loose_bolt(g, 7.5f, 1.5f, -1, 0, SHOT_AT_PLAYER, NULL, 12);
     } else if (scenario == 4) {
       g->projectile_count = MAX_PROJECTILES;
       for (int i = 0; i < MAX_PROJECTILES; i++)
-        g->projectiles[i] = (Projectile){1.5f, 1.5f, -1, 0, 0, 0.44f, SHOT_MISS, NULL, 0, 0};
+        g->projectiles[i] = (Projectile){1.5f, 1.5f, -1, 0, 0, 0.44f, SHOT_MISS, NULL, 0, 0, WEAPON_CROSSBOW};
       shoot(g); // a full projectile pool must still resolve the wall hit
     } else {
       g->enemies[0].x = 8.5f;
@@ -173,7 +173,7 @@ static void test_blast_and_indestructible_cells(void) {
   level_free(&edge);
 }
 
-static void rewrite_save(const char *path, bool legacy) {
+static void rewrite_save(const char *path, bool legacy, const Game *game) {
   FILE *file = fopen(path, "rb");
   CHECK(file && fseek(file, 0, SEEK_END) == 0);
   long size = ftell(file);
@@ -181,10 +181,12 @@ static void rewrite_save(const char *path, bool legacy) {
   uint8_t *data = malloc((size_t)size);
   CHECK(data && fread(data, 1, (size_t)size, file) == (size_t)size);
   fclose(file);
+  // Keep legacy fixtures and wall corruption independent of appended v7/v8 state.
+  long campaign_extension=112+game->enemy_count*12+game->projectile_count*4;
   if (legacy) {
     data[8] = 1;
-    size -= 8; // remove v4 camera easing and v6 burst count; no walls or pendulums here
-  } else data[size - 20] = BREAKABLE_WALL_HEALTH + 1; // invalid last wall health
+    size -= 8+campaign_extension; // v4 camera easing, v6 burst and campaign extension
+  } else data[size - campaign_extension - 20] = BREAKABLE_WALL_HEALTH + 1;
   uint32_t checksum = 2166136261u;
   for (long i = 0; i < size - 4; i++) checksum = (checksum ^ data[i]) * 16777619u;
   for (int i = 0; i < 4; i++) data[size - 4 + i] = (uint8_t)(checksum >> (i * 8));
@@ -214,7 +216,7 @@ static void test_save_load(void) {
   CHECK(f.game->wall_health[2 * f.level.w + 7] == BREAKABLE_WALL_HEALTH);
   CHECK(f.game->player.x == 4.5f && f.game->player.y == 3.5f);
   CHECK(!game_is_blocked(f.game, 4.5f, 3.5f, f.game->player.radius, NULL));
-  rewrite_save(path, false);
+  rewrite_save(path, false, f.game);
   Game *previous = f.game;
   uint64_t rng = random_state();
   CHECK(!savegame_load(path, &f.level, 1, &f.game, &f.session, err, sizeof err));
@@ -229,7 +231,7 @@ static void test_save_load(void) {
   f.game = game_create(&f.level, 0, &f.session, NULL);
   f.game->player.health = 61;
   CHECK(savegame_write(path, f.game, err, sizeof err));
-  rewrite_save(path, true);
+  rewrite_save(path, true, f.game);
   f.game->player.health = 17;
   CHECK(savegame_load(path, &f.level, 1, &f.game, &f.session, err, sizeof err));
   CHECK(f.game->player.health == 61);

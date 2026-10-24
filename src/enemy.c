@@ -114,7 +114,7 @@ static bool try_move(Enemy *e, Game *g, float nx, float ny, float step) {
     if (!game_is_blocked(g, tx, e->y, e->radius, e)) { e->x = tx; moved = true; }
     if (!game_is_blocked(g, e->x, ty, e->radius, e)) { e->y = ty; moved = true; }
   }
-  if (moved && e->stats->melee) {
+  if (moved && (e->stats->melee || e->tactical)) {
     e->face_x = nx / len;
     e->face_y = ny / len;
   }
@@ -140,6 +140,8 @@ static void open_door_ahead(Enemy *e, Game *g, float nx, float ny) {
 static bool can_see_player(const Enemy *e, const Game *g) {
   const Player *p = &g->player;
   if (hypotf(p->x - e->x, p->y - e->y) > 11) return false;
+  if (e->tactical && e->type<=ENEMY_CAPTAIN && hypotf(p->x-e->x,p->y-e->y)>1.2f &&
+      (p->x-e->x)*e->face_x+(p->y-e->y)*e->face_y < -.1f) return false;
   return game_line_of_sight(g, e->x, e->y, p->x, p->y);
 }
 
@@ -243,6 +245,16 @@ static void fire(Enemy *e, Game *g) {
   float evade = p->speed_now > 1.5f ? 2.5f : 0;
   float hit_chance = maxf(0.1f, 1 - (dist + evade) / 14);
   float aim_x = p->x - e->x, aim_y = p->y - e->y;
+  if (e->tactical) {
+    float error=(frandf()-.5f)*(e->type==ENEMY_CAPTAIN?.035f:.065f);
+    float falloff=dist<4?1:dist<8?.8f:.65f;
+    int dmg=(int)round_half_up((e->type==ENEMY_CAPTAIN?16:12)*falloff);
+    int index=g->projectile_count;
+    game_loose_bolt(g,e->x,e->y,aim_x-aim_y*error,aim_y+aim_x*error,SHOT_HOSTILE,e,dmg);
+    if (g->projectile_count>index)
+      g->projectiles[index].slope=(level_floor(g->level,p->x,p->y)-level_floor(g->level,e->x,e->y))/maxf(.01f,dist);
+    return;
+  }
   if (frand() < hit_chance) {
     float falloff = dist < 2 ? 1 : dist < 6 ? 0.7f : 0.45f;
     int dmg = maxi(3, (int)round_half_up((4 + frand() * e->stats->dmg) * falloff));
@@ -280,11 +292,108 @@ void enemy_hit(Enemy *e, Game *g, int dmg) {
   }
 }
 
+bool enemy_shield_raised(const Enemy *e) {
+  return e->tactical && e->type==ENEMY_KNIGHT &&
+    (e->state==ES_STAND || e->state==ES_PATROL || e->state==ES_CHASE) && e->shield_pressure<2.2f;
+}
+void enemy_hit_from(Enemy *e,Game *g,int dmg,WeaponKind weapon,float source_x,float source_y) {
+  if (enemy_dead(e)) return;
+  float dx=source_x-e->x,dy=source_y-e->y,d=maxf(.01f,hypotf(dx,dy));
+  float facing=(dx*e->face_x+dy*e->face_y)/d;
+  bool unsuspecting=e->state==ES_STAND || e->state==ES_PATROL || e->state==ES_FOLLOW || e->state==ES_RETURN;
+  bool backstab=e->tactical && weapon==WEAPON_DAGGER && unsuspecting && facing<-.25f && e->type<=ENEMY_CAPTAIN;
+  bool blocked=enemy_shield_raised(e) && facing>.5f;
+  if (blocked) {
+    e->shield_pressure+=weapon==WEAPON_ARBALEST?1.5f:.7f;
+    dmg=maxi(1,dmg/5);
+    Listener l=game_listener(g); audio_play_at(SND_METAL_HIT,e->x,e->y,&l,.8f,1);
+    game_say(g,e->shield_pressure>=2.2f?"GUARD BROKEN - STRIKE NOW!":"SHIELD BLOCK - FLANK OR ATTACK DURING HIS WINDUP",2);
+  }
+  if (backstab) { dmg*=4; game_say(g,"SILENT BACKSTAB",2); }
+  if (!blocked) { Listener l=game_listener(g); audio_play_at(SND_FLESH_HIT,e->x,e->y,&l,.75f,1); }
+  g->hit_confirm=.18f; g->impact_timer=.22f;
+  g->impact_x=e->x; g->impact_y=e->y; g->impact_metal=blocked;
+  enemy_hit(e,g,dmg);
+  if (blocked && !enemy_dead(e)) {
+    e->state=e->shield_pressure>=2.2f?ES_PAIN:ES_CHASE;
+    e->timer=e->shield_pressure>=2.2f?.9f:0;
+  }
+}
+void enemy_hit_player(Enemy *e,Game *g,int dmg,WeaponKind weapon) {
+  enemy_hit_from(e,g,dmg,weapon,g->player.x,g->player.y);
+}
+static void move_facing_target(Enemy *e,Game *g,float x,float y,float step) {
+  float fx=e->face_x,fy=e->face_y;
+  move_toward(e,g,x,y,step);
+  e->face_x=fx; e->face_y=fy;
+}
+
+static bool soldier_tactics(Enemy *e,Game *g,float dt) {
+  if (!e->tactical || e->type>ENEMY_CAPTAIN) return false;
+  const Player *p=&g->player;
+  float dx=p->x-e->x,dy=p->y-e->y,d=maxf(.01f,hypotf(dx,dy));
+  bool sees=game_line_of_sight(g,e->x,e->y,p->x,p->y);
+  e->attack_cooldown-=dt;
+  if (sees) {
+    e->has_last_seen=true; e->last_seen_x=p->x; e->last_seen_y=p->y; e->lost_timer=0;
+    // Turn the guard slowly enough that close flanks remain possible.
+    float a=atan2f(e->face_y,e->face_x),b=atan2f(dy,dx);
+    float delta=atan2f(sinf(b-a),cosf(b-a));
+    a+=clampf(delta,-2.8f*dt,2.8f*dt); e->face_x=cosf(a); e->face_y=sinf(a);
+  } else {
+    e->lost_timer+=dt;
+    if (e->lost_timer>5) { e->state=ES_RETURN; return true; }
+    if (e->has_last_seen) {
+      move_toward(e,g,e->last_seen_x,e->last_seen_y,e->stats->speed*.75f*dt);
+      float tx=e->last_seen_x-e->x,ty=e->last_seen_y-e->y,k=maxf(.01f,hypotf(tx,ty));
+      open_door_ahead(e,g,tx/k,ty/k);
+    }
+    return true;
+  }
+  if (e->type==ENEMY_KNIGHT) {
+    if (d<4.2f && e->attack_cooldown<=0) {
+      e->state=ES_AIM; e->timer=.8f;
+      e->dir_x=dx/d; e->dir_y=dy/d; e->charge_hit=false;
+      play_at(e,g,SND_KNIFE_SLASH,.8f,.65f); return true;
+    }
+    if (d>1.5f) move_facing_target(e,g,p->x,p->y,e->stats->speed*.72f*dt);
+    open_door_ahead(e,g,dx/d,dy/d); return true;
+  }
+  if (e->type==ENEMY_CAPTAIN && e->tactic_timer<=0) {
+    e->tactic_timer=9;
+    play_at(e,g,SND_CAPTAIN_CALL,1,1);
+    for (int i=0;i<g->enemy_count;i++) {
+      Enemy *other=&g->enemies[i];
+      if (other!=e && other->type<=ENEMY_CAPTAIN && !enemy_dead(other) &&
+          hypotf(other->x-e->x,other->y-e->y)<8) enemy_wake(other,g,true);
+    }
+    if (d<8) game_say(g,"THE CAPTAIN CALLS THE WATCH!",2);
+  }
+  if (d<1.25f && e->attack_cooldown<=0) { e->state=ES_WINDUP; e->timer=.45f; return true; }
+  if (d<e->stats->range && e->attack_cooldown<=0) {
+    e->state=ES_AIM; e->timer=e->type==ENEMY_GUARD?.65f:.45f; return true;
+  }
+  if (e->type==ENEMY_GUARD) {
+    if (d<3.2f) {
+      float fx=e->face_x,fy=e->face_y;
+      e->moving=try_move(e,g,-dx,-dy,e->stats->speed*.75f*dt);
+      e->face_x=fx; e->face_y=fy;
+    } else if (d>6) move_facing_target(e,g,p->x,p->y,e->stats->speed*dt);
+  } else {
+    float side=sinf(e->wobble)>0?1:-1;
+    float tx=p->x-dy/d*side*3,ty=p->y+dx/d*side*3;
+    move_facing_target(e,g,tx,ty,e->stats->speed*.8f*dt);
+  }
+  open_door_ahead(e,g,dx/d,dy/d); return true;
+}
+
 void enemy_update(Enemy *e, Game *g, float dt) {
   const EnemyStats *st = e->stats;
   const Player *p = &g->player;
   e->anim_time += dt;
   e->moving = false;
+  e->tactic_timer=maxf(0,e->tactic_timer-dt);
+  e->shield_pressure=maxf(0,e->shield_pressure-dt*.35f);
 
   if (st->swarm && !enemy_dead(e)) {
     // roosting swarms hang under the ceiling; airborne ones bob a little
@@ -435,6 +544,7 @@ void enemy_update(Enemy *e, Game *g, float dt) {
   }
 
   case ES_CHASE: {
+    if (soldier_tactics(e,g,dt)) return;
     e->attack_cooldown -= dt;
     float dist = hypotf(p->x - e->x, p->y - e->y);
     if (st->swarm) {
@@ -516,6 +626,9 @@ void enemy_update(Enemy *e, Game *g, float dt) {
   case ES_AIM:
     e->timer -= dt;
     if (e->timer <= 0) {
+      if (e->tactical && e->type==ENEMY_KNIGHT) {
+        e->state=ES_FIRE; e->timer=.5f; return;
+      }
       fire(e, g);
       e->state = ES_FIRE;
       e->timer = 0.18f;
@@ -523,6 +636,19 @@ void enemy_update(Enemy *e, Game *g, float dt) {
     return;
 
   case ES_FIRE:
+    if (e->tactical && e->type==ENEMY_KNIGHT) {
+      e->timer-=dt;
+      bool moving=try_move(e,g,e->dir_x,e->dir_y,7.2f*dt);
+      e->moving=moving;
+      if (!e->charge_hit && hypotf(p->x-e->x,p->y-e->y)<1.15f &&
+          fabsf(level_floor(g->level,e->x,e->y)-level_floor(g->level,p->x,p->y))<=.25f &&
+          game_line_of_sight(g,e->x,e->y,p->x,p->y)) {
+        game_hurt_player(g,18); e->charge_hit=true;
+      }
+      if (e->timer<=0 || !moving) { e->state=ES_STRIKE; e->timer=.75f; }
+      return;
+    }
+    // fall through to the common recovery
   case ES_STRIKE:
     e->timer -= dt;
     if (e->timer <= 0) {
@@ -571,15 +697,16 @@ static ViewDir view_from(const Enemy *e, const Player *p) {
 }
 
 const Image *enemy_sprite(const Enemy *e, const Assets *assets, const Player *viewer) {
-  const EnemySprites *set = &assets->enemies[e->type];
+  const EnemySprites *set = e->tactical && e->type==ENEMY_KNIGHT?&assets->knight_melee:&assets->enemies[e->type];
   // a spider on its dropline hangs head-down, whatever it is up to
   if (e->stats->climber && e->flying && !enemy_dead(e)) return set->pose[POSE_AIM];
   switch (e->state) {
   case ES_DEAD: return set->pose[POSE_DEAD];
   case ES_DYING: return set->pose[e->timer > 0.2f ? POSE_DIE1 : POSE_DIE2];
   case ES_PAIN: return set->pose[POSE_PAIN];
-  case ES_AIM: return set->pose[POSE_AIM];
+  case ES_AIM: return set->pose[e->tactical && e->type==ENEMY_KNIGHT?POSE_STRIKE1:POSE_AIM];
   case ES_FIRE:
+    if (e->tactical && e->type==ENEMY_KNIGHT) return set->pose[POSE_STRIKE2];
   case ES_BITE: return set->pose[POSE_FIRE];
   case ES_WINDUP: return set->pose[POSE_STRIKE1];
   case ES_STRIKE: return set->pose[POSE_STRIKE2];
@@ -588,7 +715,7 @@ const Image *enemy_sprite(const Enemy *e, const Assets *assets, const Player *vi
     float rate = st->swarm ? 11 : st->underfoot ? 14 : st->climber ? 12 : st->melee ? 9 : 5;
     int f = (int)floorf(e->anim_time * rate) % 2;
     int frame = !e->moving ? 0 : f ? 1 : 2; // stand / walk1 / walk2
-    if (st->melee && viewer) return set->view[frame][view_from(e, viewer)];
+    if ((st->melee || (e->tactical && e->type<=ENEMY_CAPTAIN)) && viewer) return set->view[frame][view_from(e, viewer)];
     static const Pose poses[3] = {POSE_STAND, POSE_WALK1, POSE_WALK2};
     return set->pose[poses[frame]];
   }

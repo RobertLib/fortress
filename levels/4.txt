@@ -85,6 +85,7 @@
 @terrain leaves 55 28 10 4
 @terrain leaves 51 31 4 1
 @terrain stone 43 32 23 3
+@roof 56 4 9 7 2.625 3.625 1 1
 @prop grave 45 6
 @prop grave 48 6
 @prop grave 51 6
@@ -160,8 +161,24 @@
 @landmark 60 7 5 THE VIGIL CHAPEL
 @landmark 55 25 11 BLACKWOOD
 @landmark 62 26 3 THE KEEPERS GRAVE
-@objective Find the burial keys in crypt, ossuary and Blackwood.
+@objective Read the three burial inscriptions in order. Recover the gate keys.
 @destination The western crypt gate climbs to the warlords keep.
+@prop urn 57 8
+@prop urn 63 8
+@prop bench 52 15
+@campaign 1
+@mechanism 45 7 grave 0 0 READ THE SOLDIERS BURIAL INSCRIPTION|FIRST: THE SOLDIER. NEXT FIND THE CHILD BENEATH THE EASTERN CROSS.
+@mechanism 51 10 grave 1 0 READ THE CHILDS BURIAL INSCRIPTION|SECOND: THE CHILD. LAST FIND THE KEEPER IN SOUTHERN BLACKWOOD.
+@mechanism 62 25 grave 3 0 RELEASE THE KEEPERS BURIAL SEAL|THE KEEPER IS REMEMBERED. TAKE THREE KEYS TO THE WESTERN CRYPT GATE.
+@errand 62 7 0 MEMORIAL RIBBON~Read the graves in this order: soldier in the northwest, child to the east, keeper beneath the southern forest cross.|A memorial ribbon remains by the chapel east wall. Bring it to me.~Someone still remembers the dead. That is stronger than the lords command.|The receiving treasury is open. Take supplies for the keep. Its gate lies beyond the flooded crypt at the far western end.
+@erranddoor 5 3
+@relic 2 2 3
+@facade 58 4 0 -1 shutter
+@facade 61 4 0 -1 shutter
+@facade 56 6 -1 0 shutter
+@facade 64 6 1 0 shutter
+@facade 56 9 -1 0 shutter
+@facade 64 9 1 0 shutter
 @height 29 5 8 6 0.25
 @height 3 7 6 2 -0.25
 @height 28 7 1 1 0.125

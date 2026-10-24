@@ -95,6 +95,9 @@
 @terrain stone 42 23 7 6
 @terrain grass 42 29 7 1
 @terrain stone 41 30 23 3
+@roof 42 23 7 6 2.125 3.125 1 0
+@roof 53 4 9 8 2.25 3.25 1 0
+@roof 42 13 6 5 1.75 2.75 1 0
 @prop well 51 19
 @prop oak 43 19
 @prop oak 61 25
@@ -117,8 +120,34 @@
 @landmark 51 20 12 VILLAGE WELL
 @landmark 57 7 5 THE EMPTY INN
 @landmark 63 6 3 ABBEY STAIR GATE
-@objective Search the guardhouse and village. Recover three gate keys.
+@objective Raise the village gate winch and recover three gate keys.
 @destination The far east lane gate descends to the abbey cistern.
+@prop oak 42 21
+@prop oak 62 17
+@prop bench 50 22
+@prop bench 55 24
+@prop urn 54 10
+@prop urn 60 10
+@prop table 55 21
+@prop chair 56 20
+@campaign 1
+@mechanism 63 8 winch 0 6 RAISE THE VILLAGE GATE WINCH|THE WINCH IS RELEASED. FIND THE KEYS AND TAKE THE EAST GATE.
+@errand 46 26 0 GRAIN TALLY~You fed this village. Find our grain tally in the cooper cottage, southwest of the well. I can spare supplies.|Work the winch beside the far eastern gate, then carry three keys through it.~The tally proves where the grain went.|I have released the hidden guardhouse store. Take medicine, bolts, two decoys and a door brace. Raise the eastern gate winch and bring three keys.
+@erranddoor 4 19
+@relic 3 18 0
+@facade 44 28 0 1 shutter
+@facade 47 28 0 1 shutter
+@facade 42 25 -1 0 shutter
+@facade 48 25 1 0 shutter
+@facade 55 4 0 -1 shutter
+@facade 58 4 0 -1 shutter
+@facade 53 6 -1 0 shutter
+@facade 61 6 1 0 shutter
+@facade 53 9 -1 0 shutter
+@facade 61 9 1 0 shutter
+@facade 44 13 0 -1 shutter
+@facade 44 17 0 1 shutter
+@facade 42 15 -1 0 shutter
 @height 28 1 4 9 0.5
 @height 13 2 1 4 0.5
 @height 14 2 1 1 0.375
@@ -256,7 +285,7 @@
 1111.....1111111111.2.v...B.q.....11.11222222........3.......3..22
 11111D111111111..&...>=>..1.....w.11.11222222........3333D3333..22
 11111.111111111.111..===2.11.....111.11222222........3.Ag....3..22
-11111.111111111.1111.H...111111D1111.11222222........3.......3..22
+11111.111111111.1111.H...111111D1111.11222222........3.......3.g22
 111...111111111.11111...1111111.1111.11222222........3333D3333..22
 11..H..11111111.111111D11111111.1111.112222.....................22
 11.q....8.......111111.....1111.1111.11222333333................22
@@ -267,8 +296,8 @@
 1..T1.111...G.111.1111.1111111111111.1122.......................22
 1.M.Z.L111...1111.1111.1111111111111.1122.......................22
 1...111111.111111......1111111............................Gc..H.22
-1111111111.111111.1111.1111111D1111111122.......................22
-1111.......111111.1111.11111.....11111122.......................22
+1111111111.111111.1111.1111111D1111111122.............q.........22
+1111.......111111.1111.11111.....11111122..............q........22
 1111.111111111111.1111.1111.2...Q.1111122.333D333..........A....22
 1111.111111111111.1111....D..Gc.2.1111122.3.....3...............22
 1111D111111111111.111111111.!...A.1111122.3q....3...............22

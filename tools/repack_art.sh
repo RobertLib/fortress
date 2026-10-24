@@ -26,3 +26,10 @@ done
 ./build/pack_art assets/source/rat_death.png assets/rat_death.bmp 3 1 rat_death build/rat-death-atlas.png
 ./build/pack_art assets/source/equipment.png assets/equipment.bmp 4 1 props build/equipment-atlas.png
 ./build/pack_art assets/source/outdoors.png assets/outdoors.bmp 2 4 props build/outdoors-atlas.png
+for mechanism in gate-winch drain-valve chapel-bell; do
+  ./build/pack_art "assets/source/${mechanism}.png" "assets/${mechanism}.bmp" 1 1 props "build/${mechanism}.png"
+done
+for soldier in guard knight captain; do
+  ./build/pack_art "assets/source/${soldier}-walk.png" "assets/${soldier}-walk.bmp" 3 4 soldier_walk "build/${soldier}-walk-atlas.png"
+done
+./build/pack_art assets/source/knight-melee.png assets/knight-melee.bmp 3 4 actor build/knight-melee-atlas.png

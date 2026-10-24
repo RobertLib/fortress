@@ -32,6 +32,7 @@ typedef struct {
 typedef double (*SynthFn)(double t, SynthState *s);
 
 static double noise(void) { return frand() * 2 - 1; }
+static int effects_volume=85,music_volume=45;
 static double env(double t, double dur, double p) { return pow(fmax(0, 1 - t / dur), p); }
 static double saw(double t, double f) { return 2 * fmod(t * f, 1) - 1; }
 static double square(double t, double f) { return fmod(t * f, 1) < 0.5 ? 1 : -1; }
@@ -61,6 +62,30 @@ static double sfx_dagger(double t, SynthState *s) {
 }
 
 static double sfx_empty(double t, SynthState *s) { return square(t, 900) * env(t, 0.05, 6) * 0.25; }
+static double sfx_metal_hit(double t,SynthState *s) {
+  return noise()*env(t,.018,2)*.25 + (sine(t,1463)+sine(t,2317)*.45+sine(t,3771)*.2)*env(t,.36,2)*.3;
+}
+static double sfx_flesh_hit(double t,SynthState *s) {
+  s->z+=(noise()-s->z)*.32;
+  return s->z*env(t,.14,2)*1.5+sine(t,86*(1-t*2))*env(t,.12,3)*.4;
+}
+static double sfx_reload(double t,SynthState *s) {
+  double click=noise()*env(t,.025,3)*.45;
+  if (t>.09) click+=noise()*env(t-.09,.035,3)*.3;
+  return click+sine(t,170)*env(t,.16,3)*.14;
+}
+static double sfx_captain_call(double t,SynthState *s) {
+  double attack=fmin(1,t/.07),fade=env(t,.9,1.2);
+  double f=146.83*(1+.006*sin(t*32));
+  return (sine(t,f)+sine(t,f*2)*.35+sine(t,f*3)*.14)*attack*fade*.45;
+}
+static double sfx_step_wood(double t,SynthState *s) {
+  return noise()*env(t,.018,3)*.3+(sine(t,115)+sine(t,193)*.4)*env(t,.14,3)*.45;
+}
+static double sfx_step_leaves(double t,SynthState *s) {
+  s->z+=(noise()-s->z)*.15;
+  return s->z*env(t,.17,1.4)*.9+noise()*env(t,.045,2)*.1;
+}
 
 static double sfx_splash(double t, SynthState *s) {
   s->z += (noise() - s->z) * .18;
@@ -627,6 +652,9 @@ static const SynthDef SYNTHS[SND_COUNT] = {
   [SND_WARDEN_STEP] = {.65, sfx_warden_step},
   [SND_WARDEN_CHAIN] = {1.6, sfx_warden_chain},
   [SND_PARCHMENT] = {.3, sfx_parchment},
+  [SND_METAL_HIT]={.36,sfx_metal_hit}, [SND_FLESH_HIT]={.16,sfx_flesh_hit},
+  [SND_RELOAD]={.18,sfx_reload}, [SND_CAPTAIN_CALL]={.9,sfx_captain_call},
+  [SND_STEP_WOOD]={.16,sfx_step_wood}, [SND_STEP_LEAVES]={.18,sfx_step_leaves},
 };
 
 static float *buffers[SND_COUNT];
@@ -672,6 +700,56 @@ static Voice voices[MAX_VOICES]; // guarded by the stream lock
 static bool enabled = true;
 static OcclusionFn occlusion;
 static void *occlusion_ctx;
+
+// Original chapter motifs, composed as two soft stems. Preparation uses its own
+// deterministic noise source and never consumes the combat random sequence.
+#define MUSIC_RATE 22050
+#define MUSIC_LENGTH (MUSIC_RATE*128/5)
+static float *music_stems[LEVEL_COUNT][2];
+static int music_chapter;
+static double music_position;
+static float music_danger,music_target_gain,music_gain,music_blend;
+static void prepare_music(void) {
+  static const double roots[]={55,49,65.406391,43.653529,73.416192};
+  static const int motifs[5][16]={{0,7,3,10,7,3,2,7,0,3,7,12,10,7,3,2},
+    {0,7,12,10,3,7,2,0,0,12,7,3,10,7,2,-5},
+    {0,3,7,10,7,12,10,7,0,7,3,2,7,10,3,0},
+    {0,1,7,3,0,6,3,1,0,7,1,3,6,3,1,-5},
+    {0,7,12,15,10,7,3,2,0,3,7,12,15,10,7,0}};
+  for (int chapter=0;chapter<LEVEL_COUNT;chapter++) {
+    music_stems[chapter][0]=malloc(MUSIC_LENGTH*sizeof(float));
+    music_stems[chapter][1]=malloc(MUSIC_LENGTH*sizeof(float));
+    if (!music_stems[chapter][0] || !music_stems[chapter][1]) continue;
+    double freq[16]; for (int n=0;n<16;n++) freq[n]=roots[chapter]*4*pow(2,motifs[chapter][n]/12.0);
+    Lcg random=lcg(0x724f13u+chapter); double filtered=0;
+    for (int i=0;i<MUSIC_LENGTH;i++) {
+      double t=(double)i/MUSIC_RATE;
+      int note=(int)(t/1.6)%16; double age=fmod(t,1.6),envelope=(1-exp(-age*6))*exp(-age*2.3);
+      double string=(sine(t,freq[note])*.48+sine(t,freq[note]*2)*.18+sine(t,freq[note]*3)*.08)*envelope;
+      double breath=.7+.3*sin(2*M_PI*t/12.8);
+      double drone=(sine(t,roots[chapter])*.10+sine(t,roots[chapter]*1.5)*.055)*breath;
+      double fade=fmin(1,fmin(t/1.2,(25.6-t)/1.2));
+      filtered+=((lcg_next(&random)*2-1)-filtered)*.12;
+      double beat=fmod(t,.8),drum=sine(beat,65*exp(-beat*4))*exp(-beat*18)*.13;
+      double rattle=filtered*exp(-fmod(t+.4,.8)*25)*.045;
+      music_stems[chapter][0][i]=(float)((drone+string*.16)*fade);
+      music_stems[chapter][1][i]=(float)((drone+string*.55+drum+rattle)*fade);
+    }
+  }
+}
+void audio_set_mix(int effects,int music) {
+  if (stream) SDL_LockAudioStream(stream);
+  effects_volume=clampi(effects,0,100); music_volume=clampi(music,0,100);
+  if (stream) SDL_UnlockAudioStream(stream);
+}
+void audio_set_scene(int chapter,float danger,bool shelter,bool active) {
+  if (stream) SDL_LockAudioStream(stream);
+  chapter=clampi(chapter,0,LEVEL_COUNT-1);
+  if (music_chapter!=chapter) { music_chapter=chapter; music_position=0; music_gain=0; }
+  music_danger=clampf(danger,0,1);
+  music_target_gain=active && !shelter?.7f:0;
+  if (stream) SDL_UnlockAudioStream(stream);
+}
 
 // RBJ cookbook low-pass with the resonance given in dB. Cutoffs at or above
 // Nyquist pass everything, so they leave the voice unfiltered.
@@ -726,7 +804,19 @@ static void SDLCALL mix_audio(void *userdata, SDL_AudioStream *out, int addition
     for (int i = 0; i < MAX_VOICES; i++) {
       if (voices[i].data) mix_voice(&voices[i], mix, n);
     }
-    for (int i = 0; i < n * 2; i++) mix[i] = clampf(mix[i] * MASTER_GAIN, -1.0f, 1.0f);
+    for (int i=0;i<n;i++) {
+      music_gain+=(music_target_gain-music_gain)*(1.0f/SAMPLE_RATE);
+      music_blend+=(music_danger-music_blend)*(2.0f/SAMPLE_RATE);
+      int index=(int)music_position;
+      float *quiet=music_stems[music_chapter][0],*fight=music_stems[music_chapter][1];
+      if (quiet && fight) {
+        float music=(quiet[index]*(1-music_blend)+fight[index]*music_blend)*music_gain*music_volume/100.0f;
+        mix[i*2]+=music; mix[i*2+1]+=music;
+      }
+      music_position+=MUSIC_RATE/(double)SAMPLE_RATE;
+      if (music_position>=MUSIC_LENGTH) music_position-=MUSIC_LENGTH;
+    }
+    for (int i = 0; i < n * 2; i++) mix[i] = enabled?clampf(mix[i] * MASTER_GAIN, -1.0f, 1.0f):0;
     SDL_PutAudioStreamData(out, mix, n * FRAME_BYTES);
     frames -= n;
   }
@@ -761,6 +851,7 @@ bool audio_init(void) {
   // the device opens paused, so nothing reads the buffers until resumed
   memset(voices, 0, sizeof(voices));
   synthesize_all();
+  prepare_music();
   if (!SDL_ResumeAudioStreamDevice(stream)) {
     SDL_Log("audio unavailable: %s", SDL_GetError());
     audio_shutdown();
@@ -776,9 +867,15 @@ void audio_shutdown(void) {
   }
   memset(voices, 0, sizeof(voices));
   free_buffers();
+  for (int c=0;c<LEVEL_COUNT;c++) for (int stem=0;stem<2;stem++) { free(music_stems[c][stem]); music_stems[c][stem]=NULL; }
+  music_position=0; music_gain=0;
 }
 
-void audio_set_enabled(bool on) { enabled = on; }
+void audio_set_enabled(bool on) {
+  if (stream) SDL_LockAudioStream(stream);
+  enabled=on;
+  if (stream) SDL_UnlockAudioStream(stream);
+}
 
 bool audio_enabled(void) { return enabled; }
 
@@ -790,6 +887,7 @@ void audio_set_occlusion(OcclusionFn fn, void *ctx) {
 void audio_play(SoundId id, float volume, float rate) { audio_play_ex(id, volume, rate, 0, 0); }
 
 void audio_play_ex(SoundId id, float volume, float rate, float pan, float cutoff) {
+  volume*=effects_volume/100.0f;
   if (!stream || !enabled || (unsigned)id >= SND_COUNT || !buffers[id]) return;
   if (!(volume > 0) || !(rate > 0)) return;
   Voice v = {.data = buffers[id], .len = lengths[id], .rate = rate, .gain = volume, .left = 1, .right = 1};

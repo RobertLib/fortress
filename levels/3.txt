@@ -89,6 +89,7 @@
 @terrain grass 57 27 9 5
 @terrain grass 54 31 3 1
 @terrain stone 45 32 23 3
+@roof 59 4 8 7 1.875 2.875 1 0
 @prop oak 48 6
 @prop oak 52 9
 @prop oak 48 12
@@ -125,8 +126,24 @@
 @landmark 53 15 12 THE WALLED PARK
 @landmark 62 20 5 THE STONE BRIDGE
 @landmark 63 7 4 GARDENERS LODGE
-@objective Recover the garrison keys from barracks, armoury and park.
+@objective Defeat the captain, claim his seal and recover three garrison keys.
 @destination The northwest barrack gate opens onto the old vault road.
+@prop bench 65 15
+@prop bench 54 23
+@prop urn 60 9
+@prop urn 65 9
+@prop statue 54 11
+@campaign 1
+@mechanism 62 8 seal 0 0 CLAIM THE CAPTAINS GARRISON SEAL|THE GARRISON SEAL IS YOURS. TAKE THREE KEYS TO THE NORTHWEST GATE.
+@errand 65 8 0 GARDENERS LEDGER~The captain has taken the gardeners lodge. Defeat him, then claim his seal at the desk.|Bring me the ledger from the east side of his room. These gardens once fed the village.~These are the families still waiting outside the walls.|I have opened the concealed officers cache. Take bolts, medicine, two decoys and a brace. Seek the burial gate beyond the northwest barrack ward.
+@erranddoor 15 4
+@relic 14 1 2
+@facade 61 4 0 -1 shutter
+@facade 64 4 0 -1 shutter
+@facade 59 6 -1 0 shutter
+@facade 66 6 1 0 shutter
+@facade 59 9 -1 0 shutter
+@facade 66 9 1 0 shutter
 @height 32 3 7 6 0.75
 @height 27 5 5 1 0.75
 @height 39 5 2 1 0.75
@@ -260,7 +277,7 @@
 222......2222L2Z2222222222222222.......22222222............33333333222
 222...G..D......22222222222....D.A.SK..D.22222.............3......3222
 222...F..222.22222222222222.2222...^.H.2.2222..............3....K.3.22
-222....A.222.22222222222222.2222.Q....w2.2222..............3.s....3.22
+222....A.222.22222222222222.2222.Q....w2.2222..............3.O....3.22
 2222.....222.22222222222222.~2222.....22.2222..............3.F....3.22
 22222222D222.22222222222222.222222D22222.2222..............3......3.22
 22222222.222............&...222222.22222.2222..............333D3333.22

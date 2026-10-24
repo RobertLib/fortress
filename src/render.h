@@ -43,6 +43,7 @@ void renderer_init(Renderer *r, const Assets *assets);
 void renderer_free(Renderer *r);
 
 void render_view(Renderer *r, Image *fb, const Game *g);
+void render_roofs(Renderer *r,Image *fb,const Game *g);
 void render_map(Renderer *r, Image *fb, const Game *g, const char *close_button); // NULL defaults to TAB
 void render_hud(Renderer *r, Image *fb, const Game *g);
 

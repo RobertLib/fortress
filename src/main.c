@@ -18,6 +18,7 @@
 #include "render.h"
 #include "savegame.h"
 #include "ui.h"
+#include "preferences.h"
 
 #define W SCREEN_W
 #define H SCREEN_H
@@ -37,7 +38,10 @@ typedef enum {
   ST_LEVEL_COMPLETE,
   ST_GAME_OVER,
   ST_VICTORY,
-  ST_ERROR
+  ST_ERROR,
+  ST_OPTIONS,
+  ST_BINDINGS,
+  ST_SLOTS
 } State;
 
 static SDL_Window *window;
@@ -74,6 +78,18 @@ static bool input_focused = true, gamepad_active;
 static bool gamepad_fire_ready, gamepad_menu_blocked;
 static int gamepad_menu_direction;
 static float gamepad_menu_timer;
+static State options_return=ST_MENU,slots_return=ST_MENU;
+static int options_page,options_row,binding_row,slot_row,selected_slot;
+static bool binding_wait,slot_save_mode;
+static float autosave_timer;
+static float combat_music_tail;
+static char *manual_paths[2],*automatic_path,*checkpoint_path;
+static SaveInfo slot_info[5];
+static bool slot_valid[5];
+static void refresh_save_slots(void);
+static void checkpoint_game(void);
+static bool restore_checkpoint(void);
+static const char *gamepad_button_name(SDL_GamepadButton button);
 
 // ------------------------------------------------------------------ helpers
 
@@ -144,6 +160,9 @@ static void new_game(int start_index, Difficulty difficulty) {
   selected_difficulty = difficulty;
   memset(&session, 0, sizeof session);
   session.difficulty = difficulty;
+  session.arcade=preferences_get()->arcade;
+  session.run_id=(int)((SDL_GetTicksNS()^random_state())&0x7fffffffu);
+  if (!session.run_id) session.run_id=1;
   session.lives = 3;
   session.next_life = 40000;
   start_level(start_index, NULL);
@@ -158,10 +177,12 @@ static void choose_difficulty(int start_index) {
 
 static void begin_level(void) {
   set_state(ST_PLAYING);
+  checkpoint_game();
   blip();
 }
 
 static void restart_level(void) {
+  if (!session.arcade && restore_checkpoint()) return;
   start_level(game->level_index, NULL); // classic rules: fresh crossbow after death
 }
 
@@ -188,15 +209,30 @@ static int level_bonus(void) {
 
 // ------------------------------------------------------------------ save / load
 
+static char *user_file(const char *name) {
+  const char *override=SDL_getenv("FORTRESS_USER_DATA");
+  char *directory=override?NULL:SDL_GetPrefPath("Fortress","Fortress");
+  const char *base=override?override:directory;
+  if (!base) return NULL;
+  size_t size=strlen(base)+strlen(name)+2;
+  char *path=malloc(size);
+  if (path) snprintf(path,size,"%s/%s",base,name);
+  SDL_free(directory); return path;
+}
 static const char *get_save_path(void) {
   if (save_path) return save_path;
-  char *directory = SDL_GetPrefPath("Fortress", "Fortress");
-  if (!directory) return NULL;
-  size_t size = strlen(directory) + sizeof "savegame.dat";
-  save_path = malloc(size);
-  if (save_path) snprintf(save_path, size, "%ssavegame.dat", directory);
-  SDL_free(directory);
+  save_path=user_file("savegame.dat");
   return save_path;
+}
+static const char *slot_path(int slot) {
+  if (slot==0) return get_save_path();
+  if (slot>=1 && slot<=2) {
+    if (!manual_paths[slot-1]) manual_paths[slot-1]=user_file(slot==1?"savegame-2.dat":"savegame-3.dat");
+    return manual_paths[slot-1];
+  }
+  if (slot==3) { if (!automatic_path) automatic_path=user_file("autosave.dat"); return automatic_path; }
+  if (!checkpoint_path) checkpoint_path=user_file("checkpoint.dat");
+  return checkpoint_path;
 }
 
 static void notify_save(const char *message) {
@@ -206,7 +242,7 @@ static void notify_save(const char *message) {
 }
 
 static void act_save_game(void) {
-  const char *path = get_save_path();
+  const char *path = slot_path(selected_slot);
   char err[96];
   if (!path)
     notify_save("SAVE FOLDER UNAVAILABLE");
@@ -218,7 +254,7 @@ static void act_save_game(void) {
 }
 
 static void act_load_game(void) {
-  const char *path = get_save_path();
+  const char *path = slot_path(selected_slot);
   char err[96];
   if (!path) {
     notify_save("SAVE FOLDER UNAVAILABLE");
@@ -234,6 +270,54 @@ static void act_load_game(void) {
   }
 }
 
+static void checkpoint_game(void) {
+  if (!game || !preferences_get()->autosave || session.arcade || game->player_dead || game->completed) return;
+  const char *path=slot_path(4); char err[96];
+  if (path && savegame_write(path,game,err,sizeof err)) autosave_timer=0;
+  path=slot_path(3);
+  if (path) savegame_write(path,game,err,sizeof err);
+}
+static bool restore_checkpoint(void) {
+  for (int slot=3;slot<=4;slot++) {
+    const char *path=slot_path(slot); SaveInfo info; char err[96];
+    if (path && session.run_id && savegame_inspect(path,levels,levels_loaded,&info) &&
+        info.level==game->level_index && info.run_id==session.run_id &&
+        savegame_load(path,levels,levels_loaded,&game,&session,err,sizeof err)) {
+      death_delay=0; set_state(ST_PLAYING); game_say(game,"SAFE CHECKPOINT RESTORED",3); return true;
+    }
+  }
+  return false;
+}
+static bool safe_to_autosave(void) {
+  if (!game || game->player.health<35 || game->player.venom || game->horror.reading>=0 || game->campaign.journal ||
+      game->player_dead || game->completed || game->horror.warden.state!=WARDEN_DORMANT ||
+      (game->horror.pending_hunts && !horror_in_haven(game,game->player.x,game->player.y))) return false;
+  for (int i=0;i<game->enemy_count;i++) {
+    const Enemy *e=&game->enemies[i];
+    if (!enemy_dead(e) && hypotf(e->x-game->player.x,e->y-game->player.y)<6) return false;
+  }
+  for (int i=0;i<game->projectile_count;i++) {
+    const Projectile *p=&game->projectiles[i];
+    if ((p->kind==SHOT_HOSTILE || p->kind==SHOT_TRAP || p->kind==SHOT_AT_PLAYER) &&
+        hypotf(p->x-game->player.x,p->y-game->player.y)<8) return false;
+  }
+  for (int i=0;i<game->level->pendulum_count;i++) {
+    const PendulumSpawn *p=&game->level->pendulums[i];
+    if (hypotf(p->x+.5f-game->player.x,p->y+.5f-game->player.y)<1.5f) return false;
+  }
+  return true;
+}
+static void autosave_game(float dt) {
+  if (session.arcade || !preferences_get()->autosave) return;
+  autosave_timer+=dt;
+  if ((autosave_timer<90 && !game->campaign.checkpoint_requested) || !safe_to_autosave()) return;
+  const char *path=slot_path(3); char err[96];
+  if (path && savegame_write(path,game,err,sizeof err)) {
+    autosave_timer=0; game->campaign.checkpoint_requested=false;
+    notify_save("PROGRESS AUTOSAVED");
+  }
+}
+
 // ------------------------------------------------------------------ menus
 
 typedef struct MenuItem {
@@ -246,6 +330,8 @@ static const char *label_new_game(void) { return "NEW GAME"; }
 static const char *label_save_game(void) { return "SAVE GAME"; }
 static const char *label_load_game(void) { return "LOAD GAME"; }
 static const char *label_controls(void) { return "CONTROLS"; }
+static const char *label_options(void) { return "OPTIONS"; }
+static const char *label_slots(void) { return "SAVE SLOTS"; }
 static const char *label_sound(void) { return audio_enabled() ? "SOUND: ON" : "SOUND: OFF"; }
 static const char *label_fullscreen(void) { return fullscreen() ? "FULLSCREEN: ON" : "FULLSCREEN: OFF"; }
 static const char *label_quit(void) { return "QUIT GAME"; }
@@ -285,6 +371,57 @@ static void act_controls(void) {
   blip();
   set_state(ST_CONTROLS);
 }
+static void act_options(void) {
+  options_return=state; options_page=0; options_row=0; set_state(ST_OPTIONS); blip();
+}
+static void act_slots(void) {
+  slots_return=state; slot_save_mode=state==ST_PAUSED; slot_row=selected_slot;
+  refresh_save_slots();
+  set_state(ST_SLOTS); blip();
+}
+static void save_preferences(void) {
+  char *path=user_file("options.cfg");
+  if (!path || !preferences_save(path)) notify_save("COULD NOT SAVE OPTIONS");
+  free(path);
+}
+static int option_rows(void) { static const int rows[]={4,2,3,3}; return rows[options_page]; }
+static void adjust_option(int direction) {
+  Preferences *p=preferences_get();
+  if (options_page==0) {
+    int *values[]={&p->brightness,&p->bob,&p->shake,&p->text};
+    int lo[]={70,0,0,100},hi[]={140,100,100,150},step[]={10,25,25,25};
+    *values[options_row]=clampi(*values[options_row]+step[options_row]*direction,lo[options_row],hi[options_row]);
+  } else if (options_page==1) {
+    int *value=options_row==0?&p->effects:&p->music;
+    *value=clampi(*value+5*direction,0,100);
+    audio_set_mix(p->effects,p->music);
+  } else if (options_page==2) {
+    bool *values[]={&p->tutorials,&p->autosave,&p->arcade}; *values[options_row]=!*values[options_row];
+  } else if (options_row==0) p->sensitivity=clampi(p->sensitivity+25*direction,25,250);
+  else if (options_row==1) { binding_row=0; binding_wait=false; set_state(ST_BINDINGS); }
+  else { preferences_defaults(); audio_set_mix(p->effects,p->music); }
+  blip();
+}
+static void activate_slot(void) {
+  const char *path=slot_path(slot_row); char err[96];
+  if (!path) { notify_save("SAVE FOLDER UNAVAILABLE"); return; }
+  if (slot_save_mode && slot_row<3) {
+    if (savegame_write(path,game,err,sizeof err)) { selected_slot=slot_row; refresh_save_slots(); notify_save("GAME SAVED"); blip(); }
+    else notify_save(err);
+  } else if (!slot_save_mode) {
+    if (savegame_load(path,levels,levels_loaded,&game,&session,err,sizeof err)) {
+      if (slot_row<3) selected_slot=slot_row;
+      selected_difficulty=session.difficulty; resumable=false; death_delay=0;
+      set_state(ST_PLAYING); notify_save("GAME LOADED"); blip();
+    } else notify_save(err);
+  } else notify_save("AUTOMATIC SLOTS ARE READ ONLY");
+}
+static void refresh_save_slots(void) {
+  for (int i=0;i<5;i++) {
+    const char *path=slot_path(i);
+    slot_valid[i]=path && savegame_inspect(path,levels,levels_loaded,&slot_info[i]);
+  }
+}
 
 static void act_sound(void) {
   audio_set_enabled(!audio_enabled());
@@ -316,13 +453,15 @@ static void act_quit_to_menu(void) {
 static const MenuItem MAIN_MENU_FULL[] = {
     {label_continue, act_continue}, {label_new_game, act_new_game}, {label_load_game, act_load_game},
     {label_controls, act_controls}, {label_sound, act_sound},       {label_fullscreen, act_fullscreen},
-    {label_quit, act_quit},
+    {label_options,act_options}, {label_slots,act_slots}, {label_quit, act_quit},
 };
 
 static const MenuItem PAUSE_MENU[] = {
     {label_resume, act_resume},
     {label_save_game, act_save_game},
     {label_load_game, act_load_game},
+    {label_slots,act_slots},
+    {label_options,act_options},
     {label_sound, act_sound},
     {label_fullscreen, act_fullscreen},
     {label_quit_to_menu, act_quit_to_menu},
@@ -436,6 +575,25 @@ static void handle_state_key(SDL_Scancode sc) {
   }
 
   switch (state) {
+  case ST_OPTIONS:
+    if (esc) { set_state(options_return); save_preferences(); }
+    else if (sc==SDL_SCANCODE_TAB) { options_page=(options_page+1)%4; options_row=0; blip(); }
+    else if (sc==SDL_SCANCODE_UP || sc==SDL_SCANCODE_DOWN) options_row=menu_nav(sc,option_rows(),options_row);
+    else if (sc==SDL_SCANCODE_LEFT || sc==SDL_SCANCODE_RIGHT || enter) adjust_option(sc==SDL_SCANCODE_LEFT?-1:1);
+    break;
+  case ST_BINDINGS:
+    if (esc) { if (binding_wait) binding_wait=false; else set_state(ST_OPTIONS); }
+    else if (sc==SDL_SCANCODE_UP || sc==SDL_SCANCODE_DOWN) binding_row=menu_nav(sc,ACTION_COUNT,binding_row);
+    else if (enter) { binding_wait=true; blip(); }
+    break;
+  case ST_SLOTS:
+    if (esc) set_state(slots_return);
+    else if (sc==SDL_SCANCODE_UP || sc==SDL_SCANCODE_DOWN) slot_row=menu_nav(sc,5,slot_row);
+    else if (sc==SDL_SCANCODE_LEFT || sc==SDL_SCANCODE_RIGHT) {
+      if (game && !game->player_dead && !game->completed) slot_save_mode=!slot_save_mode;
+      else slot_save_mode=false;
+    } else if (enter) activate_slot();
+    break;
   case ST_MENU: {
     Menu m = main_menu();
     main_menu_index = menu_nav(sc, m.count, main_menu_index);
@@ -482,6 +640,7 @@ static void handle_state_key(SDL_Scancode sc) {
     break;
   case ST_PLAYING:
     if (esc) {
+      if (game->campaign.journal) { game->campaign.journal=false; clear_input(); return; }
       set_state(ST_PAUSED);
       pause_menu_index = 0;
       capture_mouse(false);
@@ -527,7 +686,22 @@ static void handle_state_key(SDL_Scancode sc) {
 }
 
 static void handle_state_click(float x, float y) {
-  if (story_state()) {
+  if (state==ST_OPTIONS) {
+    if (y>=83 && y<=108 && x>=40 && x<=600) { options_page=clampi((int)((x-40)/140),0,3); options_row=0; blip(); }
+    else if (y>=119 && y<119+option_rows()*36 && x>=70 && x<=570) {
+      options_row=(int)((y-119)/36);
+      if (options_page==2 || (options_page==3 && options_row>0)) adjust_option(1);
+      else if (x>=470) adjust_option(x<530?-1:1);
+    } else if (y>=359) { set_state(options_return); save_preferences(); }
+  } else if (state==ST_BINDINGS) {
+    if (y>=91 && y<91+ACTION_COUNT*19 && x>=65 && x<=575) { binding_row=(int)((y-91)/19); binding_wait=true; }
+    else if (y>=359) { binding_wait=false; set_state(ST_OPTIONS); }
+  } else if (state==ST_SLOTS) {
+    if (y>=112 && y<112+5*39 && x>=65 && x<=575) { slot_row=(int)((y-112)/39); activate_slot(); }
+    else if (y>=83 && y<=108) {
+      slot_save_mode=x>320 && game && !game->player_dead && !game->completed;
+    } else if (y>=359) set_state(slots_return);
+  } else if (story_state()) {
     if (!input_focused) return;
     if (x >= 520 && x <= 627 && y >= 368 && y <= 394) finish_story();
     else advance_story();
@@ -559,7 +733,15 @@ static void handle_state_click(float x, float y) {
 
 static void handle_state_hover(float x, float y) {
   int hit = -1;
-  if (state == ST_MENU) {
+  if (state==ST_OPTIONS) {
+    if (x>=70 && x<=570 && y>=119 && y<119+option_rows()*36) { hit=(int)((y-119)/36); options_row=hit; }
+    else if (x>=40 && x<=600 && y>=83 && y<=108) hit=0;
+  } else if (state==ST_BINDINGS) {
+    if (!binding_wait && x>=65 && x<=575 && y>=91 && y<91+ACTION_COUNT*19) { hit=(int)((y-91)/19); binding_row=hit; }
+  } else if (state==ST_SLOTS) {
+    if (x>=65 && x<=575 && y>=112 && y<112+5*39) { hit=(int)((y-112)/39); slot_row=hit; }
+    else if (y>=83 && y<=108) hit=0;
+  } else if (state == ST_MENU) {
     hit = menu_hit_test(main_menu(), MAIN_MENU_SPAN, x, y);
     if (hit >= 0 && hit != main_menu_index) {
       main_menu_index = hit;
@@ -646,12 +828,18 @@ static void cycle_weapon(int direction) {
 
 static void on_gamepad_button(SDL_GamepadButton button) {
   gamepad_active = true;
+  if (state==ST_OPTIONS && (button==SDL_GAMEPAD_BUTTON_LEFT_SHOULDER || button==SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) {
+    options_page=(options_page+(button==SDL_GAMEPAD_BUTTON_LEFT_SHOULDER?3:1))%4; options_row=0; blip(); return;
+  }
+  if ((state==ST_OPTIONS || state==ST_SLOTS) && (button==SDL_GAMEPAD_BUTTON_DPAD_LEFT || button==SDL_GAMEPAD_BUTTON_DPAD_RIGHT)) {
+    handle_state_key(button==SDL_GAMEPAD_BUTTON_DPAD_LEFT?SDL_SCANCODE_LEFT:SDL_SCANCODE_RIGHT); return;
+  }
   if (button == SDL_GAMEPAD_BUTTON_START) {
-    handle_state_key(state == ST_PLAYING || state == ST_PAUSED ? SDL_SCANCODE_ESCAPE : SDL_SCANCODE_RETURN);
+    handle_state_key(state == ST_PLAYING || state == ST_PAUSED || state==ST_OPTIONS || state==ST_BINDINGS || state==ST_SLOTS ? SDL_SCANCODE_ESCAPE : SDL_SCANCODE_RETURN);
   } else if (state != ST_PLAYING) {
     if (button == SDL_GAMEPAD_BUTTON_SOUTH) handle_state_key(SDL_SCANCODE_RETURN);
     if (button == SDL_GAMEPAD_BUTTON_EAST) handle_state_key(SDL_SCANCODE_ESCAPE);
-    if ((state == ST_MENU || state == ST_DIFFICULTY || state == ST_PAUSED) &&
+    if ((state == ST_MENU || state == ST_DIFFICULTY || state == ST_PAUSED || state==ST_OPTIONS || state==ST_BINDINGS || state==ST_SLOTS) &&
         (button == SDL_GAMEPAD_BUTTON_DPAD_UP || button == SDL_GAMEPAD_BUTTON_DPAD_DOWN)) {
       // Handle the press immediately so a following confirm in the same frame
       // selects the new item. Polling below supplies only the held repeats.
@@ -661,6 +849,13 @@ static void on_gamepad_button(SDL_GamepadButton button) {
       handle_state_key(gamepad_menu_direction < 0 ? SDL_SCANCODE_UP : SDL_SCANCODE_DOWN);
     }
   } else {
+    if (game->campaign.journal) {
+      if (button==SDL_GAMEPAD_BUTTON_EAST || button==SDL_GAMEPAD_BUTTON_SOUTH || button==SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
+        game->campaign.journal=false;
+      if (button==SDL_GAMEPAD_BUTTON_LEFT_SHOULDER || button==SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)
+        game->campaign.journal_page=1-game->campaign.journal_page;
+      clear_input(); return;
+    }
     switch (button) {
     case SDL_GAMEPAD_BUTTON_SOUTH: input.use = true; break;
     case SDL_GAMEPAD_BUTTON_NORTH:
@@ -670,6 +865,15 @@ static void on_gamepad_button(SDL_GamepadButton button) {
       break;
     case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: cycle_weapon(-1); break;
     case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: cycle_weapon(1); break;
+    case SDL_GAMEPAD_BUTTON_WEST:
+      if (game->horror.reading<0 && !game->show_map) campaign_throw_decoy(game);
+      break;
+    case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+      if (game->horror.reading<0 && !game->show_map) campaign_brace_door(game);
+      break;
+    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+      if (game->horror.reading<0) { game->campaign.journal=true; game->show_map=false; clear_input(); }
+      break;
     default: break;
     }
   }
@@ -679,7 +883,7 @@ static void update_gamepad(float dt) {
   if (!gamepad || !input_focused) return;
   // A held trigger must be released after a pause, load or state change.
   if (!gamepad_firing()) gamepad_fire_ready = true;
-  if (state != ST_MENU && state != ST_DIFFICULTY && state != ST_PAUSED) return;
+  if (state != ST_MENU && state != ST_DIFFICULTY && state != ST_PAUSED && state!=ST_OPTIONS && state!=ST_BINDINGS && state!=ST_SLOTS) return;
   float y = gamepad_axis(SDL_GAMEPAD_AXIS_LEFTY);
   bool up = y < -0.55f || SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP);
   bool down = y > 0.55f || SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
@@ -714,39 +918,57 @@ static void apply_gamepad(Input *frame) {
 }
 
 static bool *key_binding(SDL_Scancode sc) {
+  switch (preferences_action_for_key(sc)) {
+  case ACTION_FORWARD: return &input.forward;
+  case ACTION_BACK: return &input.back;
+  case ACTION_LEFT: return &input.strafe_left;
+  case ACTION_RIGHT: return &input.strafe_right;
+  case ACTION_FIRE: return &input.fire;
+  case ACTION_RUN: return &input.run;
+  default: break;
+  }
   switch (sc) {
-  case SDL_SCANCODE_W:
   case SDL_SCANCODE_UP: return &input.forward;
-  case SDL_SCANCODE_S:
   case SDL_SCANCODE_DOWN: return &input.back;
-  case SDL_SCANCODE_A: return &input.strafe_left;
-  case SDL_SCANCODE_D: return &input.strafe_right;
   case SDL_SCANCODE_LEFT: return &input.turn_left;
   case SDL_SCANCODE_RIGHT: return &input.turn_right;
-  case SDL_SCANCODE_LSHIFT:
-  case SDL_SCANCODE_RSHIFT: return &input.run;
   case SDL_SCANCODE_LALT:
   case SDL_SCANCODE_RALT: return &input.strafe_mod;
   case SDL_SCANCODE_LCTRL:
-  case SDL_SCANCODE_RCTRL:
-  case SDL_SCANCODE_J: return &input.fire;
+  case SDL_SCANCODE_RCTRL: return &input.fire;
   default: return NULL;
   }
 }
 
 static void on_key_down(SDL_Scancode sc) {
   gamepad_active = false;
-  if (sc == SDL_SCANCODE_F5 && (state == ST_PLAYING || state == ST_PAUSED)) {
-    act_save_game();
+  int action=preferences_action_for_key(sc);
+  if (state==ST_BINDINGS && binding_wait) {
+    if (sc==SDL_SCANCODE_ESCAPE) { binding_wait=false; return; }
+    if (preferences_bind((KeyAction)binding_row,sc)) { binding_wait=false; blip(); }
+    else notify_save("THIS KEY IS RESERVED - CHOOSE ANOTHER");
     return;
   }
+  if (sc == SDL_SCANCODE_F5 && (state == ST_PLAYING || state == ST_PAUSED)) {
+    act_save_game(); return;
+  }
   if (sc == SDL_SCANCODE_F9 && state != ST_LOADING && state != ST_ERROR && state != ST_QUIT) {
-    act_load_game();
-    return;
+    act_load_game(); return;
+  }
+  if (state==ST_PLAYING && game && game->campaign.journal) {
+    if (sc==SDL_SCANCODE_LEFT || sc==SDL_SCANCODE_RIGHT) game->campaign.journal_page=1-game->campaign.journal_page;
+    if (action==ACTION_JOURNAL || sc==SDL_SCANCODE_ESCAPE || sc==SDL_SCANCODE_RETURN || sc==SDL_SCANCODE_SPACE)
+      game->campaign.journal=false;
+    clear_input(); return;
+  }
+  if (state==ST_PLAYING && game && game->horror.reading<0) {
+    if (action==ACTION_JOURNAL) { game->campaign.journal=true; game->show_map=false; clear_input(); return; }
+    if (action==ACTION_DECOY && !game->show_map) { campaign_throw_decoy(game); return; }
+    if (action==ACTION_BRACE && !game->show_map) { campaign_brace_door(game); return; }
   }
   bool *b = key_binding(sc);
   if (b) *b = true;
-  if (sc == SDL_SCANCODE_E || sc == SDL_SCANCODE_SPACE) input.use = true;
+  if (action==ACTION_USE || sc == SDL_SCANCODE_SPACE) input.use = true;
   if (sc == SDL_SCANCODE_1) input.weapon = WEAPON_DAGGER;
   if (sc == SDL_SCANCODE_2) input.weapon = WEAPON_CROSSBOW;
   if (sc == SDL_SCANCODE_3) input.weapon = WEAPON_ARBALEST;
@@ -755,7 +977,7 @@ static void on_key_down(SDL_Scancode sc) {
     if (game) game_say(game, audio_enabled() ? "SOUND ON" : "SOUND OFF", 1.2f);
   }
   if (sc == SDL_SCANCODE_F) toggle_fullscreen();
-  if (sc == SDL_SCANCODE_TAB && game && state == ST_PLAYING && game->horror.reading < 0) game->show_map = !game->show_map;
+  if (action==ACTION_MAP && game && state == ST_PLAYING && game->horror.reading < 0) game->show_map = !game->show_map;
   handle_state_key(sc);
 }
 
@@ -804,6 +1026,7 @@ static void handle_event(const SDL_Event *e) {
     if (e->button.button != SDL_BUTTON_LEFT) break;
     gamepad_active = false;
     if (state == ST_PLAYING) {
+      if (game->campaign.journal) break;
       if (!mouse_captured()) capture_mouse(true);
       input.fire = true;
     } else {
@@ -833,6 +1056,21 @@ static void handle_event(const SDL_Event *e) {
 
 static void update(float dt) {
   notice_timer = maxf(0, notice_timer - dt);
+  bool music_active=state==ST_PLAYING && input_focused && game && !game->player_dead &&
+    !game->campaign.journal && game->horror.reading<0 && !game->show_map;
+  float danger=0;
+  if (music_active) {
+    for (int i=0;i<game->enemy_count;i++) {
+      const Enemy *e=&game->enemies[i];
+      if (!enemy_dead(e) && e->state>=ES_CHASE && e->state<=ES_PAIN &&
+          hypotf(e->x-game->player.x,e->y-game->player.y)<7 &&
+          game_line_of_sight(game,e->x,e->y,game->player.x,game->player.y)) { combat_music_tail=5; break; }
+    }
+    combat_music_tail=maxf(0,combat_music_tail-dt);
+    danger=maxf(game->horror.tension,combat_music_tail>0?.85f:0);
+  }
+  bool shelter=music_active && combat_music_tail<=0 && horror_in_haven(game,game->player.x,game->player.y);
+  audio_set_scene(game?game->level_index:0,danger,shelter,music_active);
   if (story_state() && input_focused) {
     int previous = comic.panel;
     if (comic_update(&comic, dt)) finish_story();
@@ -844,7 +1082,19 @@ static void update(float dt) {
   if (state != ST_PLAYING) return;
   Input frame = input;
   apply_gamepad(&frame);
+  game->controller_input=gamepad && gamepad_active;
+  if (game->controller_input) {
+    snprintf(game->controller_use,sizeof game->controller_use,"%s",gamepad_button_name(SDL_GAMEPAD_BUTTON_SOUTH));
+    snprintf(game->controller_decoy,sizeof game->controller_decoy,"%s",gamepad_button_name(SDL_GAMEPAD_BUTTON_WEST));
+  }
+  if (frame.use && safe_to_autosave()) {
+    int station=campaign_near_station(game);
+    if (station>=0 && game->level->campaign.stations[station].kind==MECHANISM_OATH && game->player.keys>=3 &&
+        (game->campaign.done&game->level->campaign.stations[station].requires)==(uint32_t)game->level->campaign.stations[station].requires)
+      checkpoint_game();
+  }
   game_update(game, dt, &frame);
+  if (!game->campaign.journal && game->horror.reading<0) autosave_game(dt);
   input.use = frame.use;
   input.weapon = frame.weapon;
   input.mouse_dx = frame.mouse_dx;
@@ -853,7 +1103,7 @@ static void update(float dt) {
     death_delay += dt;
     if (death_delay > 1.4f) {
       death_delay = 0;
-      session.lives--;
+      if (session.arcade || !game->level->campaign.enabled) session.lives--;
       capture_mouse(false);
       if (session.lives <= 0) {
         audio_play(SND_GAME_OVER, 1, 1);
@@ -1035,7 +1285,7 @@ static void draw_difficulty(void) {
     ui_rule(fb, 344, 241, 235);
     char buf[80];
     const DifficultySettings *settings = game_difficulty_settings(DIFFICULTY_CHOICES[i]);
-    snprintf(buf, sizeof buf, "%d STARTING BOLTS  /  THREE LIVES", (int)round_half_up(16 * settings->ammo));
+    snprintf(buf, sizeof buf, "%d STARTING BOLTS  /  %s", (int)round_half_up(16 * settings->ammo),preferences_get()->arcade?"THREE LIVES":"STORY CHECKPOINTS");
     text_align(buf, 344, 274, 9, "#b5a07b", ALIGN_LEFT);
   } else {
     text("RETURN TO THE MAIN MENU", 462, 223, 13, "#d5c7ac");
@@ -1049,16 +1299,25 @@ static void draw_controls(void) {
   gfx_fill_rect(fb, 0, 0, W, H, rgba(3, 8, 13, .77f));
   title_text("CONTROLS", W / 2.0f, 70, 36, "#d8bd87");
   ui_panel(fb, 32, 95, 576, 242);
-  static const char *keyboard_controls[][2] = {
-      {"W A S D / ARROWS", "move & turn"},
+  char movement[80],fire[48],use_key[40],run_key[40],map_journal[80],tools[80];
+  Preferences *p=preferences_get();
+  snprintf(movement,sizeof movement,"%s %s %s %s / ARROWS",SDL_GetScancodeName(p->keys[ACTION_FORWARD]),SDL_GetScancodeName(p->keys[ACTION_LEFT]),SDL_GetScancodeName(p->keys[ACTION_BACK]),SDL_GetScancodeName(p->keys[ACTION_RIGHT]));
+  snprintf(fire,sizeof fire,"CTRL / %s",SDL_GetScancodeName(p->keys[ACTION_FIRE]));
+  snprintf(use_key,sizeof use_key,"%s / SPACE",SDL_GetScancodeName(p->keys[ACTION_USE]));
+  snprintf(run_key,sizeof run_key,"%s",SDL_GetScancodeName(p->keys[ACTION_RUN]));
+  snprintf(map_journal,sizeof map_journal,"%s / %s",SDL_GetScancodeName(p->keys[ACTION_MAP]),SDL_GetScancodeName(p->keys[ACTION_JOURNAL]));
+  snprintf(tools,sizeof tools,"%s / %s",SDL_GetScancodeName(p->keys[ACTION_DECOY]),SDL_GetScancodeName(p->keys[ACTION_BRACE]));
+  const char *keyboard_controls[][2] = {
+      {movement, "move & turn"},
       {"MOUSE (CLICK VIEW)", "turn & shoot"},
-      {"CTRL / J", "shoot"},
-      {"E / SPACE", "doors, levers, gate, read / close notes"},
+      {fire, "shoot"},
+      {use_key, "use, speak, read / close notes"},
       {"1 / 2 / 3", "dagger, crossbow, repeater"},
-      {"SHIFT / TAB / M", "run / map / sound"},
-      {"F", "fullscreen"},
+      {run_key, "run"},
+      {map_journal, "automap / field journal"},
+      {tools,"throw decoy / brace closed door"},
       {"F5 / F9", "save / load game"},
-      {"ESC", "pause menu"},
+      {"ESC / F / M", "pause / fullscreen / sound"},
   };
   char use[32], map[48];
   if (gamepad) {
@@ -1072,14 +1331,15 @@ static void draw_controls(void) {
       {use, "doors, levers, gate, read / close notes"},
       {"LB / RB (L1 / R1)", "previous / next weapon"},
       {"LT / L2 / L3", "run (hold)"},
-      {map, "map"},
+      {map, "automap"},
+      {"X / SQUARE", "throw a noise decoy"},
+      {"D-PAD LEFT / RIGHT", "brace door / field journal"},
       {"START / OPTIONS", "pause, save & load"},
-      {"D-PAD / LEFT STICK", "select menu item"},
   };
   const char *(*controls)[2] = gamepad && gamepad_active ? pad_controls : keyboard_controls;
   for (int i = 0; i < (int)(sizeof keyboard_controls / sizeof keyboard_controls[0]); i++) {
-    float y = 121.0f + i * 25;
-    if (i % 2 == 0) gfx_fill_rect(fb, 40, y - 17, 560, 24, rgba(102, 126, 141, .045f));
+    float y = 117.0f + i * 23;
+    if (i % 2 == 0) gfx_fill_rect(fb, 40, y - 17, 560, 22, rgba(102, 126, 141, .045f));
     text_align(controls[i][0], 50, y, 10, "#c3ab80", ALIGN_LEFT);
     font_draw(fb, controls[i][1], 249, y, 12, FONT_REGULAR, ALIGN_LEFT, rgb(196, 202, 199));
   }
@@ -1111,7 +1371,7 @@ static void draw_level_start(void) {
             rgb(179, 190, 193));
   if (game->level->world.destination[0])
     font_draw(fb, game->level->world.destination, W / 2, 239, 10, FONT_REGULAR, ALIGN_CENTER, rgb(155, 170, 173));
-  snprintf(buf, sizeof buf, "%d LIVES    /    %06d SCORE    /    %s", session.lives, session.score,
+  snprintf(buf, sizeof buf, "%s    /    %06d SCORE    /    %s", session.arcade?"ARCADE - THREE LIVES":"STORY - SAFE CHECKPOINTS", session.score,
            game_difficulty_settings(session.difficulty)->name);
   text(buf, W / 2, 258, 10, "#b5a17c");
   ui_panel(fb, 219, 291, 202, 32);
@@ -1147,9 +1407,11 @@ static void draw_died_overlay(void) {
   title_text("YOU HAVE FALLEN", W / 2, 132, 28, "#ddc4a9");
   ui_rule(fb, 175, 151, 290);
   char lives[48];
-  snprintf(lives, sizeof lives, "%d LIVES REMAIN", session.lives);
+  if (session.arcade) snprintf(lives, sizeof lives, "%d LIVES REMAIN", session.lives);
+  else snprintf(lives,sizeof lives,"RETURN TO YOUR SAFE CHECKPOINT");
   text(lives, W / 2, 181, 12, "#a9b5b7");
-  control_hint("ENTER  /  TRY THIS CHAPTER AGAIN", "%s  /  TRY THIS CHAPTER AGAIN", 224, 12, "#d4bd96");
+  control_hint(session.arcade?"ENTER  /  TRY THIS CHAPTER AGAIN":"ENTER  /  RETURN TO SAFE SAVE",
+    session.arcade?"%s  /  TRY THIS CHAPTER AGAIN":"%s  /  RETURN TO SAFE SAVE",224,12,"#d4bd96");
 }
 
 static void stat_rows(const char *rows[][2], int n, float y0, float step, float size) {
@@ -1210,15 +1472,84 @@ static void draw_victory(void) {
   snprintf(treasure, sizeof treasure, "%d/%d  (%d%%)", session.total_treasure, session.max_treasure,
            percent(session.total_treasure, session.max_treasure));
   snprintf(secrets, sizeof secrets, "%d/%d", session.total_secrets_found, session.max_secrets);
-  snprintf(lives, sizeof lives, "%d", session.lives);
+  if (session.arcade) snprintf(lives, sizeof lives, "%d", session.lives);
+  else snprintf(lives,sizeof lives,"STORY");
   snprintf(score, sizeof score, "%d", session.score);
   const char *rows[][2] = {{"TOTAL TIME", time},  {"KILLS", kills},      {"TREASURE", treasure},
-                           {"SECRETS", secrets}, {"LIVES LEFT", lives}, {"FINAL SCORE", score}};
+                           {"SECRETS", secrets}, {session.arcade?"LIVES LEFT":"RULES", lives}, {"FINAL SCORE", score}};
   stat_rows(rows, 6, 150, 26, 13);
 
   control_hint("ENTER  /  MAIN MENU", "%s  /  MAIN MENU", 337, 12, "#d8c098");
 }
 
+static void options_card(const char *title) {
+  menu_background();
+  gfx_fill_rect(fb,0,0,W,H,rgba(2,7,12,.86f));
+  ui_panel(fb,30,24,580,349);
+  title_text(title,W/2,65,25,"#e8dcc4");
+}
+static void draw_options(void) {
+  options_card("OPTIONS");
+  const char *tabs[]={"DISPLAY","SOUND","GAMEPLAY","CONTROLS"};
+  for (int i=0;i<4;i++) {
+    if (options_page==i) gfx_fill_rect(fb,40+i*140,83,140,25,rgba(141,113,67,.28f));
+    text(tabs[i],110+i*140,100,11,options_page==i?"#e4c78e":"#82969e");
+  }
+  Preferences *p=preferences_get();
+  const char *labels[4][4]={{"BRIGHTNESS","WEAPON MOVEMENT","CAMERA SHAKE","READING TEXT"},
+    {"SOUND EFFECTS","MUSIC"},{"CONTEXTUAL HINTS","AUTOMATIC SAVING","NEW GAME RULES"},
+    {"MOUSE SENSITIVITY","KEYBOARD BINDINGS","RESET ALL OPTIONS"}};
+  int numbers[4][4]={{p->brightness,p->bob,p->shake,p->text},{p->effects,p->music},{0,0,0},{p->sensitivity,0,0}};
+  for (int i=0;i<option_rows();i++) {
+    float y=141+i*36;
+    if (i==options_row) { gfx_fill_rect(fb,62,y-22,516,32,rgba(139,116,75,.2f)); gfx_fill_rect(fb,62,y-22,2,32,rgb(193,165,112)); }
+    font_draw(fb,labels[options_page][i],77,y,13,FONT_BOLD,ALIGN_LEFT,rgb(196,206,205));
+    char value[64];
+    if (options_page==2) snprintf(value,sizeof value,"%s",i==0?(p->tutorials?"ON":"OFF"):i==1?(p->autosave?"ON":"OFF"):(p->arcade?"ARCADE":"STORY"));
+    else if (options_page==3 && i>0) snprintf(value,sizeof value,"%s",i==1?"CHANGE":"RESTORE");
+    else snprintf(value,sizeof value,"<  %d%%  >",numbers[options_page][i]);
+    text_align(value,557,y,13,"#d7bc86",ALIGN_RIGHT);
+  }
+  const char *desc=options_page==0?"Reading text affects notes and conversations. Preview:":
+    options_page==1?"Music follows exploration, danger and the silence of refuges.":
+    options_page==2?"Story: retry a safe save. Arcade: three lives and fresh equipment.":
+    "Choose a binding, then press its new key. Conflicting bindings swap.";
+  font_draw(fb,desc,W/2,300,10,FONT_REGULAR,ALIGN_CENTER,rgb(148,168,172));
+  if (options_page==0) font_draw(fb,"The white candles remember your name.",W/2,328,13*p->text/100.0f,FONT_REGULAR,ALIGN_CENTER,rgb(218,208,182));
+  font_draw(fb,"TAB / SHOULDERS: SECTION   UP / DOWN: SELECT   LEFT / RIGHT: CHANGE",W/2,350,8,FONT_BOLD,ALIGN_CENTER,rgb(173,185,186));
+  font_draw(fb,"ESC / BACK - SAVE OPTIONS AND RETURN",W/2,366,9,FONT_BOLD,ALIGN_CENTER,rgb(209,188,146));
+}
+static void draw_bindings(void) {
+  options_card("KEYBOARD BINDINGS");
+  for (int i=0;i<ACTION_COUNT;i++) {
+    float y=106+i*19;
+    if (i==binding_row) gfx_fill_rect(fb,62,y-15,516,19,rgba(141,113,67,.25f));
+    text_align(preferences_action_name((KeyAction)i),76,y,11,"#c0cccb",ALIGN_LEFT);
+    const char *key=binding_wait && i==binding_row?"PRESS A KEY...":SDL_GetScancodeName((SDL_Scancode)preferences_get()->keys[i]);
+    text_align(key,559,y,11,"#dcc18b",ALIGN_RIGHT);
+  }
+  font_draw(fb,"Arrows, Ctrl, Space, 1-3, F5/F9, F and M remain reserved shortcuts.",W/2,329,9,FONT_REGULAR,ALIGN_CENTER,rgb(144,165,171));
+  font_draw(fb,"SELECT / CLICK A ROW TO REBIND    -    ESC / BACK TO RETURN",W/2,366,9,FONT_BOLD,ALIGN_CENTER,rgb(209,188,146));
+}
+static void draw_slots(void) {
+  options_card("SAVED JOURNEYS");
+  text("<  LOAD",225,101,12,slot_save_mode?"#82969e":"#e4c78e");
+  text("SAVE  >",415,101,12,slot_save_mode?"#e4c78e":"#82969e");
+  for (int i=0;i<5;i++) {
+    float y=132+i*39;
+    if (i==slot_row) { gfx_fill_rect(fb,62,y-20,516,37,rgba(139,116,75,.23f)); gfx_fill_rect(fb,62,y-20,2,37,rgb(193,165,112)); }
+    char title[64]; snprintf(title,sizeof title,i<3?"MANUAL SLOT %d":i==3?"AUTOSAVE":"CHAPTER CHECKPOINT",i+1);
+    text_align(title,76,y,11,"#d9c18f",ALIGN_LEFT);
+    if (slot_valid[i]) {
+      SaveInfo *info=&slot_info[i]; char details[80];
+      snprintf(details,sizeof details,"%s - %d HP / %d BOLTS",game_difficulty_settings(info->difficulty)->name,info->health,info->ammo);
+      text_align(levels[info->level].name,558,y-2,10,"#c1cece",ALIGN_RIGHT);
+      text_align(details,558,y+11,8,"#8aa0a7",ALIGN_RIGHT);
+    } else text_align("EMPTY OR INCOMPATIBLE",558,y+4,9,"#81939b",ALIGN_RIGHT);
+  }
+  font_draw(fb,"F5 SAVES TO THE SELECTED MANUAL SLOT. F9 LOADS IT.",W/2,335,9,FONT_REGULAR,ALIGN_CENTER,rgb(148,168,172));
+  font_draw(fb,"LEFT / RIGHT: LOAD OR SAVE    ENTER: SELECT    ESC / BACK: RETURN",W/2,366,8,FONT_BOLD,ALIGN_CENTER,rgb(209,188,146));
+}
 static void render(void) {
   switch (state) {
   case ST_LOADING: draw_center_screen("#101018", "LOADING..."); break;
@@ -1228,6 +1559,9 @@ static void render(void) {
   case ST_MENU: draw_main_menu(); break;
   case ST_DIFFICULTY: draw_difficulty(); break;
   case ST_CONTROLS: draw_controls(); break;
+  case ST_OPTIONS: draw_options(); break;
+  case ST_BINDINGS: draw_bindings(); break;
+  case ST_SLOTS: draw_slots(); break;
   case ST_QUIT: draw_quit(); break;
   case ST_LEVEL_START: draw_level_start(); break;
   case ST_PLAYING:
@@ -1308,6 +1642,10 @@ int main(int argc, char **argv) {
     SDL_Log("SDL_Init failed: %s", SDL_GetError());
     return 1;
   }
+  char *options_path=user_file("options.cfg");
+  if (options_path) preferences_load(options_path);
+  free(options_path);
+  audio_set_mix(preferences_get()->effects,preferences_get()->music);
   find_gamepad();
   if (!SDL_CreateWindowAndRenderer("Fortress", W * 2, H * 2, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY,
                                    &window, &sdl_renderer)) {
@@ -1372,6 +1710,8 @@ int main(int argc, char **argv) {
 
   game_destroy(game);
   free(save_path);
+  for (int i=0;i<2;i++) free(manual_paths[i]);
+  free(automatic_path); free(checkpoint_path);
   for (int i = 0; i < levels_loaded; i++) level_free(&levels[i]);
   renderer_free(&renderer);
   assets_free(&assets);

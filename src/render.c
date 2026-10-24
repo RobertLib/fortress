@@ -3,6 +3,8 @@
 // Torchlit atmosphere: everything fades into darkness with distance.
 
 #include "render.h"
+#include "preferences.h"
+#include <SDL3/SDL.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +19,10 @@
 #define NEAR_PLANE 0.05f
 
 static const Color FOG = {9, 15, 21, 1}; // the darkness everything sinks into
+static Color chapter_fog(const Game *g) {
+  static const Color colors[]={{10,17,25,1},{14,21,30,1},{10,23,20,1},{19,23,27,1},{23,19,27,1}};
+  return g->level->campaign.enabled?colors[clampi(g->level_index,0,4)]:FOG;
+}
 
 static float fog_amount(float dist) { return minf(0.88f, maxf(0, (dist - 1.4f) / 13)); }
 
@@ -41,6 +47,7 @@ static const HangingSpec HANGING_SPECS[HANG_KIND_COUNT] = {
     [HANG_SWORD] = {0.3f, 0.9f, 0.03f},    [HANG_SHIELD] = {0.35f, 0.85f, 0.03f},
     [HANG_CHAIN] = {0.22f, 0.92f, 0.03f},  [HANG_PORTRAIT] = {0.32f, 0.84f, 0.03f},
     [HANG_COBWEB] = {0.55f, 1, 0.02f},     [HANG_CRACK] = {0, 1, 0.02f},
+    [HANG_GLASS_WINDOW]={.65f,2.85f,.025f}, [HANG_SHUTTER_WINDOW]={.5f,1.6f,.025f},
 };
 
 // distance buckets for pre-darkened sprite variants
@@ -114,7 +121,8 @@ static Tint surface_tint(const Game *g, float x, float y, float dist) {
   if (glow > 0.02f) tint_add(&t, 255, 214, 92, minf(0.1f, glow * 0.1f));
   bool outside = world_outside(g->level, (int)floorf(x), (int)floorf(y));
   float fog = maxf(0, (outside ? minf(.84f, maxf(0, (dist - 3) / 27)) : fog_amount(dist)) - light * 0.42f - glow * 0.3f);
-  if (fog > 0.02f) tint_add(&t, FOG.r, FOG.g, FOG.b, fog);
+  Color fog_color=chapter_fog(g);
+  if (fog > 0.02f) tint_add(&t, fog_color.r, fog_color.g, fog_color.b, fog);
   if (outside) {
     t.k *= .88f;
     tint_add(&t, 32, 48, 57, .09f);
@@ -1237,6 +1245,36 @@ static void collect_sprites(Renderer *r, const Game *g) {
   const Player *p = &g->player;
   const Level *lv = g->level;
   sprite_count = 0;
+  const CampaignLayout *campaign=&lv->campaign;
+  for (int i=0;i<campaign->count;i++) {
+    const Mechanism *m=&campaign->stations[i];
+    const Image *img=m->kind==MECHANISM_GRAVE?as->decor[DECO_GRAVE]:
+      m->kind==MECHANISM_SEAL?as->hangings[HANG_SHIELD]:
+      as->mechanisms[m->kind==MECHANISM_VALVE?1:m->kind==MECHANISM_BELL || m->kind==MECHANISM_OATH?2:0];
+    float scale=m->kind==MECHANISM_SEAL?.38f:m->kind==MECHANISM_GRAVE?.65f:.88f;
+    add_sprite(m->x+.5f,m->y+.5f,img,scale);
+    if (!(g->campaign.done&(1u<<i))) {
+      Sprite *glint=add_sprite(m->x+.5f,m->y+.5f,as->sparkle,.12f);
+      glint->has_z=true; glint->z_center=.65f; glint->fullbright=true;
+      glint->alpha=.35f+.25f*sinf(g->time*2+i);
+    }
+  }
+  for (int i=0;i<campaign->relic_count;i++) if (!(g->campaign.relics_taken&(1u<<i))) {
+    const RelicSpawn *relic=&campaign->relics[i];
+    Sprite *s=add_sprite(relic->x+.5f,relic->y+.5f,as->items[ITEM_TREASURE],.28f);
+    s->has_z=true; s->z_center=.3f+sinf(g->time*2)*.025f;
+    s=add_sprite(relic->x+.5f,relic->y+.5f,as->sparkle,.23f);
+    s->fullbright=true; s->has_z=true; s->z_center=.35f; s->alpha=.6f;
+  }
+  if (campaign->errand.present && !g->campaign.errand_found)
+    add_sprite(campaign->errand.x+.5f,campaign->errand.y+.5f,as->horror_note,.35f);
+  if (g->campaign.decoy_timer>0)
+    add_sprite(g->campaign.decoy_x,g->campaign.decoy_y,as->items[ITEM_TREASURE],.18f);
+  if (g->impact_timer>0) {
+    Sprite *impact=add_sprite(g->impact_x,g->impact_y,g->impact_metal?as->sparkle:as->horror_traces[TRACE_BLOOD],.22f);
+    impact->has_z=true; impact->z_center=.45f; impact->fullbright=g->impact_metal;
+    impact->alpha=clampf(g->impact_timer/.12f,0,1);
+  }
   const HorrorLayout *h = &lv->horror;
   for (int i = 0; i < h->note_count; i++) {
     if (world_monk_note(lv, i)) continue;
@@ -1678,6 +1716,35 @@ static void render_embers(Renderer *r, Image *fb, const Game *g) {
   }
 }
 
+// Sparse world-anchored weather follows the saved clock and is occluded by
+// roofs and masonry. It is drawn before actors so warnings stay readable.
+static void render_estate_weather(Renderer *r,Image *fb,const Game *g) {
+  if (!g->level->campaign.enabled) return;
+  const Player *p=&g->player;
+  int px=(int)floorf(p->x),py=(int)floorf(p->y);
+  bool rain=g->level_index<2;
+  for (int cy=py-6;cy<=py+6;cy++) for (int cx=px-6;cx<=px+6;cx++) {
+    if (!world_outside(g->level,cx,cy) || !level_is_open(game_cell(g,cx,cy))) continue;
+    Lcg random=lcg((uint32_t)cx*374761393u+(uint32_t)cy*668265263u+5137u);
+    float age=fmodf(g->time*(rain?1.4f:.14f)+(float)lcg_next(&random),1);
+    float wx=cx+.15f+(float)lcg_next(&random)*.7f,wy=cy+.15f+(float)lcg_next(&random)*.7f;
+    if (!rain) { wx+=sinf(age*6+cx)*.1f; wy+=cosf(age*7+cy)*.1f; }
+    float sx=wx-p->x,sy=wy-p->y,k=inv_det(p);
+    float tx=k*(p->dir_y*sx-p->dir_x*sy),depth=k*(-p->plane_y*sx+p->plane_x*sy);
+    if (depth<.45f || depth>8) continue;
+    float z=level_floor(g->level,wx,wy)+(rain?2.8f:1.7f)*(1-age);
+    float x=W*.5f*(1+tx/depth),y=VIEW_H*.5f+(r->eye_z-z)*VIEW_H/depth;
+    int ix=(int)x,iy=(int)y;
+    if (ix<1 || ix>=W-1 || iy<1 || iy>=VIEW_H-12 || depth>r->depth[iy*W+ix]) continue;
+    float opacity=(1-depth/9)*(rain?.17f:.28f);
+    if (rain) gfx_line(fb,x,y,x-.6f, y+clampf(6/depth,1,10),.6f,rgba(140,166,178,opacity));
+    else {
+      Color color=g->level_index==4?rgba(201,177,148,opacity):rgba(156,119,64,opacity);
+      gfx_fill_rect(fb,x,y,clampf(1.7f/depth,.5f,2),.8f,color);
+    }
+  }
+}
+
 // ------------------------------------------------------------------ weapon
 
 static void render_weapon(Renderer *r, Image *fb, const Game *g) {
@@ -1686,12 +1753,25 @@ static void render_weapon(Renderer *r, Image *fb, const Game *g) {
   const float size = 258;
   float bob_x = sinf(p->bob_phase) * 10 * p->bob_amount;
   float bob_y = fabsf(cosf(p->bob_phase)) * 8 * p->bob_amount + 4;
+  float motion=preferences_get()->bob/100.0f;
+  bob_x*=motion; bob_y=(bob_y-4)*motion+4;
+  if (g->level->campaign.enabled && g->weapon_anim_timer>0) {
+    float phase=clampf(1-g->weapon_anim_timer/.42f,0,1);
+    float kick=sinf(minf(1,phase*4)*(float)M_PI);
+    bob_y+=(kick*9+sinf(phase*(float)M_PI)*15)*motion;
+    bob_x+=sinf(phase*(float)M_PI*2)*4*motion;
+  }
   gfx_blit(fb, img, 0, 0, (float)img->w, (float)img->h, W / 2.0f - size / 2 + bob_x, VIEW_H - size + 28 + bob_y, size,
            size, 1);
   // crosshair
   gfx_fill_rect(fb, W / 2.0f - 1, VIEW_H / 2.0f - 1, 2, 2, rgba(234, 223, 195, .8f));
   gfx_fill_rect(fb, W / 2.0f - 6, VIEW_H / 2.0f, 2, 1, rgba(0, 0, 0, .55f));
   gfx_fill_rect(fb, W / 2.0f + 4, VIEW_H / 2.0f, 2, 1, rgba(0, 0, 0, .55f));
+  if (g->hit_confirm>0) {
+    Color c=g->impact_metal?rgba(233,178,101,.9f):rgba(237,226,193,.9f);
+    for (int x=-1;x<=1;x+=2) for (int y=-1;y<=1;y+=2)
+      gfx_line(fb,W/2+x*4,VIEW_H/2+y*4,W/2+x*7,VIEW_H/2+y*7,1,c);
+  }
 }
 
 static void render_flashes(Image *fb, const Game *g) {
@@ -1703,11 +1783,22 @@ static void render_flashes(Image *fb, const Game *g) {
   if (g->pickup_flash > 0) gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(230, 200, 60, minf(0.3f, g->pickup_flash)));
   if (g->message[0] && g->message_timer > 0) {
     float a = minf(1, g->message_timer);
-    float tw = font_measure(g->message, 15, FONT_BOLD);
-    gfx_fill_rect(fb, W / 2.0f - tw / 2 - 12, 30, tw + 24, 26, rgba(12, 8, 4, 0.6f * a));
-    gfx_fill_rect(fb, W / 2.0f - tw / 2 - 12, 30, tw + 24, 1, rgba(201, 162, 74, 0.7f * a));
-    gfx_fill_rect(fb, W / 2.0f - tw / 2 - 12, 55, tw + 24, 1, rgba(201, 162, 74, 0.7f * a));
-    font_draw(fb, g->message, W / 2.0f, 48, 15, FONT_BOLD, ALIGN_CENTER, rgba(235, 215, 140, a));
+    char lines[2][96]={{0}}; snprintf(lines[0],sizeof lines[0],"%s",g->message);
+    int count=1;
+    if (font_measure(lines[0],14,FONT_BOLD)>556) {
+      char *cut=strrchr(lines[0],' ');
+      while (cut) {
+        *cut=0;
+        if (font_measure(lines[0],14,FONT_BOLD)<=556) break;
+        *cut=' '; char *previous=cut-1; while (previous>lines[0] && *previous!=' ') previous--;
+        cut=previous>lines[0]?previous:NULL;
+      }
+      if (cut) { snprintf(lines[1],sizeof lines[1],"%s",g->message+(cut-lines[0])+1); count=2; }
+    }
+    float tw=maxf(font_measure(lines[0],14,FONT_BOLD),font_measure(lines[1],14,FONT_BOLD));
+    gfx_fill_rect(fb,W/2.0f-tw/2-12,32,tw+24,24+20*(count-1),rgba(7,11,14,.86f*a));
+    gfx_fill_rect(fb,W/2.0f-tw/2-12,32,tw+24,1,rgba(201,162,74,.7f*a));
+    for (int i=0;i<count;i++) font_draw(fb,lines[i],W/2.0f,49+i*20,14,FONT_BOLD,ALIGN_CENTER,rgba(235,215,168,a));
   }
 }
 
@@ -1722,16 +1813,18 @@ static void render_horror_text(Renderer *r, Image *fb, const Game *g) {
     return;
   }
   gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(2, 5, 8, .78f));
-  gfx_fill_rect(fb, 61, 36, 520, 250, rgba(0, 0, 0, .6f));
-  gfx_blit(fb, r->assets->note_page, 0, 0, TEX, TEX, 58, 32, 520, 250, 1);
-  gfx_fill_rect(fb, 80, 79, 472, 1, rgb(135, 109, 76));
+  gfx_fill_rect(fb, 61, 20, 520, 292, rgba(0, 0, 0, .6f));
+  gfx_blit(fb, r->assets->note_page, 0, 0, TEX, TEX, 58, 16, 520, 292, 1);
+  gfx_fill_rect(fb, 80, 65, 472, 1, rgb(135, 109, 76));
   const Monk *monk = world_monk_note(g->level, index);
-  font_draw(fb, monk ? monk->name : "WORDS LEFT BEHIND", W / 2, 64, 18, FONT_BOLD, ALIGN_CENTER, rgb(92, 44, 34));
+  font_draw(fb, monk ? monk->name : "WORDS LEFT BEHIND", W / 2, 48, 18, FONT_BOLD, ALIGN_CENTER, rgb(92, 44, 34));
   // Word-wrap the short handwritten fragments; | starts a new paragraph.
-  const char *text = g->level->horror.notes[index].text;
+  const char *text = campaign_dialogue(g,index);
   char line[224] = {0};
   size_t len = 0;
-  float y = 105;
+  float y = 88;
+  float reading_size=14*preferences_get()->text/100.0f;
+  float line_height=reading_size*1.2f+2;
   for (const char *p = text;;) {
     while (*p == ' ') p++;
     const char *end = p;
@@ -1739,9 +1832,9 @@ static void render_horror_text(Renderer *r, Image *fb, const Game *g) {
     size_t word = (size_t)(end - p);
     char candidate[224];
     snprintf(candidate, sizeof candidate, "%s%s%.*s", line, len ? " " : "", (int)word, p);
-    if (len && font_measure(candidate, 14, FONT_REGULAR) > 466) {
-      font_draw(fb, line, 85, y, 14, FONT_REGULAR, ALIGN_LEFT, rgb(49, 40, 33));
-      y += 20;
+    if (len && font_measure(candidate, reading_size, FONT_REGULAR) > 466) {
+      font_draw(fb, line, 85, y, reading_size, FONT_REGULAR, ALIGN_LEFT, rgb(49, 40, 33));
+      y += line_height;
       len = 0; line[0] = 0;
     }
     if (word) {
@@ -1749,13 +1842,86 @@ static void render_horror_text(Renderer *r, Image *fb, const Game *g) {
       memcpy(line + len, p, word); len += word; line[len] = 0;
     }
     if (!*end || *end == '|') {
-      font_draw(fb, line, 85, y, 14, FONT_REGULAR, ALIGN_LEFT, rgb(49, 40, 33));
-      y += 26; len = 0; line[0] = 0;
+      font_draw(fb, line, 85, y, reading_size, FONT_REGULAR, ALIGN_LEFT, rgb(49, 40, 33));
+      y += line_height+5; len = 0; line[0] = 0;
       if (!*end) break;
     }
     p = end + 1;
   }
-  font_draw(fb, monk ? "USE - END CONVERSATION" : "USE - FOLD THE NOTE", W / 2, 263, 10, FONT_BOLD, ALIGN_CENTER, rgb(112, 72, 50));
+  font_draw(fb, monk ? "USE - END CONVERSATION" : "USE - FOLD THE NOTE", W / 2, 293, 10, FONT_BOLD, ALIGN_CENTER, rgb(112, 72, 50));
+}
+
+static void journal_line(Image *fb,const char *text,float y,Color color) {
+  float size=12;
+  float width=font_measure(text,size,FONT_REGULAR);
+  if (width>500) size*=500/width;
+  font_draw(fb,text,72,y,size,FONT_REGULAR,ALIGN_LEFT,color);
+}
+static void render_campaign_text(Image *fb,const Game *g) {
+  const CampaignLayout *c=&g->level->campaign;
+  const CampaignState *s=&g->campaign;
+  if (!c->enabled || g->horror.reading>=0 || g->player_dead) return;
+  Color ink=rgb(204,211,208),gold=rgb(210,184,128),muted=rgb(137,154,157);
+  if (!s->journal) {
+    int near=campaign_near_station(g);
+    if (near>=0) {
+      const Mechanism *m=&c->stations[near];
+      const char *label=(s->done&(1u<<near))?"MECHANISM RESTORED":m->name;
+      float width=font_measure(label,10,FONT_BOLD)+28;
+      gfx_fill_rect(fb,W/2-width/2,VIEW_H-47,width,33,rgba(4,10,14,.92f));
+      font_draw(fb,label,W/2,VIEW_H-31,10,FONT_BOLD,ALIGN_CENTER,gold);
+      char operation[64]; snprintf(operation,sizeof operation,"%s TO OPERATE",g->controller_input?(g->controller_use[0]?g->controller_use:"USE"):SDL_GetScancodeName(preferences_get()->keys[ACTION_USE]));
+      font_draw(fb,(s->done&(1u<<near))?"RECORDED IN YOUR JOURNAL":operation,W/2,VIEW_H-19,8,FONT_REGULAR,ALIGN_CENTER,ink);
+    }
+    if (s->active>=0) {
+      float progress=clampf(s->work/maxf(.01f,c->stations[s->active].duration),0,1);
+      gfx_fill_rect(fb,220,VIEW_H-60,200,4,rgba(40,51,56,.9f));
+      gfx_fill_rect(fb,220,VIEW_H-60,200*progress,4,gold);
+    }
+    char supplies[128];
+    if (g->controller_input) snprintf(supplies,sizeof supplies,"%s: DECOY %d   LEFT: BRACE %d   RIGHT: JOURNAL",g->controller_decoy[0]?g->controller_decoy:"USE",s->decoys,s->braces);
+    else snprintf(supplies,sizeof supplies,"%s: DECOY %d   %s: BRACE %d   %s: JOURNAL",
+      SDL_GetScancodeName(preferences_get()->keys[ACTION_DECOY]),s->decoys,
+      SDL_GetScancodeName(preferences_get()->keys[ACTION_BRACE]),s->braces,
+      SDL_GetScancodeName(preferences_get()->keys[ACTION_JOURNAL]));
+    font_draw(fb,supplies,W-15,18,8,FONT_REGULAR,ALIGN_RIGHT,muted);
+    return;
+  }
+  gfx_fill_rect(fb,0,0,W,VIEW_H,rgba(1,5,9,.92f));
+  ui_panel(fb,48,19,544,288);
+  font_draw(fb,"FIELD JOURNAL",W/2,50,21,FONT_BOLD,ALIGN_CENTER,gold);
+  font_draw(fb,s->journal_page?"DISCOVERIES & FIELDCRAFT":"CHAPTER OBJECTIVES",W/2,73,10,FONT_BOLD,ALIGN_CENTER,muted);
+  gfx_fill_rect(fb,70,84,500,1,rgba(169,145,94,.5f));
+  if (!s->journal_page) {
+    for (int i=0;i<c->count;i++) {
+      char text[64]; snprintf(text,sizeof text,"%s  %s",s->done&(1u<<i)?"DONE":"  - ",c->stations[i].name);
+      journal_line(fb,text,109+i*24,s->done&(1u<<i)?muted:ink);
+    }
+    float y=115+c->count*24;
+    char keys[80]; snprintf(keys,sizeof keys,"GATE KEYS: %d / 3    -    %s",g->player.keys,campaign_objective(g));
+    journal_line(fb,keys,y,gold);
+    const Errand *e=&c->errand;
+    if (e->present) {
+      char line[128];
+      snprintf(line,sizeof line,"OPTIONAL: %s%s",e->name,s->errand_done?" - RETURNED":s->errand_found?" - RETURN TO THE MONK":" - STILL MISSING");
+      journal_line(fb,line,y+29,ink);
+      snprintf(line,sizeof line,"CONTACT: %s",g->level->world.monks[e->monk].name);
+      journal_line(fb,line,y+47,muted);
+    }
+  } else {
+    static const char *benefits[]={"Running and splashing carry less far to the Jailer.","A steady crossbow sight makes precision shots easier.","Healing potions restore 35 health and purge venom.","Crossbow shots hold the Jailer for longer.","Spider venom inflicts half as much poisoning."};
+    int row=0;
+    for (int i=0;i<CAMPAIGN_RELICS;i++) if (campaign_has_relic(g,(RelicKind)i)) {
+      journal_line(fb,campaign_relic_name((RelicKind)i),105+row*30,gold);
+      journal_line(fb,benefits[i],119+row*30,muted); row++;
+    }
+    if (!row) { journal_line(fb,"ANCIENT RELICS LIE IN CONCEALED TREASURIES.",109,ink); row=1; }
+    if (row<4) {
+      journal_line(fb,"DECOY: lure unseen pursuers away from your escape route.",126+row*30,ink);
+      journal_line(fb,"BRACE: face a closed wooden door to secure it for 10 seconds.",146+row*30,ink);
+    }
+  }
+  font_draw(fb,"LEFT / RIGHT OR SHOULDERS: PAGE    -    JOURNAL / BACK: CLOSE",W/2,291,8,FONT_BOLD,ALIGN_CENTER,muted);
 }
 
 // ------------------------------------------------------------------ 3D view
@@ -1770,7 +1936,8 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
 
   for (int y = 0; y < VIEW_H; y++) {
     uint32_t *row = fb->px + (size_t)y * fb->w;
-    uint32_t c = pack_argb(255, FOG.r, FOG.g, FOG.b);
+    Color fog=chapter_fog(g);
+    uint32_t c = pack_argb(255,fog.r,fog.g,fog.b);
     for (int x = 0; x < W; x++) row[x] = c;
   }
 
@@ -1816,6 +1983,8 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
   render_wall_hangings(r, fb, g);
   render_transparent_walls(r, fb, 0, W - 1, INFINITY);
   render_glows(r, fb, g);
+  render_roofs(r,fb,g);
+  render_estate_weather(r,fb,g);
   render_sprites(r, fb, g);
   render_embers(r, fb, g);
   gfx_blit(fb, r->vignette, 0, 0, W, VIEW_H, 0, 0, W, VIEW_H, 1);
@@ -1828,7 +1997,7 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
   // camera shake: jitter the whole view, slightly overscanned so the
   // displaced frame never exposes the edges
   if (g->shake > 0) {
-    float amp = g->shake * g->shake * 7;
+    float amp = g->shake * g->shake * 7*preferences_get()->shake/100.0f;
     float dx = (float)(frand() * 2 - 1) * amp;
     float dy = (float)(frand() * 2 - 1) * amp;
     float zoom = 1 + (amp * 2) / VIEW_H;
@@ -1852,6 +2021,14 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     gfx_fill_rect(fb, 0, VIEW_H - drop, W, drop, rgb(3, 2, 1));
     gfx_fill_rect(fb, 0, 0, W, VIEW_H, rgba(0, 0, 0, fall * fall));
   }
+  if (preferences_get()->brightness!=100) {
+    float factor=preferences_get()->brightness/100.0f;
+    for (int i=0;i<W*VIEW_H;i++) {
+      uint32_t p=fb->px[i];
+      fb->px[i]=(p&0xff000000u)|((uint32_t)mini(255,(int)(((p>>16)&255)*factor))<<16)|
+        ((uint32_t)mini(255,(int)(((p>>8)&255)*factor))<<8)|(uint32_t)mini(255,(int)((p&255)*factor));
+    }
+  }
   render_flashes(fb, g);
   const Landmark *landmark = world_landmark(g->level, p->x, p->y);
   if (landmark && g->horror.reading < 0) {
@@ -1861,6 +2038,7 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     font_draw(fb, landmark->name, 22, 25, 9, FONT_BOLD, ALIGN_LEFT, rgb(203, 196, 170));
   }
   render_horror_text(r, fb, g);
+  render_campaign_text(fb,g);
   image_reset_clip(fb);
 }
 
@@ -1963,6 +2141,12 @@ void render_map(Renderer *r, Image *fb, const Game *g, const char *close_button)
     ui_diamond(fb, ox + (m->x + .5f) * cs, oy + (m->y + .5f) * cs, 2, rgb(219, 204, 157));
   }
   // player arrow
+  for (int i=0;i<lv->campaign.count;i++) {
+    const Mechanism *m=&lv->campaign.stations[i];
+    if (!g->visited[m->y*lv->w+m->x]) continue;
+    ui_diamond(fb,ox+(m->x+.5f)*cs,oy+(m->y+.5f)*cs,2.5f,
+        g->campaign.done&(1u<<i)?rgb(96,146,124):rgb(228,172,80));
+  }
   const Player *p = &g->player;
   float ang = atan2f(p->dir_y, p->dir_x);
   float c = cosf(ang), s = sinf(ang);
@@ -2016,9 +2200,10 @@ void render_hud(Renderer *r, Image *fb, const Game *g) {
   Color bar = p->venom > 0 ? rgb(118, 148, 77) : rgb(149, 59, 55);
   gfx_fill_rect(fb, 62, y + 58, 96 * health, 3, bar);
   gfx_fill_rect(fb, 62, y + 58, 96 * health, 1, color_shade(bar, 1.4f));
-  hud_text(fb, "LIVES", 61, y + 73, 8, muted);
-  for (int i = 0; i < mini(g->session->lives, 8); i++)
-    ui_diamond(fb, 101 + i * 7, y + 70, 2, gold);
+  if (g->session->arcade || !g->level->campaign.enabled) {
+    hud_text(fb, "LIVES", 61, y + 73, 8, muted);
+    for (int i = 0; i < mini(g->session->lives, 8); i++) ui_diamond(fb, 101 + i * 7, y + 70, 2, gold);
+  } else hud_text(fb,"STORY MODE",61,y+73,8,muted);
   hud_text(fb, "BOLTS", 195, y + 24, 8, muted);
   if (p->weapon == WEAPON_DAGGER)
     snprintf(buf, sizeof buf, "--");

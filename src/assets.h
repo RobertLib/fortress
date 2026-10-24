@@ -85,6 +85,7 @@ typedef struct BoxTextures {
 } BoxTextures;
 
 typedef struct Assets {
+  Image *mechanisms[3]; // painted winch, drainage valve and chapel bell
   Image *warden[4], *haunt_shadow, *prisoner, *horror_note, *white_candles;
   Image *note_page;
   Image *horror_traces[3];
@@ -95,6 +96,7 @@ typedef struct Assets {
   Image *grounds[GROUND_COUNT - 1][SURFACE_MIPS];
   Image *sky;
   EnemySprites enemies[ENEMY_TYPE_COUNT];
+  EnemySprites knight_melee;
   Image *items[ITEM_KIND_COUNT]; // ITEM_BOLTS_DROP shares the quiver sprite
   Image *sparkle;
   Image *barrels[3]; // ordinary, gunpowder, charred debris

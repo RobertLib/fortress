@@ -14,6 +14,8 @@ find_package(SDL3 REQUIRED CONFIG COMPONENTS SDL3)
 
 set(GAME_SOURCES
   src/game.c
+  src/campaign.c
+  src/preferences.c
   src/horror.c
   src/enemy.c
   src/level.c
@@ -26,6 +28,7 @@ set(GAME_SOURCES
 
 set(VISUAL_SOURCES
   src/render.c
+  src/roofs.c
   src/assets.c
   src/materials.c
   src/weapons.c
@@ -79,7 +82,9 @@ if(BUILD_TESTING)
   add_executable(horror_tests tests/horror.c ${VISUAL_SOURCES} ${GAME_SOURCES})
   add_executable(visual_tests tests/visuals.c ${VISUAL_SOURCES} ${GAME_SOURCES})
   add_executable(world_tests tests/world.c ${VISUAL_SOURCES} ${GAME_SOURCES})
-  foreach(test_target barrel_tests weapon_tests difficulty_tests savegame_tests savegame_ui_tests gamepad_tests comic_tests wall_tests pit_tests pendulum_tests water_tests surface_tests stair_tests architecture_tests horror_tests visual_tests world_tests)
+  add_executable(production_tests tests/production.c ${VISUAL_SOURCES} ${GAME_SOURCES})
+  add_executable(audio_tests tests/audio.c src/common.c)
+  foreach(test_target barrel_tests weapon_tests difficulty_tests savegame_tests savegame_ui_tests gamepad_tests comic_tests wall_tests pit_tests pendulum_tests water_tests surface_tests stair_tests architecture_tests horror_tests visual_tests world_tests production_tests audio_tests)
     add_dependencies(${test_target} fortress_data)
     target_include_directories(${test_target} PRIVATE src)
     target_link_libraries(${test_target} PRIVATE SDL3::SDL3)
@@ -111,6 +116,9 @@ if(BUILD_TESTING)
   set_tests_properties(complete_artwork PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   add_test(NAME horror_atmosphere COMMAND horror_tests)
   add_test(NAME outdoor_world COMMAND world_tests)
+  add_test(NAME production_systems COMMAND production_tests)
+  add_test(NAME audio_production COMMAND audio_tests)
+  set_tests_properties(production_systems PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(outdoor_world PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(horror_atmosphere PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(savegame_ui gamepad comic_story PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
@@ -120,4 +128,8 @@ if(BUILD_TESTING)
   set_tests_properties(pendulum_traps PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(shallow_water PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   set_tests_properties(floor_and_ceiling PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+  foreach(ui_test savegame_ui gamepad comic_story complete_artwork production_systems)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-user-data/${ui_test}")
+    set_tests_properties(${ui_test} PROPERTIES ENVIRONMENT "FORTRESS_USER_DATA=${CMAKE_CURRENT_BINARY_DIR}/test-user-data/${ui_test}")
+  endforeach()
 endif()

@@ -53,7 +53,7 @@ static void test_ceilings(const Assets *assets) {
   CHECK(!game_line_of_sight_3d(g, 1.5f, 3.5f, 2, 10.5f, 3.5f, 2));
   CHECK(game_line_of_sight(g, 1.5f, 3.5f, 10.5f, 3.5f));
   Input in = {.weapon = -1};
-  g->projectiles[g->projectile_count++] = (Projectile){2.5f, 3.5f, 1, 0, 0, 2, SHOT_TRAP, NULL, 0, 0};
+  g->projectiles[g->projectile_count++] = (Projectile){2.5f, 3.5f, 1, 0, 0, 2, SHOT_TRAP, NULL, 0, 0, WEAPON_CROSSBOW};
   game_update(g, .15f, &in);
   CHECK(g->projectile_count == 1 && g->projectiles[0].x > 3);
   game_update(g, .4f, &in);
@@ -274,6 +274,24 @@ static int play_floor(Level *lv, int n, const int order[3], bool report) {
   for (int i = 0; i < 3; i++) walk_to(g, keys[order[i]], &doors_used, &turns);
   CHECK(g->player.keys == 3);
   const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
+  // Required mechanisms are traversed and operated with real use input too.
+  // Combat is isolated above; the captain's defeat is tested by the combat suite.
+  for (int i=0;i<lv->campaign.count;i++) {
+    const Mechanism *m=&lv->campaign.stations[i];
+    bool reached=false;
+    for (int d=0;d<4;d++) {
+      int x=m->x+dx[d],y=m->y+dy[d];
+      if (!find_path(g,y*lv->w+x,path)) continue;
+      walk_to(g,y*lv->w+x,&doors_used,&turns);
+      aim(g,g->player.x,g->player.y,-dx[d],-dy[d]);
+      Input use={.weapon=-1,.use=true}; control_tick(g,&use,.01f);
+      Input idle={.weapon=-1};
+      for (int t=0;t<1300 && !(g->campaign.done&(1u<<i));t++) control_tick(g,&idle,.01f);
+      if (g->campaign.done&(1u<<i)) { reached=true; break; }
+    }
+    if (!reached) fprintf(stderr,"Chapter %d: cannot operate mechanism %d (%s)\n",n,i,m->name);
+    CHECK(reached);
+  }
   bool exited = false;
   for (int d = 0; d < 4; d++) {
     int x = gate % lv->w + dx[d], y = gate / lv->w + dy[d];
