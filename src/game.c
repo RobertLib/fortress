@@ -1139,7 +1139,7 @@ static bool apply_pickup(Game *g, const Item *it) {
     }
     return true;
   case ITEM_POTION:
-    if (p->health >= 100) return false;
+    if (p->health >= 100 && p->venom <= 0) return false;
     p->health = mini(100, p->health + (campaign_has_relic(g,RELIC_MERCY)?35:25));
     p->venom = 0;
     audio_play(SND_PICKUP_HEALTH, 1, 1);

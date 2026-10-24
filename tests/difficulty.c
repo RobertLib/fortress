@@ -170,6 +170,38 @@ static void test_ammo_pickups(void) {
   }
 }
 
+static void test_potion_antidote(void) {
+  for (int d = 0; d < DIFFICULTY_COUNT; d++) {
+    for (int mercy = 0; mercy < 2; mercy++) {
+      Fixture f;
+      setup(&f, (Difficulty)d);
+      Game *g = f.game;
+      if (mercy) f.session.relics |= 1u << RELIC_MERCY;
+
+      // Bread can restore full health while the spider's venom remains.
+      g->player.health = 95;
+      game_poison_player(g, 8);
+      place_pickup(g, ITEM_BREAD);
+      tick(g, 1);
+      CHECK(g->player.health == 100 && g->player.venom > 0 && g->item_count == 0);
+      place_pickup(g, ITEM_POTION);
+      tick(g, 1);
+      CHECK(g->player.health == 100 && g->player.venom == 0 && g->item_count == 0);
+      tick(g, 100);
+      CHECK(g->player.health == 100);
+
+      // Healthy players leave medicine for later; injured players still heal.
+      place_pickup(g, ITEM_POTION);
+      tick(g, 1);
+      CHECK(g->item_count == 1);
+      g->player.health = 10;
+      tick(g, 1);
+      CHECK(g->player.health == (mercy ? 45 : 35) && g->item_count == 0);
+      teardown(&f);
+    }
+  }
+}
+
 static void test_retries_and_later_floors(void) {
   static const int ammo[] = {16, 24, 12};
   for (int d = 0; d < DIFFICULTY_COUNT; d++) {
@@ -199,6 +231,7 @@ int main(void) {
   test_projectile_and_blast_damage();
   test_venom();
   test_ammo_pickups();
+  test_potion_antidote();
   test_retries_and_later_floors();
   puts("Difficulty checks passed.");
   return 0;

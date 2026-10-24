@@ -357,6 +357,72 @@ static void closing_door_occupancy(void) {
   ticks(play,1); CHECK(door->state==DOOR_OPENING && door->open>=.9f);
   puts("Closing doors reopen around the player, soldiers and Jailer; sprinting through cannot trap the player.");
 }
+static void key_event(SDL_Scancode scancode, bool down) {
+  SDL_Event event = {.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP};
+  event.key.scancode = scancode;
+  handle_event(&event);
+}
+static void overlapping_inputs(void) {
+  preferences_defaults(); new_game(0,DIFFICULTY_NORMAL); begin_level();
+  const struct { SDL_Scancode first, second; bool *action; } aliases[] = {
+    {SDL_SCANCODE_W, SDL_SCANCODE_UP, &input.forward},
+    {SDL_SCANCODE_S, SDL_SCANCODE_DOWN, &input.back},
+    {SDL_SCANCODE_LALT, SDL_SCANCODE_RALT, &input.strafe_mod},
+    {SDL_SCANCODE_J, SDL_SCANCODE_LCTRL, &input.fire},
+    {SDL_SCANCODE_LCTRL, SDL_SCANCODE_RCTRL, &input.fire},
+  };
+  for (size_t i = 0; i < SDL_arraysize(aliases); i++) for (int order = 0; order < 2; order++) {
+    clear_input();
+    SDL_Scancode first = order ? aliases[i].second : aliases[i].first;
+    SDL_Scancode second = order ? aliases[i].first : aliases[i].second;
+    key_event(first,true); key_event(first,true); key_event(second,true);
+    key_event(first,false); key_event(first,false);
+    CHECK(*aliases[i].action); // Only the released source stops contributing.
+    key_event(second,false); CHECK(!*aliases[i].action);
+  }
+  CHECK(preferences_bind(ACTION_FORWARD,SDL_SCANCODE_K));
+  key_event(SDL_SCANCODE_K,true); key_event(SDL_SCANCODE_UP,true);
+  key_event(SDL_SCANCODE_UP,false); CHECK(input.forward);
+  key_event(SDL_SCANCODE_K,false); CHECK(!input.forward);
+
+  SDL_Event mouse = {.type = SDL_EVENT_MOUSE_BUTTON_DOWN};
+  mouse.button.button = SDL_BUTTON_LEFT;
+  for (int order = 0; order < 2; order++) {
+    clear_input();
+    game->player.weapon = WEAPON_CROSSBOW; game->player.ammo = 10;
+    game->fire_timer = 0; game->fire_held = false;
+    key_event(SDL_SCANCODE_LCTRL,true); game_update(game,.01f,&input);
+    CHECK(game->player.ammo == 9);
+    mouse.type = SDL_EVENT_MOUSE_BUTTON_DOWN; handle_event(&mouse);
+    if (order) { mouse.type = SDL_EVENT_MOUSE_BUTTON_UP; handle_event(&mouse); }
+    else key_event(SDL_SCANCODE_LCTRL,false);
+    CHECK(input.fire);
+    game_update(game,.5f,&input);
+    CHECK(game->fire_held && game->player.ammo == 9);
+    // Pressing the other source again cannot retrigger a still-held crossbow.
+    if (order) { mouse.type = SDL_EVENT_MOUSE_BUTTON_DOWN; handle_event(&mouse); }
+    else key_event(SDL_SCANCODE_LCTRL,true);
+    game_update(game,.01f,&input); CHECK(game->player.ammo == 9);
+    key_event(SDL_SCANCODE_LCTRL,false);
+    mouse.type = SDL_EVENT_MOUSE_BUTTON_UP; handle_event(&mouse);
+    CHECK(!input.fire);
+    game_update(game,.01f,&input);
+    key_event(SDL_SCANCODE_J,true); game_update(game,.01f,&input);
+    CHECK(game->player.ammo == 8);
+    key_event(SDL_SCANCODE_J,false);
+  }
+  key_event(SDL_SCANCODE_K,true); key_event(SDL_SCANCODE_LCTRL,true);
+  mouse.type = SDL_EVENT_MOUSE_BUTTON_DOWN; handle_event(&mouse);
+  SDL_Event focus = {.type = SDL_EVENT_WINDOW_FOCUS_LOST}; handle_event(&focus);
+  CHECK(state == ST_PAUSED && !input.forward && !input.fire);
+  focus.type = SDL_EVENT_WINDOW_FOCUS_GAINED; handle_event(&focus);
+  handle_state_key(SDL_SCANCODE_ESCAPE);
+  key_event(SDL_SCANCODE_J,true); key_event(SDL_SCANCODE_J,false);
+  key_event(SDL_SCANCODE_UP,true); key_event(SDL_SCANCODE_UP,false);
+  CHECK(!input.fire && !input.forward); // Cleared sources cannot reappear after resume.
+  preferences_defaults(); clear_input();
+  puts("Overlapping keyboard aliases, rebound movement, mouse fire and focus-reset checks passed.");
+}
 static void reading_input_isolation(void) {
   new_game(0,DIFFICULTY_NORMAL); begin_level();
   position(game,3.5f,28.5f,0,-1);
@@ -599,7 +665,7 @@ static void screenshots(void) {
 int main(int argc,char **argv) {
   CHECK(SDL_Init(0)); fixture_map(); progression(); tactical_tools(); soldier_combat(); preferences_and_saves();
   autosave_trap_safety(); autosave_powder_safety(); loaded_story_recovery(); closing_door_occupancy();
-  reading_input_isolation(); journal_and_map_input(); authored_campaign(); retry_statistics(); custom_map_rules();
+  overlapping_inputs(); reading_input_isolation(); journal_and_map_input(); authored_campaign(); retry_statistics(); custom_map_rules();
   if (argc>1 && !strcmp(argv[1],"--screenshots")) screenshots();
   game_destroy(play); level_free(&fixture); game_destroy(game);
   for (int i=0;i<levels_loaded;i++) level_free(&levels[i]);

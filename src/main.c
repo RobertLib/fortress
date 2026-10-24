@@ -69,6 +69,7 @@ static int difficulty_menu_index = 1, pending_start_index;
 static Difficulty selected_difficulty = DIFFICULTY_NORMAL;
 static const Difficulty DIFFICULTY_CHOICES[] = {DIFFICULTY_EASY, DIFFICULTY_NORMAL, DIFFICULTY_HARD};
 static Input input = {.weapon = -1};
+static bool held_keys[SDL_SCANCODE_COUNT], mouse_fire_held;
 static char *save_path;
 static char notice[96];
 static float notice_timer;
@@ -120,6 +121,8 @@ static void blip(void) { audio_play(SND_BLIP, 1, 1); }
 
 static void clear_input(void) {
   input = (Input){.weapon = -1};
+  memset(held_keys, 0, sizeof held_keys);
+  mouse_fire_held = false;
   gamepad_fire_ready = false;
   gamepad_menu_blocked = true;
   gamepad_menu_direction = 0;
@@ -971,6 +974,23 @@ static bool *key_binding(SDL_Scancode sc) {
   }
 }
 
+// Multiple keys and the mouse may hold the same action. Releasing one source
+// must leave the action active until its other sources have also been released.
+static void refresh_held_binding(bool *binding) {
+  bool held = binding == &input.fire && mouse_fire_held;
+  for (int sc = 1; !held && sc < SDL_SCANCODE_COUNT; sc++)
+    if (held_keys[sc] && key_binding((SDL_Scancode)sc) == binding) held = true;
+  *binding = held;
+}
+
+static void set_key_held(SDL_Scancode sc, bool held) {
+  if (sc <= SDL_SCANCODE_UNKNOWN || sc >= SDL_SCANCODE_COUNT) return;
+  bool *binding = key_binding(sc);
+  if (!binding) return;
+  held_keys[sc] = held;
+  refresh_held_binding(binding);
+}
+
 static void on_key_down(SDL_Scancode sc) {
   gamepad_active = false;
   int action=preferences_action_for_key(sc);
@@ -997,8 +1017,7 @@ static void on_key_down(SDL_Scancode sc) {
     if (action==ACTION_DECOY && !game->show_map) { campaign_throw_decoy(game); return; }
     if (action==ACTION_BRACE && !game->show_map) { campaign_brace_door(game); return; }
   }
-  bool *b = key_binding(sc);
-  if (b) *b = true;
+  set_key_held(sc, true);
   if (action==ACTION_USE || sc == SDL_SCANCODE_SPACE) input.use = true;
   if (sc == SDL_SCANCODE_1) input.weapon = WEAPON_DAGGER;
   if (sc == SDL_SCANCODE_2) input.weapon = WEAPON_CROSSBOW;
@@ -1050,18 +1069,15 @@ static void handle_event(const SDL_Event *e) {
   case SDL_EVENT_KEY_DOWN:
     if (!e->key.repeat) on_key_down(e->key.scancode);
     break;
-  case SDL_EVENT_KEY_UP: {
-    bool *b = key_binding(e->key.scancode);
-    if (b) *b = false;
-    break;
-  }
+  case SDL_EVENT_KEY_UP: set_key_held(e->key.scancode, false); break;
   case SDL_EVENT_MOUSE_BUTTON_DOWN:
     if (e->button.button != SDL_BUTTON_LEFT) break;
     gamepad_active = false;
     if (state == ST_PLAYING) {
       if (game->campaign.journal || game->horror.reading >= 0) break;
       if (!mouse_captured()) capture_mouse(true);
-      input.fire = true;
+      mouse_fire_held = true;
+      refresh_held_binding(&input.fire);
     } else {
       float x, y;
       event_pos(e, &x, &y);
@@ -1069,7 +1085,10 @@ static void handle_event(const SDL_Event *e) {
     }
     break;
   case SDL_EVENT_MOUSE_BUTTON_UP:
-    if (e->button.button == SDL_BUTTON_LEFT) input.fire = false;
+    if (e->button.button == SDL_BUTTON_LEFT) {
+      mouse_fire_held = false;
+      refresh_held_binding(&input.fire);
+    }
     break;
   case SDL_EVENT_MOUSE_MOTION:
     if (e->motion.xrel || e->motion.yrel) gamepad_active = false;
