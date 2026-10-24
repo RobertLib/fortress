@@ -77,7 +77,7 @@ painted cinematic scenes with readable captions and gentle camera movement.
 
 Run `./build/visual_tests --screenshots` from the repository root to render the
 complete presentation and contact sheets into `build/art-*.bmp`. The test
-checks all 614 asset slots, premultiplied alpha, distinct animation frames,
+checks all 632 asset slots, premultiplied alpha, distinct animation frames,
 material mips and asset ownership. See [the coverage and verification guide](docs/art-direction.md)
 and [artwork sources and reproduction](assets/README.md).
 
@@ -118,8 +118,10 @@ Outdoor spaces have an open night sky, longer moonlit visibility, local
 grass, earth, cobble, gravel and leaf-litter surfaces, and wind and distant
 bells. Roofs occlude the sky when entering buildings. The automap fits the
 larger chapters, distinguishes outdoor ground and marks explored monks.
-Pitched roofs, arched church windows, shutters, buttresses and furnishing
-clusters distinguish buildings. Rain, drifting leaves or ash and chapter-specific
+Pitched roofs have shingle or slate courses, solid overhangs, timber edges,
+ridge caps and house chimneys. Shuttered windows follow the building's storeys;
+arched church windows, buttresses and furnishing clusters distinguish buildings.
+Rain, drifting leaves or ash and chapter-specific
 fog palettes reinforce each district. Five original two-stem musical motifs
 crossfade with danger and fall silent in refuges; effect and music gains are separate.
 See [the story and world design](docs/story-and-world.md) and
@@ -542,7 +544,7 @@ cells from automatic furnishings, including when selecting indoor stone.
 chair, candelabra, statue and urn. Props require unoccupied dry floor;
 monks also require `@horror` and an available story-text slot. A `|` starts a
 new dialogue paragraph. Landmarks use a finite radius from 1 to 32 tiles.
-Terrain and prop edits invalidate incompatible saves; legacy maps without
+Terrain, roof, facade and prop edits invalidate incompatible saves; legacy maps without
 world directives keep their existing save signatures.
 
 Run `./build/architecture_tests` to check door frames, maze structure and routes.

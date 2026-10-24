@@ -17,7 +17,7 @@ The game retains its 640 × 400 raycasting presentation.
 | World | 256 px limestone, moss, timber, brick, windows, banners, arrow slits, doors, bars, gate, levers and three masonry damage stages |
 | Portal | Painted antique mirror with local animated distortion inside its frame |
 | Floors and ceilings | Five themed material pairs, each with nine mip levels |
-| Outdoor ground and sky | Five local ground materials with mipmaps; directional night panorama, pitched roof meshes, arched windows, shutters, buttresses and depth-tested weather |
+| Outdoor ground and sky | Five local ground materials with mipmaps; directional night panorama, shingle/slate roof materials with mipmaps, solid overhangs, timber edges, ridge caps, chimneys, arched windows, storey-sized shutters, buttresses and depth-tested weather |
 | Estate props | Painted oak, fir, roofed well, headstone, cross, bench, altar and peaceful monk; isolated alpha atlas |
 | Soldiers | Guard, knight and captain; eleven combat poses plus twelve directional locomotion frames per family. Campaign knight has dedicated sword/shield combat art |
 | Animals | Hound, rat and spider: stand and two strides from four sides, plus injury and death; four bat flight frames and dedicated falling frames |
@@ -47,7 +47,7 @@ ctest --test-dir build --output-on-failure
 make release
 ```
 
-The artwork check visits all 614 image slots, verifies nonempty images and
+The artwork check visits all 632 image slots, verifies nonempty images and
 premultiplied alpha, checks distinct locomotion and weapon frames, validates
 mip sizes, renders all presentation states and checks shared-image cleanup.
 The existing gameplay checks cover walls, water, pits, stairs, pendulums,

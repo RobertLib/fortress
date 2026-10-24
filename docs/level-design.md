@@ -16,8 +16,16 @@ the interior plans by `tools/author_campaign.py`.
 
 Each district has a required key, a well, monks, additional supplies and
 landmarks. Local ground materials include grass, earth, cobbles, gravel and
-leaf litter. Roofs occlude a directional night sky. The dimensions below
-describe the retained interior plans, before the district extension.
+leaf litter. Roofs occlude a directional night sky. Tall facades, door headers
+and pitched-roof gables continue the wall's authored material at the same
+texture scale, orientation and lighting. Windows and banners painted into wall
+tiles stay on the ground storey, with bare masonry above them. The dimensions below
+describe the retained interior plans, before the district extension. Roofs
+project beyond the walls with solid timber undersides and edge boards; larger
+timber houses have masonry chimneys. The inn has a steeper roof with its ridge
+parallel to the entrance facade and shuttered windows on both storeys.
+Window faces and the adjoining space occupied by wide church windows are
+reserved before torches are placed, keeping flames and brackets off the frames.
 
 Each exit stands on the far side of its chapter from the player start:
 the eastern end of the village north lane, the southeast cloister, beyond
@@ -125,10 +133,13 @@ rendered by the actual game engine in `build/architecture-floor-N-V.bmp`,
 `./build/world_tests --screenshots` adds outdoor, building, monk and dialogue
 views in `build/world-N-*.bmp`. Its separate regressions cover roof/sky
 occlusion, solid wall and roof tops, scenery beyond low walls, door headers,
+facade material and UV continuity across both gable axes and roof coverings,
 terrain, peaceful dialogue, map validation and save compatibility. The geometry
 previews are `build/world-wall-cap.bmp`, `build/world-door-header.bmp` and
 `build/world-inn-facade.bmp`; both sides of the inn's doors are checked closed,
 partly open and fully open.
+`build/world-inn-house-0.bmp` through `world-inn-house-2.bmp` show the complete
+inn from the square and both side approaches, using walkable player positions.
 Flat-material previews in `build/world-distant-lighting-N.bmp` check that
 oblique facades and headers keep continuous lighting at a distance, including
 the roof edge where a second coplanar surface would cause striping.

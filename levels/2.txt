@@ -148,8 +148,10 @@
 @facade 63 8 1 0 glass
 @facade 49 11 -1 0 glass
 @facade 63 11 1 0 glass
+@facade 46 22 0 -1 shutter
 @facade 46 29 0 1 shutter
-@facade 49 29 0 1 shutter
+@facade 48 22 0 -1 shutter
+@facade 48 29 0 1 shutter
 @facade 44 24 -1 0 shutter
 @facade 50 24 1 0 shutter
 @facade 44 27 -1 0 shutter

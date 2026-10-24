@@ -288,6 +288,25 @@ static void mips(Image **list, Image *base) {
       }
   }
 }
+static Image *roof_material(const Image *wood, const Image *stone, bool slate) {
+  Image *im = image_new(TEX, TEX);
+  const Image *source = slate ? stone : wood;
+  for (int y = 0; y < TEX; y++) for (int x = 0; x < TEX; x++) {
+    int row = y / 32, shifted = (x + (row & 1) * 32) % TEX;
+    int col = shifted / 64, u = shifted % 64, v = y % 32;
+    float variation = .83f + hash(col, row, 613) * .27f;
+    int sx = (u * 3 + col * 29) % source->w, sy = (v * 5 + row * 17) % source->h;
+    uint32_t p = source->px[sy * source->w + sx];
+    float grain = .76f + ((p >> 16) & 255) / 512.0f;
+    float relief = v < 3 ? .34f : v < 5 ? 1.23f : .91f + v * .003f;
+    if (u < 2 || u > 62) relief *= .47f;
+    float k = variation * grain * relief;
+    im->px[y * TEX + x] = pack_argb(255, (slate ? 67 : 104) * k,
+                                      77 * k, (slate ? 85 : 47) * k);
+  }
+  return im;
+}
+
 static Image *water(int frame, bool flowing) {
   Image *im = image_new(TEX, TEX);
   float t = 2 * (float)M_PI * frame / WATER_FRAMES;
@@ -373,6 +392,9 @@ void materials_build(Assets *a, const Image *limestone, const Image *atlas, cons
     mips(a->ceilings[theme], surface(atlas, (SurfaceTheme)theme, true));
   }
   for (int kind = 1; kind < GROUND_COUNT; kind++) mips(a->grounds[kind - 1], ground_material((GroundKind)kind));
+  Image *wood = art_cell(atlas, 4, 13);
+  for (int slate = 0; slate < 2; slate++) mips(a->roofs[slate], roof_material(wood, limestone, slate));
+  image_free(wood);
   a->sky = night_sky();
   for (int kind = 0; kind < BOX_KIND_COUNT; kind++) {
     BoxTextures *b = &a->boxes[kind];

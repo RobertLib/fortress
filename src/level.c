@@ -210,6 +210,21 @@ static bool wall_has_door(const Level *lv, int x, int y, int dx, int dy) {
   return false;
 }
 
+// Facade windows are appended to the hangings after automatic dressing.
+// Reserve their wall faces now, including the adjoining cells covered by
+// a wide church window. The opposite face of a wall remains available.
+static bool facade_on_face(const Level *lv, int x, int y, int dx, int dy) {
+  for (int i = 0; i < lv->world.facade_count; i++) {
+    const WorldFacade *f = &lv->world.facades[i];
+    if (f->dx != dx || f->dy != dy) continue;
+    int nx = x - f->x, ny = y - f->y;
+    if (nx * dx + ny * dy != 0) continue;
+    int reach = f->kind == HANG_GLASS_WINDOW ? 1 : 0;
+    if (abs(nx * dy - ny * dx) <= reach) return true;
+  }
+  return false;
+}
+
 // is any torch closer than sqrt(r2) to (x, y)?
 static bool near_torch(const Level *lv, double x, double y, double r2) {
   for (int i = 0; i < lv->torch_count; i++) {
@@ -697,16 +712,18 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   // Scatter a modest number of torches along walls that border walkable
   // space. Sorting by a coordinate hash makes the layout stable while the
   // spacing pass keeps corridors from turning into rows of identical lights.
-  // The banner of "6" hangs where a torch would go, so it never takes one.
+  // Painted windows and banners, and authored facade details, keep their
+  // faces clear of torches. Rejected candidates leave room for bare masonry.
   TorchCandidate *torch_cands = malloc(sizeof(TorchCandidate) * cells * 4);
   int torch_cand_count = 0;
   for (int y = 1; y < h - 1; y++) {
     for (int x = 1; x < w - 1; x++) {
       char cell = grid[y * w + x];
-      if (!level_is_wall(cell) || cell == '6' || cell == '7' || cell == '8' || cell == 'B') continue;
+      if (!level_is_wall(cell) || cell == '4' || cell == '6' || cell == '7' || cell == '8' || cell == 'B') continue;
       for (int d = 0; d < 4; d++) {
         int dx = CARDINAL[d][0], dy = CARDINAL[d][1];
         if (grid[(y + dy) * w + x + dx] != '.') continue;
+        if (facade_on_face(lv, x, y, dx, dy)) continue;
         uint32_t hash = imul((uint32_t)(x + 17), 73856093u) ^ imul((uint32_t)(y + 31), 19349663u) ^
                         imul((uint32_t)(d + 7), 83492791u);
         torch_cands[torch_cand_count] = (TorchCandidate){x, y, dx, dy, hash, torch_cand_count};

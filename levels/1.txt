@@ -96,7 +96,7 @@
 @terrain grass 42 29 7 1
 @terrain stone 41 30 23 3
 @roof 42 23 7 6 2.125 3.125 1 0
-@roof 53 4 9 8 2.25 3.25 1 0
+@roof 53 4 9 8 2.25 4.75 0 0
 @roof 42 13 6 5 1.75 2.75 1 0
 @prop well 51 19
 @prop oak 43 19
@@ -135,18 +135,24 @@
 @errand 46 26 0 GRAIN TALLY~You fed this village. Find our grain tally in the cooper cottage, southwest of the well. I can spare supplies.|Work the winch beside the far eastern gate, then carry three keys through it.~The tally proves where the grain went.|I have released the hidden guardhouse store. Take medicine, bolts, two decoys and a door brace. Raise the eastern gate winch and bring three keys.
 @erranddoor 4 19
 @relic 3 18 0
+@facade 44 23 0 -1 shutter
 @facade 44 28 0 1 shutter
-@facade 47 28 0 1 shutter
+@facade 46 23 0 -1 shutter
+@facade 46 28 0 1 shutter
 @facade 42 25 -1 0 shutter
 @facade 48 25 1 0 shutter
 @facade 55 4 0 -1 shutter
-@facade 58 4 0 -1 shutter
+@facade 55 11 0 1 shutter
+@facade 59 4 0 -1 shutter
+@facade 59 11 0 1 shutter
 @facade 53 6 -1 0 shutter
 @facade 61 6 1 0 shutter
 @facade 53 9 -1 0 shutter
 @facade 61 9 1 0 shutter
 @facade 44 13 0 -1 shutter
 @facade 44 17 0 1 shutter
+@facade 45 13 0 -1 shutter
+@facade 45 17 0 1 shutter
 @facade 42 15 -1 0 shutter
 @height 28 1 4 9 0.5
 @height 13 2 1 4 0.5

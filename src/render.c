@@ -47,7 +47,7 @@ static const HangingSpec HANGING_SPECS[HANG_KIND_COUNT] = {
     [HANG_SWORD] = {0.3f, 0.9f, 0.03f},    [HANG_SHIELD] = {0.35f, 0.85f, 0.03f},
     [HANG_CHAIN] = {0.22f, 0.92f, 0.03f},  [HANG_PORTRAIT] = {0.32f, 0.84f, 0.03f},
     [HANG_COBWEB] = {0.55f, 1, 0.02f},     [HANG_CRACK] = {0, 1, 0.02f},
-    [HANG_GLASS_WINDOW]={.65f,2.85f,.025f}, [HANG_SHUTTER_WINDOW]={.5f,1.6f,.025f},
+    [HANG_GLASS_WINDOW]={.65f,2.85f,.025f}, [HANG_SHUTTER_WINDOW]={.3f,1.1f,.025f},
 };
 
 // distance buckets for pre-darkened sprite variants
@@ -161,6 +161,19 @@ static int wall_tex_for(char c) {
   }
 }
 
+// Continue the facade's material above its first storey, without repeating
+// windows, banners, mechanisms or damage marks on every floor.
+static int wall_material(int tex) {
+  switch (tex) {
+  case WT_MOSS:
+  case WT_TIMBER:
+  case WT_BRICK:
+  case WT_DUNGEON_BARE: return tex;
+  case WT_DUNGEON: return WT_DUNGEON_BARE;
+  default: return WT_STONE;
+  }
+}
+
 // The sides of a door or niche opening (and of a secret wall slid aside)
 // are its jambs. They keep their wall's masonry but none of its dressing:
 // a banner, window, slit or mirror belongs on the face, not in the reveal.
@@ -215,8 +228,8 @@ static void draw_column(Renderer *r, Image *fb, const Image *tex, int tex_x, int
   }
 }
 
-// Tall masonry keeps its texel scale. Feature textures occupy the bottom
-// storey; plain stone continues above doors, banners and carved recesses.
+// Tall facades keep their material and texel scale. Feature textures occupy
+// the bottom storey; their bare material continues above them.
 static void draw_wall_column(Renderer *r, Image *fb, const Image *tex, const Image *upper, int tex_x,
                              int x, float base, float ceiling, const Tint *tint, float dist, bool write_depth) {
   float h = VIEW_H / dist;
@@ -414,6 +427,72 @@ typedef struct {
 static bool doorway(char cell) { return cell == 'D' || cell == 'R' || cell == 'Z'; }
 static bool solid_masonry(char cell) { return !level_is_open(cell) && !doorway(cell) && cell != 'B'; }
 
+// Headers and gables belong to the authored facade even when its door is
+// open or a wall below has been broken. An opening inherits its jambs.
+static int facade_material(const Game *g, int x, int y, int side) {
+  const Level *lv = g->level;
+  char cell = lv->grid[y * lv->w + x];
+  if (cell == 'Z') {
+    const Door *door = game_door_at((Game *)g, x, y);
+    cell = door ? door->tex : '1';
+  } else if (cell == 'L') {
+    const Lever *lever = game_lever_at(g, x, y);
+    cell = lever ? lever->tex : '1';
+  } else if (doorway(cell) || cell == 'B' || level_is_open(cell)) {
+    for (int d = -1; d <= 1; d += 2) {
+      int nx = x + (side ? d : 0), ny = y + (side ? 0 : d);
+      if (nx < 0 || ny < 0 || nx >= lv->w || ny >= lv->h) continue;
+      char next = lv->grid[ny * lv->w + nx];
+      if (solid_masonry(next)) return facade_material(g, nx, ny, side);
+    }
+    return WT_STONE;
+  }
+  return wall_material(wall_tex_for(cell));
+}
+
+// A vertical extension uses the same UV origin, face lighting and column
+// renderer as the wall below; clipping only changes its visible outline.
+static void facade_extension(Renderer *r, Image *fb, const Game *g, int x, float dist,
+                             int side, int cx, int cy, float bottom, float top) {
+  if (dist < NEAR_PLANE || top <= bottom) return;
+  float camera = 2.0f * x / W - 1;
+  float rx = g->player.dir_x + g->player.plane_x * camera;
+  float ry = g->player.dir_y + g->player.plane_y * camera;
+  float wx = g->player.x + rx * dist, wy = g->player.y + ry * dist;
+  float u = side ? wx : wy;
+  u -= floorf(u);
+  if ((side == 0 && rx > 0) || (side == 1 && ry < 0)) u = 1 - u;
+  int material = facade_material(g, cx, cy, side);
+  const Image *tex = (side ? r->assets->walls_dark : r->assets->walls)[material];
+  Tint tint = face_tint(g, wx, wy, dist, side, rx, ry);
+  float base = minf(level_floor_at(g->level, cx, cy),
+                    level_floor_at(g->level, cx - (side ? 0 : (rx > 0 ? 1 : -1)),
+                                             cy - (side ? (ry > 0 ? 1 : -1) : 0)));
+  int clip1 = fb->clip_y1;
+  fb->clip_y1 = mini(clip1, (int)ceilf(VIEW_H / 2.0f + VIEW_H / dist * (r->eye_z - bottom) - .5f));
+  draw_wall_column(r, fb, tex, tex, tex_column(tex, u), x, base, top, &tint, dist, true);
+  fb->clip_y1 = clip1;
+}
+
+void render_roof_gable(Renderer *r, Image *fb, const Game *g, const WorldRoof *roof, bool far) {
+  int side = roof->axis;
+  float x = roof->x + (!side && far ? roof->w : 0);
+  float y = roof->y + (side && far ? roof->h : 0);
+  QuadSpan q;
+  if (!quad_span(&g->player, x, y, x + (side ? roof->w : 0), y + (side ? 0 : roof->h), &q)) return;
+  for (int column = q.x_start; column <= q.x_end; column++) {
+    float dist, u;
+    quad_at(&q, column, &dist, &u);
+    u = clampf(u, 0, 1);
+    float top = roof->eave + (roof->ridge - roof->eave) * (1 - fabsf(2 * u - 1));
+    int cx = side ? clampi((int)floorf(x + u * roof->w), roof->x, roof->x + roof->w - 1)
+                  : roof->x + (far ? roof->w - 1 : 0);
+    int cy = side ? roof->y + (far ? roof->h - 1 : 0)
+                  : clampi((int)floorf(y + u * roof->h), roof->y, roof->y + roof->h - 1);
+    facade_extension(r, fb, g, column, dist, side, cx, cy, roof->eave, top);
+  }
+}
+
 static float roof_height(const Level *lv, int x, int y) {
   float roof = lv->ceilings[y * lv->w + x];
   return isfinite(roof) ? roof : level_floor_at(lv, x, y) + 1;
@@ -460,7 +539,7 @@ static void render_hit(Renderer *r, Image *fb, const Game *g, int x, Hit hit, in
   float wx = g->player.x + rx * hit.dist, wy = g->player.y + ry * hit.dist;
   Tint tint = face_tint(g, wx, wy, hit.dist, hit.side, rx, ry);
   const Image *tex = (hit.side ? as->walls_dark : as->walls)[hit.tex];
-  const Image *upper = (hit.side ? as->walls_dark : as->walls)[WT_STONE];
+  const Image *upper = (hit.side ? as->walls_dark : as->walls)[wall_material(hit.tex)];
   float base = minf(level_floor_at(lv, cx, cy), level_floor_at(lv, from_x, from_y));
   float top = doorway(game_cell(g, cx, cy)) ? roof_height(lv, cx, cy) : wall_top(g, cx, cy);
   draw_wall_column(r, fb, tex, upper, tex_column(tex, hit.wall_x), x, base, top, &tint, hit.dist, true);
@@ -728,9 +807,9 @@ static void render_sectors(Renderer *r, Image *fb, const Game *g) {
         sector_riser(r, fb, g, x, rx, ry, exit, side, minf(floor, next), maxf(floor, next));
       bool next_outside = world_outside(g->level, cx, cy);
       if (volumes && door)
-        sector_riser(r, fb, g, x, rx, ry, exit, side, ceiling, top);
+        facade_extension(r, fb, g, x, exit, side, cx - (side ? 0 : sx), cy - (side ? sy : 0), ceiling, top);
       if (volumes && doorway(next_cell))
-        sector_riser(r, fb, g, x, rx, ry, exit, side, next_ceiling, doorway_top(g, cx, cy));
+        facade_extension(r, fb, g, x, exit, side, cx, cy, next_ceiling, doorway_top(g, cx, cy));
       if (next_ceiling != ceiling && !outside && !next_outside)
         sector_riser(r, fb, g, x, rx, ry, exit, side, minf(ceiling, next_ceiling),
                      maxf(ceiling, next_ceiling) + (volumes ? ROOF_THICKNESS : 0));
@@ -1201,6 +1280,12 @@ static void render_wall_hangings(Renderer *r, Image *fb, const Game *g) {
     float ax = fx + tx * half_w, ay = fy + ty * half_w;
     float bx = fx - tx * half_w, by = fy - ty * half_w;
     draw_hanging_quad(r, fb, g, ax, ay, bx, by, shaded(img, bucket), spec);
+    if (hg->kind == HANG_SHUTTER_WINDOW &&
+        level_ceiling_at(lv,hg->x,hg->y)-level_floor_at(lv,hg->x,hg->y)>=2) {
+      HangingSpec upper=*spec;
+      upper.z_bot+=.95f; upper.z_top+=.95f;
+      draw_hanging_quad(r, fb, g, ax, ay, bx, by, shaded(img, bucket), &upper);
+    }
   }
 }
 
@@ -1878,13 +1963,6 @@ static void render_campaign_text(Image *fb,const Game *g) {
       gfx_fill_rect(fb,220,VIEW_H-60,200,4,rgba(40,51,56,.9f));
       gfx_fill_rect(fb,220,VIEW_H-60,200*progress,4,gold);
     }
-    char supplies[128];
-    if (g->controller_input) snprintf(supplies,sizeof supplies,"%s: DECOY %d   LEFT: BRACE %d   RIGHT: JOURNAL",g->controller_decoy[0]?g->controller_decoy:"USE",s->decoys,s->braces);
-    else snprintf(supplies,sizeof supplies,"%s: DECOY %d   %s: BRACE %d   %s: JOURNAL",
-      SDL_GetScancodeName(preferences_get()->keys[ACTION_DECOY]),s->decoys,
-      SDL_GetScancodeName(preferences_get()->keys[ACTION_BRACE]),s->braces,
-      SDL_GetScancodeName(preferences_get()->keys[ACTION_JOURNAL]));
-    font_draw(fb,supplies,W-15,18,8,FONT_REGULAR,ALIGN_RIGHT,muted);
     return;
   }
   gfx_fill_rect(fb,0,0,W,VIEW_H,rgba(1,5,9,.92f));
@@ -1968,7 +2046,7 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     float near = maxf(0, hit.dist - .001f);
     float base = level_floor(g->level, p->x + ray_x * near, p->y + ray_y * near);
     float ceiling = level_ceiling(g->level, p->x + ray_x * near, p->y + ray_y * near);
-    const Image *upper = (hit.side == 1 ? as->walls_dark : as->walls)[WT_STONE];
+    const Image *upper = (hit.side == 1 ? as->walls_dark : as->walls)[wall_material(hit.tex)];
     draw_wall_column(r, fb, tex, upper, tex_column(tex, hit.wall_x), x, base, ceiling, &tint, hit.dist, true);
   }
 

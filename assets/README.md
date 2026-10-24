@@ -44,6 +44,9 @@ Their exact built-in `image_gen` prompts are retained in
 [production-knight-prompt.md](production-knight-prompt.md) (sword/shield combat).
 Arched glass windows and shutters are deterministic material details assembled
 from the existing painted stone and timber; they require no additional atlas.
+Shingle and slate roof courses are derived from the same painted wood and
+limestone, with separate mip chains. Their courses follow the roof slope;
+overhangs, timber undersides, edge boards, ridge caps and chimneys are meshes.
 
 Normal builds use the committed BMPs. To reproduce all runtime atlases from
 the retained PNGs, run:

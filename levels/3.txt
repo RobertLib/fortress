@@ -139,7 +139,9 @@
 @erranddoor 15 4
 @relic 14 1 2
 @facade 61 4 0 -1 shutter
+@facade 61 10 0 1 shutter
 @facade 64 4 0 -1 shutter
+@facade 64 10 0 1 shutter
 @facade 59 6 -1 0 shutter
 @facade 66 6 1 0 shutter
 @facade 59 9 -1 0 shutter

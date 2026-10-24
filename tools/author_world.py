@@ -33,7 +33,7 @@ class District:
         for y in range(y1, y2+1):
             for x in range(self.x+x1, self.x+x2+1): self.ground[y][x] = GROUND.index(kind)
 
-    def building(self, name, x1, y1, x2, y2, door, axis='NS', wall='3', ceiling=2):
+    def building(self, name, x1, y1, x2, y2, door, axis='NS', wall='3', ceiling=2, roof_axis=1, roof_rise=1):
         m, ox = self.m, self.x
         for y in range(y1, y2+1):
             for x in range(ox+x1, ox+x2+1):
@@ -45,7 +45,7 @@ class District:
         dx, dy = door
         m.g[dy][ox+dx] = '.'
         m.door(ox+dx, dy, axis)
-        self.lines.append(f'@roof {ox+x1} {y1} {x2-x1+1} {y2-y1+1} {ceiling+.125} {min(4.875,ceiling+1.125)} 1 {int(wall!="3")}')
+        self.lines.append(f'@roof {ox+x1} {y1} {x2-x1+1} {y2-y1+1} {ceiling+.125} {min(4.875,ceiling+.125+roof_rise)} {roof_axis} {int(wall!="3")}')
 
     def connect(self, name, interior, exterior):
         ix, iy = interior; ex, ey = exterior
@@ -83,22 +83,23 @@ class District:
 
     def finish(self):
         m = self.m
-        # Windows are authored against genuine exterior faces, spaced away
-        # from doors. They are perspective-correct wall details, not billboards.
+        # Windows are authored against genuine exterior faces and keep door
+        # apertures clear. They are perspective-correct wall details.
         for roof in [line.split() for line in self.lines if line.startswith('@roof ')] :
             _,rx,ry,rw,rh,eave,_,_,_=roof
             rx,ry,rw,rh=int(rx),int(ry),int(rw),int(rh)
             kind='glass' if float(eave)>3 else 'shutter'
             faces=[]
             # Tall church windows flank the central portal symmetrically;
-            # ordinary houses retain the closer three-cell rhythm.
-            for x in range(rx+(4 if kind=='glass' else 2),rx+rw-1,6 if kind=='glass' else 3):
+            # ordinary houses have a balanced pair of smaller shuttered windows.
+            columns = range(rx+4,rx+rw-1,6) if kind=='glass' else sorted({rx+2,rx+rw-3})
+            for x in columns:
                 faces.extend([(x,ry,0,-1),(x,ry+rh-1,0,1)])
             for y in range(ry+2,ry+rh-1,3): faces.extend([(rx,y,-1,0),(rx+rw-1,y,1,0)])
             for x,y,dx,dy in faces:
                 if not (0<x+dx<m.w-1 and 0<y+dy<m.h-1): continue
                 if m.g[y][x] not in '123456' or m.g[y+dy][x+dx]!='.' or not self.sky[y+dy][x+dx]: continue
-                if any(m.g[yy][xx] in 'DR' for yy in range(max(0,y-2),min(m.h,y+3)) for xx in range(max(0,x-2),min(m.w,x+3))): continue
+                if kind=='glass' and any(m.g[yy][xx] in 'DR' for yy in range(max(0,y-2),min(m.h,y+3)) for xx in range(max(0,x-2),min(m.w,x+3))): continue
                 self.lines.append(f'@facade {x} {y} {dx} {dy} {kind}')
         lines = []
         sky = [[1 if cell else None for cell in row] for row in self.sky]
@@ -126,7 +127,8 @@ def village(d):
     d.surface('cobble', 2, 18, 24, 21)
     d.surface('earth', 10, 13, 13, 29)
     d.building('Abandoned cooper cottage', 3, 23, 9, 28, (6, 23), wall='3')
-    d.building('Village inn and the innkeepers room', 14, 4, 22, 11, (18, 11), wall='3', ceiling=2.125)
+    d.building('Village inn and the innkeepers room', 14, 4, 22, 11, (18, 11), wall='3', ceiling=2.125,
+               roof_axis=0, roof_rise=2.5)
     for x in range(15,22):
         if x != 18: m.wall(d.x+x,8,'3')
     m.door(d.x+18,8,'NS')

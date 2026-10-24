@@ -114,9 +114,11 @@ static void pitched_roofs(const Assets *assets) {
   Renderer r; renderer_init(&r,assets); Image *fb=image_new(SCREEN_W,SCREEN_H); r.eye_z=.5f;
   aim(g,1.5f,5.5f,1,0);
   for (int i=0;i<SCREEN_W*VIEW_H;i++) r.depth[i]=INFINITY;
-  render_roofs(&r,fb,g); int covered=0;
-  for (int i=0;i<SCREEN_W*VIEW_H;i++) { CHECK(!isnan(r.depth[i])); covered+=isfinite(r.depth[i]); }
-  CHECK(covered>500 && fabsf(r.depth[100*SCREEN_W+SCREEN_W/2]-6.5f)<.01f);
+  render_roofs(&r,fb,g); int covered=0,overhang=0;
+  for (int i=0;i<SCREEN_W*VIEW_H;i++) {
+    CHECK(!isnan(r.depth[i])); covered+=isfinite(r.depth[i]); overhang+=r.depth[i]<6.49f;
+  }
+  CHECK(covered>500 && overhang>100 && fabsf(r.depth[100*SCREEN_W+SCREEN_W/2]-6.5f)<.01f);
   image_fill(fb,0xff123456);
   for (int i=0;i<SCREEN_W*VIEW_H;i++) r.depth[i]=2;
   render_roofs(&r,fb,g);
@@ -131,6 +133,82 @@ static void pitched_roofs(const Assets *assets) {
   }
   image_free(fb); renderer_free(&r); game_destroy(g); level_free(&lv);
 }
+static void facade_textures(const Assets *assets) {
+  // Distinct materials with asymmetric UV markers expose wrong materials,
+  // double-width gable tiles, mirrored seams and shifted vertical origins.
+  Assets marked = *assets;
+  for (int material=0;material<WT_COUNT;material++) {
+    Image *tex=image_new(TEX,TEX);
+    for (int y=0;y<TEX;y++) for (int x=0;x<TEX;x++)
+      tex->px[y*TEX+x]=pack_argb(255,30+material*7,32+x/2,32+y/2);
+    marked.walls[material]=marked.walls_dark[material]=tex;
+  }
+  Image *empty=image_new(1,1);
+  marked.weapons[WEAPON_CROSSBOW][0]=empty;
+  char text[1024];
+  int len=snprintf(text,sizeof text,"@outside 1 1 17 17\n@height 0 0 19 19 .125\n@ceiling 7 7 5 5 1.5\n");
+  for (int y=0;y<19;y++) {
+    for (int x=0;x<19;x++)
+      text[len++]=x==0||y==0||x==18||y==18?'1':x==3&&y==3?'P':'.';
+    text[len++]='\n';
+  }
+  text[len]=0;
+  Level lv; parse(&lv,text);
+  lv.decoration_count=lv.wall_box_count=lv.hanging_count=lv.torch_count=lv.fire_light_count=0;
+  for (int y=7;y<12;y++) for (int x=7;x<12;x++) lv.world.cells[y*lv.w+x].outside=0;
+  lv.world.roof_count=1;
+  lv.world.roofs[0]=(WorldRoof){.x=7,.y=7,.w=5,.h=5,.eave=1.625f,.ridge=3.125f};
+  Session session={.lives=3,.next_life=40000}; Game *g=game_create(&lv,0,&session,NULL);
+  Renderer r; renderer_init(&r,&marked); image_fill(r.vignette,0);
+  Image *fb=image_new(SCREEN_W,SCREEN_H);
+  for (int variant=0;variant<5;variant++) {
+    for (int y=7;y<12;y++) for (int x=7;x<12;x++) if (x==7||x==11||y==7||y==11)
+      lv.grid[y*lv.w+x]=variant<4?"1235"[variant]:"235"[(x+y)%3];
+    for (int axis=0;axis<2;axis++) for (int far=0;far<2;far++) for (int slate=0;slate<2;slate++) {
+      lv.world.roofs[0].axis=axis; lv.world.roofs[0].slate=slate;
+      float position=far?16:3,direction=far?-1:1;
+      aim(g,axis?9.5f:position,axis?position:9.5f,axis?0:direction,axis?direction:0);
+      render_view(&r,fb,g);
+      // At depth four, one world unit is exactly 80 pixels. All three
+      // samples must share a texel and lighting, including the raised base.
+      uint32_t upper[5],gable[5];
+      for (int i=0;i<5;i++) {
+        int x=200+i*60;
+        CHECK(fabsf(r.depth[20*SCREEN_W+x]-4)<.001f);
+        upper[i]=fb->px[100*SCREEN_W+x]; gable[i]=fb->px[20*SCREEN_W+x];
+        CHECK(fb->px[180*SCREEN_W+x]==upper[i] && upper[i]==gable[i]);
+      }
+      // Replacing one cell with a sliding door must leave the material,
+      // UVs and lighting above its opening and in its gable unchanged.
+      int cx=axis?9:(far?11:7),cy=axis?(far?11:7):9,at=cy*lv.w+cx;
+      char wall=lv.grid[at]; lv.grid[at]='D'; lv.ceilings[at]=1.125f;
+      g->doors[0]=(Door){.x=cx,.y=cy,.kind='D'}; g->door_at[at]=0; g->door_count=1;
+      for (int state=0;state<3;state++) {
+        g->doors[0].open=state*.5f; render_view(&r,fb,g);
+        // The uniform facades' door headers inherit the adjacent jambs.
+        if (variant<4) CHECK(fb->px[100*SCREEN_W+320]==upper[2] && fb->px[20*SCREEN_W+320]==gable[2]);
+      }
+      lv.grid[at]=wall; lv.ceilings[at]=1.5f; g->door_at[at]=-1; g->door_count=0;
+    }
+  }
+  // A banner remains a ground-storey feature; bare stone fills both the
+  // upper wall and the gable, regardless of the roof's covering.
+  uint32_t plain[3];
+  for (int feature=0;feature<2;feature++) {
+    for (int y=7;y<12;y++) for (int x=7;x<12;x++) if (x==7||x==11||y==7||y==11)
+      lv.grid[y*lv.w+x]=feature?'6':'1';
+    aim(g,9.5f,16,0,-1); render_view(&r,fb,g);
+    for (int i=0;i<3;i++) {
+      uint32_t color=fb->px[(180-i*80)*SCREEN_W+320];
+      if (!feature) plain[i]=color;
+      else CHECK(i?color==plain[i]:color!=plain[i]);
+    }
+  }
+  image_free(fb); renderer_free(&r); game_destroy(g); level_free(&lv);
+  for (int i=0;i<WT_COUNT;i++) image_free(marked.walls[i]);
+  image_free(empty);
+}
+
 static void solid_architecture(const Assets *assets, bool shots) {
   Level lv; parse(&lv, COURT);
   lv.decoration_count=lv.wall_box_count=lv.hanging_count=lv.torch_count=lv.fire_light_count=0;
@@ -235,6 +313,20 @@ static void distant_wall_lighting(const Assets *assets, bool shots) {
   image_free(flat.walls[WT_STONE]); image_free(flat.walls_dark[WT_STONE]);
 }
 
+static void check_window_torches(const Level *lv) {
+  for (int i=0;i<lv->world.facade_count;i++) {
+    const WorldFacade *f=&lv->world.facades[i];
+    if (f->kind!=HANG_GLASS_WINDOW && f->kind!=HANG_SHUTTER_WINDOW) continue;
+    for (int j=0;j<lv->torch_count;j++) {
+      float x=lv->torches[j].x-f->x-.5f,y=lv->torches[j].y-f->y-.5f;
+      float normal=x*f->dx+y*f->dy,along=fabsf(x*f->dy-y*f->dx);
+      // The window and the full torch sprite must fit side by side on
+      // this face; a light on the other side of the wall is independent.
+      CHECK(fabsf(normal-.52f)>.001f || along>(f->kind==HANG_GLASS_WINDOW?1.36f:.66f));
+    }
+  }
+}
+
 static void campaign(const Assets *assets,bool shots) {
   const int offsets[]={39,41,43,41,45};
   const float views[][2][4]={
@@ -246,6 +338,7 @@ static void campaign(const Assets *assets,bool shots) {
     char path[128],err[160]; snprintf(path,sizeof path,"levels/%d.txt",n+1);
     char *text=SDL_LoadFile(path,NULL); CHECK(text); Level lv;
     CHECK(level_parse(&lv,text,err,sizeof err)); SDL_free(text);
+    check_window_torches(&lv);
     int outside=0,external_keys=0,kinds[8]={0},portals=0;
     for(int y=0;y<lv.h;y++) for(int x=0;x<lv.w;x++) outside+=world_outside(&lv,x,y)&&level_is_open(lv.grid[y*lv.w+x]);
     for(int i=0;i<lv.item_count;i++) external_keys+=lv.items[i].kind==ITEM_KEY&&lv.items[i].x>offsets[n];
@@ -276,6 +369,15 @@ static void campaign(const Assets *assets,bool shots) {
       if(shots) {
         aim(g,57.5f,18.5f,0,-1); render_view(&r,fb,g); render_hud(&r,fb,g);
         screenshot(fb,"build/world-inn-facade.bmp");
+        const float houses[][2]={{57.5f,22},{49.5f,16.5f},{63.5f,19.5f}};
+        for (int view=0;view<3;view++) {
+          float dx=57.5f-houses[view][0],dy=8-houses[view][1],length=hypotf(dx,dy);
+          aim(g,houses[view][0],houses[view][1],dx/length,dy/length);
+          CHECK(!game_is_blocked(g,g->player.x,g->player.y,g->player.radius,NULL));
+          render_view(&r,fb,g); render_hud(&r,fb,g);
+          snprintf(path,sizeof path,"build/world-inn-house-%d.bmp",view);
+          screenshot(fb,path);
+        }
       }
     }
     for (int i=0;i<lv.world.monk_count;i++) {
@@ -303,7 +405,7 @@ int main(int argc,char **argv) {
   CHECK(SDL_Init(0)); random_seed(9187);
   Assets assets; CHECK(assets_build(&assets));
   bool shots=argc>1&&!strcmp(argv[1],"--screenshots");
-  validation(); rendering(&assets); pitched_roofs(&assets); solid_architecture(&assets,shots);
+  validation(); rendering(&assets); pitched_roofs(&assets); facade_textures(&assets); solid_architecture(&assets,shots);
   distant_wall_lighting(&assets,shots); campaign(&assets,shots);
   assets_free(&assets); SDL_Quit(); puts("Outdoor terrain, roofs, peaceful monks, dialogue and save compatibility passed.");
   return 0;

@@ -94,6 +94,7 @@ typedef struct Assets {
   Image *floors[SURFACE_THEME_COUNT][SURFACE_MIPS];
   Image *ceilings[SURFACE_THEME_COUNT][SURFACE_MIPS];
   Image *grounds[GROUND_COUNT - 1][SURFACE_MIPS];
+  Image *roofs[2][SURFACE_MIPS]; // overlapping timber shingles and blue-grey slate
   Image *sky;
   EnemySprites enemies[ENEMY_TYPE_COUNT];
   EnemySprites knight_melee;
