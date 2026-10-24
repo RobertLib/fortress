@@ -10,8 +10,8 @@
 #include "level.h"
 
 #define MAX_PROJECTILES 256
-#define BARREL_RADIUS 0.25f
-#define BARREL_HEIGHT 0.65f
+#define BARREL_RADIUS 0.18f
+#define BARREL_HEIGHT 0.48f
 #define BARREL_BLAST_RADIUS 3.2f
 #define BARREL_EXPLOSION_TIME 0.7f
 #define BREAKABLE_WALL_HEALTH 36

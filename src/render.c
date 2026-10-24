@@ -1043,7 +1043,7 @@ static void collect_sprites(Renderer *r, const Game *g) {
   }
   for (int i = 0; i < g->barrel_count; i++) {
     const Barrel *b = &g->barrels[i];
-    add_sprite(b->x, b->y, as->barrels[b->destroyed ? 2 : b->powder ? 1 : 0], 0.78f);
+    add_sprite(b->x, b->y, as->barrels[b->destroyed ? 2 : b->powder ? 1 : 0], 0.55f);
     if (b->blast_timer > 0) {
       float age = 1 - b->blast_timer / BARREL_EXPLOSION_TIME;
       int frame = clampi((int)(age * EXPLOSION_FRAMES), 0, EXPLOSION_FRAMES - 1);
