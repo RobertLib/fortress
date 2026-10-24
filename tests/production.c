@@ -248,6 +248,115 @@ static void autosave_trap_safety(void) {
   CHECK(savegame_inspect(slot_path(3),levels,levels_loaded,&info) && info.health==75);
   puts("Triggered and firing traps defer autosaves, preserve the safe slot and allow saving after escape.");
 }
+static void autosave_powder_safety(void) {
+  new_game(0,DIFFICULTY_NORMAL); begin_level();
+  for (int i=0;i<game->enemy_count;i++) { game->enemies[i].hp=0; game->enemies[i].state=ES_DEAD; }
+  game->horror.calm_timer=10000;
+  game->player.health=61; game->campaign.checkpoint_requested=true; autosave_game(.1f);
+  SaveInfo info;
+  CHECK(savegame_inspect(slot_path(3),levels,levels_loaded,&info) && info.health==61);
+  // Fire from inside the fatal blast radius of the first chapter's powder.
+  position(game,12.2f,16.5f,-1,0);
+  CHECK(!game_is_blocked(game,game->player.x,game->player.y,game->player.radius,NULL));
+  game->player.health=60; game->campaign.checkpoint_requested=true; autosave_timer=90;
+  input.fire=true; input_focused=true; update(.01f);
+  CHECK(game->projectile_count==1 && game->projectiles[0].kind==SHOT_MISS);
+  CHECK(!safe_to_autosave() && game->campaign.checkpoint_requested && autosave_timer>=90);
+  CHECK(savegame_inspect(slot_path(3),levels,levels_loaded,&info) && info.health==61);
+  input.fire=false;
+  for (int i=0;i<10 && !game->player_dead;i++) update(.01f);
+  CHECK(game->player_dead);
+  restart_level();
+  CHECK(state==ST_PLAYING && !game->player_dead && game->player.health==61 && !game->projectile_count);
+  for (int i=0;i<10;i++) update(.01f);
+  CHECK(!game->player_dead); // The restored save cannot replay the fatal shot.
+  game->player.has_arbalest=true; game->player.weapon=WEAPON_ARBALEST;
+  game->burst_remaining=1; game->fire_timer=.3f;
+  CHECK(!safe_to_autosave());
+  game->burst_remaining=0;
+  game->player.health=75; game->campaign.checkpoint_requested=true;
+  autosave_game(.01f);
+  CHECK(savegame_inspect(slot_path(3),levels,levels_loaded,&info) && info.health==75);
+  puts("Own bolts and committed bursts defer autosaves; powder deaths restore a safe position.");
+}
+static void loaded_story_recovery(void) {
+  for (int browser=0;browser<2;browser++) for (int scenario=0;scenario<3;scenario++) {
+    preferences_defaults(); selected_slot=2;
+    new_game(1,DIFFICULTY_HARD); session.run_id=100+browser*3+scenario; begin_level();
+    for (int i=0;i<game->enemy_count;i++) { game->enemies[i].hp=0; game->enemies[i].state=ES_DEAD; }
+    game->horror.calm_timer=10000;
+    game->player.health=scenario==1?20:61;
+    game->player.venom=scenario==1?2:0;
+    game->player.ammo=73; game->player.has_arbalest=true; game->player.weapon=WEAPON_ARBALEST;
+    game->time=12; session.score=1234;
+    int run_id=session.run_id;
+    act_save_game(); CHECK(!strcmp(notice,"GAME SAVED"));
+    // Both automatic files now belong to a different playthrough.
+    new_game(1,DIFFICULTY_NORMAL); session.run_id=run_id+1000; begin_level();
+    if (scenario==2) preferences_get()->autosave=false;
+    if (browser) {
+      set_state(ST_MENU); act_slots(); slot_row=2; slot_save_mode=false; activate_slot();
+    } else on_key_down(SDL_SCANCODE_F9);
+    CHECK(state==ST_PLAYING && session.run_id==run_id && game->player.ammo==73 && game->player.has_arbalest);
+    SaveInfo info;
+    CHECK(savegame_inspect(slot_path(3),levels,levels_loaded,&info));
+    if (scenario==0) {
+      CHECK(info.run_id==run_id && info.health==61);
+      CHECK(savegame_inspect(slot_path(4),levels,levels_loaded,&info) && info.run_id==run_id);
+    } else {
+      CHECK(info.run_id==run_id+1000); // Neither unsafe loads nor disabled saving replace safe files.
+      CHECK(game->campaign.checkpoint_requested || scenario==2);
+    }
+    game_hurt_player(game,1000); restart_level();
+    CHECK(!game->player_dead && game->player.ammo==73 && game->player.has_arbalest && game->player.weapon==WEAPON_ARBALEST);
+    CHECK(session.run_id==run_id && session.score==1234 && session.difficulty==DIFFICULTY_HARD);
+    if (scenario==0) CHECK(state==ST_PLAYING && game->player.health==61 && game->time==12);
+    else CHECK(state==ST_LEVEL_START && game->player.health==100 && game->time==0);
+  }
+  preferences_defaults(); selected_slot=0;
+  puts("Quickload and slot-browser Story recovery preserve equipment with foreign checkpoints, unsafe loads and saving disabled.");
+}
+static void closing_door_occupancy(void) {
+  reset_fixture();
+  Door *door=game_door_at(play,5,5); CHECK(door);
+  position(play,4.76f,5.5f,1,0);
+  door->state=DOOR_CLOSING; door->open=1;
+  Input move={.weapon=-1,.forward=true,.run=true};
+  for (int i=0;i<12;i++) game_update(play,.05f,&move);
+  CHECK(play->player.x>6.5f && !play->player_dead);
+  CHECK(door->state==DOOR_OPEN && door->open==1);
+  position(play,3.5f,5.5f,1,0);
+  // The same obstruction check protects soldiers and the pursuing Jailer.
+  Enemy *guard=&play->enemies[0];
+  guard->x=5.5f; guard->y=5.5f; guard->state=ES_STAND; guard->hp=25;
+  door->state=DOOR_CLOSING; door->open=.9f;
+  ticks(play,1); CHECK(door->state==DOOR_OPENING && door->open>=.9f);
+  guard->state=ES_DEAD;
+  play->horror.warden=(Warden){.state=WARDEN_HUNT,.x=5.5f,.y=5.5f,.next_x=5.5f,.next_y=5.5f,.remaining=20};
+  door->state=DOOR_CLOSING; door->open=.9f;
+  ticks(play,1); CHECK(door->state==DOOR_OPENING && door->open>=.9f);
+  puts("Closing doors reopen around the player, soldiers and Jailer; sprinting through cannot trap the player.");
+}
+static void reading_input_isolation(void) {
+  new_game(0,DIFFICULTY_NORMAL); begin_level();
+  position(game,3.5f,28.5f,0,-1);
+  input.use=true; update(.01f);
+  CHECK(game->horror.reading==0 && !input.use);
+  float time=game->time;
+  int ammo=game->player.ammo;
+  input.mouse_dx=800; input.forward=true; input.fire=true; input.weapon=WEAPON_DAGGER;
+  gamepad_fire_ready=true; update(.01f);
+  CHECK(game->time==time && input.mouse_dx==0 && !input.fire && !input.forward && input.weapon==-1 && !gamepad_fire_ready);
+  SDL_Event click={.type=SDL_EVENT_MOUSE_BUTTON_DOWN}; click.button.button=SDL_BUTTON_LEFT;
+  handle_event(&click); CHECK(!input.fire);
+  // Firing and closing in the same frame must not queue a shot or a turn.
+  on_key_down(SDL_SCANCODE_LCTRL); on_key_down(SDL_SCANCODE_E); update(.01f); update(.01f);
+  CHECK(game->horror.reading==-1 && game->player.dir_x==0 && game->player.dir_y==-1);
+  CHECK(game->player.ammo==ammo && game->player.weapon==WEAPON_CROSSBOW && game->projectile_count==0);
+  on_key_down(SDL_SCANCODE_J); update(.01f);
+  CHECK(game->player.ammo==ammo-1);
+  puts("Reading discards camera movement, queued weapon/fire input and controller trigger readiness; fresh input works after closing.");
+}
 static void journal_and_map_input(void) {
   preferences_defaults(); set_state(ST_PLAYING);
   CHECK(preferences_bind(ACTION_MAP,SDL_SCANCODE_K));
@@ -438,7 +547,8 @@ static void screenshots(void) {
 }
 int main(int argc,char **argv) {
   CHECK(SDL_Init(0)); fixture_map(); progression(); tactical_tools(); soldier_combat(); preferences_and_saves();
-  autosave_trap_safety(); journal_and_map_input(); authored_campaign(); retry_statistics();
+  autosave_trap_safety(); autosave_powder_safety(); loaded_story_recovery(); closing_door_occupancy();
+  reading_input_isolation(); journal_and_map_input(); authored_campaign(); retry_statistics();
   if (argc>1 && !strcmp(argv[1],"--screenshots")) screenshots();
   game_destroy(play); level_free(&fixture); game_destroy(game);
   for (int i=0;i<levels_loaded;i++) level_free(&levels[i]);

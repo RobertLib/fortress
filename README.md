@@ -191,10 +191,18 @@ working directory.
 
 Story mode writes a fresh chapter checkpoint on entry and autosaves important
 progress, or after ninety seconds, when health and nearby threats allow it.
-Projectiles, poison, nearby enemies, triggered arrow traps, swinging blades and
-Jailer encounters defer autosaving. A safe interaction with the last bell saves
+All projectiles, unfinished crossbow bursts, poison, nearby enemies, triggered
+arrow traps, swinging blades and Jailer encounters defer autosaving.
+A safe interaction with the last bell saves
 the preparation before the pursuit. Automatic saving can be disabled; manual
 slots remain available.
+
+Loading a safe position refreshes the automatic checkpoints for that run.
+An unsafe loaded position waits until the danger passes before autosaving.
+If no matching checkpoint can be restored, Story retries the chapter with full
+health and the equipment from chapter entry or the most recently loaded save.
+This fallback also preserves equipment when automatic saving is disabled.
+
 Options and keyboard bindings persist in `options.cfg`. For portable testing,
 `FORTRESS_USER_DATA=/existing/directory` isolates both saves and options.
 

@@ -405,6 +405,10 @@ static void update_doors(Game *g, float dt) {
         }
       }
     } else if (d->state == DOOR_CLOSING) {
+      if (doorway_occupied(g, d)) {
+        game_open_door(g, d, false);
+        continue;
+      }
       d->open -= dt * 1.6f;
       if (d->open <= 0) {
         d->open = 0;
@@ -1246,6 +1250,8 @@ void game_update(Game *g, float dt, Input *input) {
         g->horror.reading_page = 0;
       }
     }
+    *input = (Input){.weapon = -1};
+    g->fire_held = true; // release a held trigger before firing after reading
     return; // Reading pauses the world, including venom and the pursuer.
   }
   if (g->player_dead || g->completed) {
@@ -1256,7 +1262,11 @@ void game_update(Game *g, float dt, Input *input) {
   g->time += dt;
   update_doors(g, dt);
   update_player(g, dt, input);
-  if (g->horror.reading >= 0) return;
+  if (g->horror.reading >= 0) {
+    *input = (Input){.weapon = -1};
+    g->fire_held = true;
+    return;
+  }
   if (g->player_dead || g->completed) {
     mark_visited(g);
     decay_fx(g, dt);

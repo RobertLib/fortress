@@ -152,13 +152,20 @@ static void test_reading_pauses_world(void) {
   int ammo = g->player.ammo;
   g->player.venom = 5; g->player.venom_timer = .01f;
   Warden *w = hunt(g, 4.5f, 3.5f);
-  in = (Input){.weapon = WEAPON_DAGGER, .forward = true, .fire = true};
+  in = (Input){.weapon = WEAPON_DAGGER, .forward = true, .fire = true, .mouse_dx = 800};
   game_update(g, 1, &in);
   CHECK(g->time == time && g->player.x == x && g->player.health == 100 && g->player.venom == 5);
   CHECK(g->player.ammo == ammo && g->player.weapon == WEAPON_CROSSBOW && w->x == 4.5f);
+  CHECK(in.mouse_dx == 0 && !in.fire && !in.forward && in.weapon == -1);
   in.use = true;
   game_update(g, .01f, &in);
   CHECK(g->horror.reading == -1 && !in.use && g->time == time);
+  in.fire = true; // A trigger held across closing must first be released.
+  game_update(g, .01f, &in);
+  CHECK(g->player.dir_x == 0 && g->player.dir_y == -1 && g->player.ammo == ammo);
+  in.fire = false; game_update(g, .01f, &in);
+  in.fire = true; game_update(g, .01f, &in);
+  CHECK(g->player.ammo == ammo - 1);
   teardown(&f);
 }
 

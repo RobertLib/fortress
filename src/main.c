@@ -82,6 +82,7 @@ static State options_return=ST_MENU,slots_return=ST_MENU;
 static int options_page,options_row,binding_row,slot_row,selected_slot;
 static bool binding_wait,slot_save_mode;
 static float autosave_timer;
+static Persist story_retry_equipment;
 static float combat_music_tail;
 static char *manual_paths[2],*automatic_path,*checkpoint_path;
 static SaveInfo slot_info[5];
@@ -89,6 +90,8 @@ static bool slot_valid[5];
 static void refresh_save_slots(void);
 static void checkpoint_game(void);
 static bool restore_checkpoint(void);
+static bool safe_to_autosave(void);
+static void finish_load_game(void);
 static const char *gamepad_button_name(SDL_GamepadButton button);
 
 // ------------------------------------------------------------------ helpers
@@ -156,6 +159,8 @@ static void advance_story(void) {
 static void start_level(int index, const Persist *persist) {
   game_destroy(game);
   game = game_create(&levels[index], index, &session, persist);
+  const Player *p = &game->player;
+  story_retry_equipment = (Persist){100, p->ammo, p->weapon, p->has_arbalest};
   input.use = false;
   input.weapon = -1;
   input.mouse_dx = 0;
@@ -195,7 +200,9 @@ static void restart_level(void) {
   session.total_kills = maxi(0, session.total_kills - game->kills);
   session.total_treasure = maxi(0, session.total_treasure - game->treasure);
   session.total_secrets_found = maxi(0, session.total_secrets_found - game->secrets_found);
-  start_level(game->level_index, NULL); // classic rules: fresh crossbow after death
+  Persist equipment = story_retry_equipment;
+  start_level(game->level_index,
+              !session.arcade && game->level->campaign.enabled ? &equipment : NULL);
 }
 
 static void next_level(void) {
@@ -271,12 +278,7 @@ static void act_load_game(void) {
   if (!path) {
     notify_save("SAVE FOLDER UNAVAILABLE");
   } else if (savegame_load(path, levels, levels_loaded, &game, &session, err, sizeof err)) {
-    selected_difficulty = session.difficulty;
-    resumable = false;
-    death_delay = 0;
-    set_state(ST_PLAYING);
-    notify_save("GAME LOADED");
-    blip();
+    finish_load_game();
   } else {
     notify_save(err);
   }
@@ -302,17 +304,15 @@ static bool restore_checkpoint(void) {
 }
 static bool safe_to_autosave(void) {
   if (!game || game->player.health<35 || game->player.venom || game->horror.reading>=0 || game->campaign.journal ||
+      game->projectile_count || game->burst_remaining ||
       game->player_dead || game->completed || game->horror.warden.state!=WARDEN_DORMANT ||
       (game->horror.pending_hunts && !horror_in_haven(game,game->player.x,game->player.y))) return false;
   for (int i=0;i<game->enemy_count;i++) {
     const Enemy *e=&game->enemies[i];
     if (!enemy_dead(e) && hypotf(e->x-game->player.x,e->y-game->player.y)<6) return false;
   }
-  for (int i=0;i<game->projectile_count;i++) {
-    const Projectile *p=&game->projectiles[i];
-    if ((p->kind==SHOT_HOSTILE || p->kind==SHOT_TRAP || p->kind==SHOT_AT_PLAYER) &&
-        hypotf(p->x-game->player.x,p->y-game->player.y)<8) return false;
-  }
+  // Even our own bolts can ignite powder beside the player. Wait for every
+  // projectile and committed burst to finish before replacing a safe save.
   // An imminent volley is unsafe before its first projectile exists, too.
   // Defer nearby saves for the short trigger/firing interval, even if the
   // player has just stepped aside from the arrow's path.
@@ -327,6 +327,22 @@ static bool safe_to_autosave(void) {
     if (hypotf(p->x+.5f-game->player.x,p->y+.5f-game->player.y)<1.5f) return false;
   }
   return true;
+}
+static void finish_load_game(void) {
+  const Player *p = &game->player;
+  story_retry_equipment = (Persist){100, p->ammo, p->weapon, p->has_arbalest};
+  selected_difficulty = session.difficulty;
+  resumable = false;
+  death_delay = 0;
+  autosave_timer = 0;
+  set_state(ST_PLAYING);
+  // A different run may have replaced both automatic slots. Only promote a
+  // safe loaded position; otherwise keep its equipment for a chapter retry
+  // and save its progress as soon as the danger has passed.
+  if (safe_to_autosave()) checkpoint_game();
+  else game->campaign.checkpoint_requested = true;
+  notify_save("GAME LOADED");
+  blip();
 }
 static void autosave_game(float dt) {
   if (session.arcade || !preferences_get()->autosave) return;
@@ -432,8 +448,7 @@ static void activate_slot(void) {
   } else if (!slot_save_mode) {
     if (savegame_load(path,levels,levels_loaded,&game,&session,err,sizeof err)) {
       if (slot_row<3) selected_slot=slot_row;
-      selected_difficulty=session.difficulty; resumable=false; death_delay=0;
-      set_state(ST_PLAYING); notify_save("GAME LOADED"); blip();
+      finish_load_game();
     } else notify_save(err);
   } else notify_save("AUTOMATIC SLOTS ARE READ ONLY");
 }
@@ -1044,7 +1059,7 @@ static void handle_event(const SDL_Event *e) {
     if (e->button.button != SDL_BUTTON_LEFT) break;
     gamepad_active = false;
     if (state == ST_PLAYING) {
-      if (game->campaign.journal) break;
+      if (game->campaign.journal || game->horror.reading >= 0) break;
       if (!mouse_captured()) capture_mouse(true);
       input.fire = true;
     } else {
@@ -1059,7 +1074,8 @@ static void handle_event(const SDL_Event *e) {
   case SDL_EVENT_MOUSE_MOTION:
     if (e->motion.xrel || e->motion.yrel) gamepad_active = false;
     if (mouse_captured()) {
-      if (state == ST_PLAYING) input.mouse_dx += e->motion.xrel;
+      if (state == ST_PLAYING && !game->campaign.journal && game->horror.reading < 0)
+        input.mouse_dx += e->motion.xrel;
     } else {
       float x, y;
       event_pos(e, &x, &y);
@@ -1111,11 +1127,13 @@ static void update(float dt) {
         (game->campaign.done&game->level->campaign.stations[station].requires)==(uint32_t)game->level->campaign.stations[station].requires)
       checkpoint_game();
   }
+  bool was_reading = game->horror.reading >= 0;
   game_update(game, dt, &frame);
   if (!game->campaign.journal && game->horror.reading<0) autosave_game(dt);
   input.use = frame.use;
   input.weapon = frame.weapon;
   input.mouse_dx = frame.mouse_dx;
+  if (was_reading || game->horror.reading >= 0) clear_input();
 
   if (game->player_dead) {
     death_delay += dt;
@@ -1426,10 +1444,10 @@ static void draw_died_overlay(void) {
   ui_rule(fb, 175, 151, 290);
   char lives[48];
   if (session.arcade) snprintf(lives, sizeof lives, "%d LIVES REMAIN", session.lives);
-  else snprintf(lives,sizeof lives,"RETURN TO YOUR SAFE CHECKPOINT");
+  else snprintf(lives,sizeof lives,"SAFE SAVE OR RETRY WITH YOUR EQUIPMENT");
   text(lives, W / 2, 181, 12, "#a9b5b7");
-  control_hint(session.arcade?"ENTER  /  TRY THIS CHAPTER AGAIN":"ENTER  /  RETURN TO SAFE SAVE",
-    session.arcade?"%s  /  TRY THIS CHAPTER AGAIN":"%s  /  RETURN TO SAFE SAVE",224,12,"#d4bd96");
+  control_hint(session.arcade?"ENTER  /  TRY THIS CHAPTER AGAIN":"ENTER  /  RECOVER YOUR RUN",
+    session.arcade?"%s  /  TRY THIS CHAPTER AGAIN":"%s  /  RECOVER YOUR RUN",224,12,"#d4bd96");
 }
 
 static void stat_rows(const char *rows[][2], int n, float y0, float step, float size) {

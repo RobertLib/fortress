@@ -213,6 +213,11 @@ static void test_actions(SDL_Joystick *joystick) {
   tap(joystick, SDL_GAMEPAD_BUTTON_BACK);
   CHECK(!game->show_map);
   game->horror.reading = 0;
+  input.use = false; // Opening a note normally consumes the preceding use press.
+  int reading_ammo = game->player.ammo;
+  axis(joystick, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 32767);
+  update(.01f);
+  CHECK(game->horror.reading == 0 && game->player.ammo == reading_ammo && !gamepad_fire_ready);
   tap(joystick, SDL_GAMEPAD_BUTTON_NORTH);
   CHECK(!game->show_map);
   on_key_down(SDL_SCANCODE_TAB);
@@ -221,7 +226,11 @@ static void test_actions(SDL_Joystick *joystick) {
   update(.01f);
   CHECK(game->horror.reading == -1);
   update(.01f);
-  CHECK(!input.use && input.weapon == -1 && game->player.weapon == WEAPON_DAGGER);
+  // Reading discards the pending weapon change and requires trigger release.
+  CHECK(!input.use && input.weapon == -1 && game->player.weapon == WEAPON_CROSSBOW);
+  CHECK(game->player.ammo == reading_ammo && !gamepad_fire_ready);
+  axis(joystick, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 0);
+  update(.01f);
   game->player.weapon = WEAPON_CROSSBOW;
   game->fire_timer = 0;
   game->fire_held = false;
