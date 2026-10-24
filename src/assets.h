@@ -99,7 +99,6 @@ typedef struct Assets {
   Image *wall_rubble, *wall_dust[WALL_DUST_FRAMES];
   Image *trap[TRAP_SPRITE_COUNT];
   Image *pendulum[PENDULUM_FRAMES]; // angle samples from left to right
-  Image *pendulum_edge;
   Image *weapons[WEAPON_COUNT][3]; // idle, just fired, recovering
   Image *weapon_icons[WEAPON_COUNT];
   Image *crests[CREST_COUNT];

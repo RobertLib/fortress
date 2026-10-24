@@ -76,7 +76,7 @@ painted cinematic scenes with readable captions and gentle camera movement.
 
 Run `./build/visual_tests --screenshots` from the repository root to render the
 complete presentation and contact sheets into `build/art-*.bmp`. The test
-checks all 525 asset slots, premultiplied alpha, distinct animation frames,
+checks all 524 asset slots, premultiplied alpha, distinct animation frames,
 material mips and asset ownership. See [the coverage and verification guide](docs/art-direction.md)
 and [artwork sources and reproduction](assets/README.md).
 

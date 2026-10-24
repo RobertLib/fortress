@@ -25,7 +25,7 @@ The game retains its 640 × 400 raycasting presentation.
 | Boxes | Textured front, side and lid for chest and wardrobe; matching shaded faces |
 | Items | Keys, potion, bread, quivers, treasure and repeating crossbow |
 | Weapons | Three painted first-person frames per weapon and separate equipment icons |
-| Traps | Two pressure-plate states, directional bolts and 49 pendulum angle samples |
+| Traps | Two pressure-plate states, directional bolts and 49 pendulum angle samples with solid silhouette sides |
 | Effects | Eight painted explosion stages, six dust stages, rubble, flames, fountain motion, two water families and embers |
 | HUD, automap, notes | Matching colors, panels and symbols; health, venom, lives, ammunition and three key indicators |
 
@@ -43,7 +43,7 @@ ctest --test-dir build --output-on-failure
 make release
 ```
 
-The artwork check visits all 525 image slots, verifies nonempty images and
+The artwork check visits all 524 image slots, verifies nonempty images and
 premultiplied alpha, checks distinct locomotion and weapon frames, validates
 mip sizes, renders all presentation states and checks shared-image cleanup.
 The existing gameplay checks cover walls, water, pits, stairs, pendulums,

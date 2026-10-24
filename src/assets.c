@@ -330,12 +330,6 @@ bool assets_build(Assets *a) {
   for (int i = 0; i < PENDULUM_FRAMES; i++)
     a->pendulum[i] = pendulum(axe, i);
   image_free(axe);
-  a->pendulum_edge = image_new(TEX, TEX);
-  for (int y = 0; y < TEX; y++)
-    for (int x = 0; x < TEX; x++) {
-      float k = .45f + .5f * sinf(x / (float)TEX * (float)M_PI);
-      a->pendulum_edge->px[y * TEX + x] = pack_argb(255, 149 * k, 165 * k, 172 * k);
-    }
   for (int w = 0; w < WEAPON_COUNT; w++) {
     for (int f = 0; f < 3; f++) {
       Image *cell = art_cell(atlas[8], 3, w * 3 + f);

@@ -209,6 +209,50 @@ static void test_rendering(bool screenshots) {
   f.level.pendulum_count = count;
   if (screenshots) screenshot(fb, "build/pendulum-edge.bmp");
 
+  // Solid sides follow the painted silhouette throughout the swing and
+  // across the former edge-view cutoff (atan(.25), about 14 degrees).
+  const float views[] = {0, 13, 15, 45, 90, 180, 270};
+  float *depth = malloc(sizeof(float) * SCREEN_W * VIEW_H);
+  CHECK(depth);
+  Image *sheet = screenshots ? image_new(7 * 320, 3 * 200) : NULL;
+  g->player.weapon = WEAPON_DAGGER;
+  f.level.pendulum_count = 1;
+  for (int axis = 0; axis < 2; axis++) {
+    f.level.pendulums[0].dx = !axis;
+    f.level.pendulums[0].dy = axis;
+    for (int phase = 0; phase < 3; phase++) {
+      g->time = phase == 0 ? 0 : phase == 1 ? PENDULUM_PERIOD / 4 : PENDULUM_PERIOD * .75f;
+      for (int view = 0; view < 7; view++) {
+        float angle = (views[view] + axis * 90) * (float)M_PI / 180;
+        float dx = cosf(angle), dy = sinf(angle);
+        aim(g, 4.5f - dx * 1.7f, 4.5f - dy * 1.7f, dx, dy);
+        render_view(&renderer, fb, g);
+        memcpy(depth, renderer.depth, sizeof(float) * SCREEN_W * VIEW_H);
+        f.level.pendulum_count = 0;
+        render_view(&renderer, other, g);
+        f.level.pendulum_count = 1;
+        int solid = 0;
+        for (int i = 0; i < SCREEN_W * VIEW_H; i++) {
+          if (depth[i] >= renderer.depth[i]) continue;
+          CHECK(isfinite(depth[i]) && depth[i] > .05f && depth[i] < 2.6f);
+          solid++;
+        }
+        CHECK(solid > 100 && changed_pixels(fb, other) > 100);
+        if (sheet && !axis) {
+          image_reset_clip(fb);
+          gfx_blit(sheet, fb, 0, 0, SCREEN_W, SCREEN_H, view * 320, phase * 200, 320, 200, 1);
+        }
+      }
+    }
+  }
+  if (sheet) screenshot(sheet, "build/pendulum-views.bmp");
+  image_free(sheet);
+  free(depth);
+  f.level.pendulums[0].dx = 1;
+  f.level.pendulums[0].dy = 0;
+  f.level.pendulum_count = count;
+  g->time = 0;
+
   // Full masonry hides the whole trap, including its ceiling attachment.
   aim(g, 4.5f, 2.2f, 0, 1);
   for (int x = 1; x < f.level.w - 1; x++) f.level.grid[3 * f.level.w + x] = '1';
@@ -231,6 +275,7 @@ static void test_rendering(bool screenshots) {
   image_free(fb);
   image_free(other);
   renderer_free(&renderer);
+  assets_free(&assets);
   teardown(&f);
 }
 

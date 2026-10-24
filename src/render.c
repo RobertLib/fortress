@@ -1155,21 +1155,12 @@ static void collect_sprites(Renderer *r, const Game *g) {
   qsort(sprites, (size_t)sprite_count, sizeof(Sprite), cmp_sprite);
 }
 
-static void pendulum_quad(Renderer *r, Image *fb, const Game *g, const Image *tex,
-                          float x0, float y0, float x1, float y1, float bottom, float top) {
-  QuadSpan q;
-  if (!quad_span(&g->player, x0, y0, x1, y1, &q)) return;
-  for (int x = q.x_start; x <= q.x_end; x++) {
-    float dist, u;
-    quad_at(&q, x, &dist, &u);
-    if (dist >= r->zbuffer[x]) continue;
-    float h = VIEW_H / dist;
-    const Image *img = shaded(tex, shade_bucket(dist));
-    float base = level_floor(g->level, (x0 + x1) * .5f, (y0 + y1) * .5f);
-    draw_column(r, fb, img, tex_column(img, u), x, VIEW_H / 2.0f + h * (r->eye_z - base - top), h * (top - bottom),
-                NULL, dist, false);
-    render_transparent_walls(r, fb, x, x, dist);
-  }
+static bool pendulum_interval(float origin, float dir, float lo, float hi, float *enter, float *exit) {
+  if (fabsf(dir) < 1e-7f) return origin >= lo && origin <= hi;
+  float a = (lo - origin) / dir, b = (hi - origin) / dir;
+  *enter = maxf(*enter, minf(a, b));
+  *exit = minf(*exit, maxf(a, b));
+  return *enter <= *exit;
 }
 
 static void render_pendulum(Renderer *r, Image *fb, const Game *g, const PendulumSpawn *s) {
@@ -1177,28 +1168,63 @@ static void render_pendulum(Renderer *r, Image *fb, const Game *g, const Pendulu
   int frame = clampi((int)round_half_up((angle / PENDULUM_MAX_ANGLE + 1) * 0.5f * (PENDULUM_FRAMES - 1)),
                      0, PENDULUM_FRAMES - 1);
   float cx = s->x + 0.5f, cy = s->y + 0.5f;
-  float half = PENDULUM_VIEW_WIDTH / 2;
-  pendulum_quad(r, fb, g, r->assets->pendulum[frame], cx - s->dx * half, cy - s->dy * half,
-                cx + s->dx * half, cy + s->dy * half, 0, 1);
+  const Player *p = &g->player;
+  const Image *tex = r->assets->pendulum[frame];
+  const float half = PENDULUM_VIEW_WIDTH / 2, thickness = .018f;
+  float across = (p->x - cx) * s->dx + (p->y - cy) * s->dy;
+  float normal = -(p->x - cx) * s->dy + (p->y - cy) * s->dx;
+  float eye = r->eye_z - level_floor(g->level, cx, cy);
 
-  // A narrow edge and shaft remain visible when looking along the swing's
-  // plane. In a face-on view the painted blade already covers these parts.
-  float facing = fabsf((cx - g->player.x) * s->dy - (cy - g->player.y) * s->dx);
-  float along = fabsf((cx - g->player.x) * s->dx + (cy - g->player.y) * s->dy);
-  if (facing >= along * 0.25f) return;
-  float sn = sinf(angle), cs = cosf(angle);
-  for (int i = 0; i < 12; i++) {
-    float radius = PENDULUM_LENGTH * (i + 0.5f) / 12;
-    float bx = cx + s->dx * radius * sn, by = cy + s->dy * radius * sn;
-    float z = PENDULUM_PIVOT - radius * cs;
-    pendulum_quad(r, fb, g, r->assets->pendulum_edge, bx - s->dy * .015f, by + s->dx * .015f,
-                  bx + s->dy * .015f, by - s->dx * .015f, z - .025f, z + .025f);
+  // Extrude the painted alpha silhouette, including the holes in the blade.
+  // Walking texture cells along each ray gives the same solid shape from
+  // every angle, with continuous sides instead of an edge-on substitute.
+  for (int x = fb->clip_x0; x < fb->clip_x1; x++) {
+    float camera_x = 2.0f * x / W - 1;
+    float rx = p->dir_x + p->plane_x * camera_x, ry = p->dir_y + p->plane_y * camera_x;
+    float da = rx * s->dx + ry * s->dy, dn = -rx * s->dy + ry * s->dx;
+    float near = NEAR_PLANE, far = r->zbuffer[x];
+    if (!pendulum_interval(across, da, -half, half, &near, &far) ||
+        !pendulum_interval(normal, dn, -thickness, thickness, &near, &far)) continue;
+    float top = VIEW_H * .5f + minf((eye - 1) * VIEW_H / near, (eye - 1) * VIEW_H / far);
+    float bottom = VIEW_H * .5f + maxf(eye * VIEW_H / near, eye * VIEW_H / far);
+    int y0 = maxi(fb->clip_y0, (int)ceilf(top - .5f));
+    int y1 = mini(fb->clip_y1, (int)ceilf(bottom - .5f));
+    float painted_to = 0;
+    for (int y = y0; y < y1; y++) {
+      int index = y * W + x;
+      float dz = (VIEW_H * .5f - y - .5f) / VIEW_H;
+      float enter = near, exit = minf(far, r->depth[index]);
+      if (!pendulum_interval(eye, dz, 0, 1, &enter, &exit) || enter > exit) continue;
+      float dist = minf(enter + .00001f, exit);
+      float u = ((across + da * dist) / PENDULUM_VIEW_WIDTH + .5f) * tex->w;
+      float v = (1 - eye - dz * dist) * tex->h;
+      float du = da / PENDULUM_VIEW_WIDTH * tex->w, dv = -dz * tex->h;
+      int tx = clampi((int)floorf(u), 0, tex->w - 1), ty = clampi((int)floorf(v), 0, tex->h - 1);
+      int sx = du < 0 ? -1 : 1, sy = dv < 0 ? -1 : 1;
+      float step_x = fabsf(du) < 1e-7f ? INFINITY : fabsf(1 / du);
+      float step_y = fabsf(dv) < 1e-7f ? INFINITY : fabsf(1 / dv);
+      float next_x = isinf(step_x) ? INFINITY : dist + (tx + (sx > 0) - u) / du;
+      float next_y = isinf(step_y) ? INFINITY : dist + (ty + (sy > 0) - v) / dv;
+      while (dist <= exit && tx >= 0 && tx < tex->w && ty >= 0 && ty < tex->h) {
+        uint32_t color = tex->px[ty * tex->w + tx];
+        int alpha = color >> 24;
+        if (alpha >= 128) {
+          bool side = dist > enter + .00002f || fabsf(normal + dn * dist) < thickness - .0001f;
+          float ridge = 1 - clampf(fabsf(normal + dn * dist) / thickness, 0, 1);
+          float light = SPRITE_SHADES[shade_bucket(dist)] * (side ? .68f + .22f * ridge : 1);
+          float k = light * 255 / alpha;
+          fb->px[index] = pack_argb(255, ((color >> 16) & 255) * k, ((color >> 8) & 255) * k, (color & 255) * k);
+          r->depth[index] = dist;
+          r->floor_mask[index] = 0;
+          painted_to = maxf(painted_to, dist);
+          break;
+        }
+        if (next_x < next_y) { dist = next_x; next_x += step_x; tx += sx; }
+        else { dist = next_y; next_y += step_y; ty += sy; }
+      }
+    }
+    if (painted_to > 0) render_transparent_walls(r, fb, x, x, painted_to);
   }
-  float bx = cx + s->dx * PENDULUM_LENGTH * sn, by = cy + s->dy * PENDULUM_LENGTH * sn;
-  float z = PENDULUM_PIVOT - PENDULUM_LENGTH * cs;
-  float height = PENDULUM_BLADE_HEIGHT * cs + PENDULUM_BLADE_WIDTH * fabsf(sn);
-  pendulum_quad(r, fb, g, r->assets->pendulum_edge, bx - s->dy * .035f, by + s->dx * .035f,
-                bx + s->dy * .035f, by - s->dx * .035f, z - height, z + height);
 }
 
 static void render_sprites(Renderer *r, Image *fb, const Game *g) {
