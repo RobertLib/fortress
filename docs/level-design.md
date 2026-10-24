@@ -113,4 +113,11 @@ rendered by the actual game engine in `build/architecture-floor-N-V.bmp`,
 
 `./build/world_tests --screenshots` adds outdoor, building, monk and dialogue
 views in `build/world-N-*.bmp`. Its separate regressions cover roof/sky
-occlusion, terrain, peaceful dialogue, map validation and save compatibility.
+occlusion, solid wall and roof tops, scenery beyond low walls, door headers,
+terrain, peaceful dialogue, map validation and save compatibility. The geometry
+previews are `build/world-wall-cap.bmp`, `build/world-door-header.bmp` and
+`build/world-inn-facade.bmp`; both sides of the inn's doors are checked closed,
+partly open and fully open.
+Flat-material previews in `build/world-distant-lighting-N.bmp` check that
+oblique facades and headers keep continuous lighting at a distance, including
+the roof edge where a second coplanar surface would cause striping.

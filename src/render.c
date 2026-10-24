@@ -127,6 +127,14 @@ static Tint surface_tint(const Game *g, float x, float y, float dist) {
   return t;
 }
 
+static Tint face_tint(const Game *g, float x, float y, float dist, int side, float rx, float ry) {
+  // A grid boundary belongs to two lighting sectors. Sample just in front
+  // of the face so roundoff cannot alternate exterior and interior fog.
+  if (side == 0) x -= copysignf(.001f, rx);
+  else y -= copysignf(.001f, ry);
+  return surface_tint(g, x, y, dist);
+}
+
 static int wall_tex_for(char c) {
   switch (c) {
   case '2': return WT_MOSS;
@@ -393,12 +401,69 @@ typedef struct {
   float wall_x;
 } Hit;
 
+#define ROOF_THICKNESS .125f
+
+static bool doorway(char cell) { return cell == 'D' || cell == 'R' || cell == 'Z'; }
+static bool solid_masonry(char cell) { return !level_is_open(cell) && !doorway(cell) && cell != 'B'; }
+
+static float roof_height(const Level *lv, int x, int y) {
+  float roof = lv->ceilings[y * lv->w + x];
+  return isfinite(roof) ? roof : level_floor_at(lv, x, y) + 1;
+}
+
+// Exterior physics has a high, invisible ceiling. Masonry uses the authored
+// roof instead, and reaches the adjacent room's ceiling even on legacy walls
+// whose own ceiling was left unspecified.
+static float wall_top(const Game *g, int x, int y) {
+  const Level *lv = g->level;
+  float top = roof_height(lv, x, y);
+  static const int dirs[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
+  for (int d = 0; d < 4; d++) {
+    int nx = x + dirs[d][0], ny = y + dirs[d][1];
+    if (nx < 0 || ny < 0 || nx >= lv->w || ny >= lv->h || world_outside(lv, nx, ny)) continue;
+    char next = game_cell(g, nx, ny);
+    if (level_is_open(next) || doorway(next)) top = maxf(top, level_ceiling_at(lv, nx, ny));
+  }
+  return top + ROOF_THICKNESS;
+}
+
+// A door's ceiling is the opening, not the height of the surrounding wall.
+// Its two jambs carry the full header above the sliding leaf.
+static float doorway_top(const Game *g, int x, int y) {
+  const Level *lv = g->level;
+  float top = roof_height(lv, x, y) + ROOF_THICKNESS;
+  static const int dirs[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
+  for (int d = 0; d < 4; d++) {
+    int nx = x + dirs[d][0], ny = y + dirs[d][1];
+    if (nx < 0 || ny < 0 || nx >= lv->w || ny >= lv->h) continue;
+    char next = game_cell(g, nx, ny);
+    if (!level_is_open(next) && !doorway(next)) top = maxf(top, wall_top(g, nx, ny));
+  }
+  return top;
+}
+
+static void render_hit(Renderer *r, Image *fb, const Game *g, int x, Hit hit, int cx, int cy, int from_x, int from_y) {
+  if (hit.dist <= .0001f) return;
+  const Assets *as = r->assets;
+  const Level *lv = g->level;
+  float camera = 2.0f * x / W - 1;
+  float rx = g->player.dir_x + g->player.plane_x * camera;
+  float ry = g->player.dir_y + g->player.plane_y * camera;
+  float wx = g->player.x + rx * hit.dist, wy = g->player.y + ry * hit.dist;
+  Tint tint = face_tint(g, wx, wy, hit.dist, hit.side, rx, ry);
+  const Image *tex = (hit.side ? as->walls_dark : as->walls)[hit.tex];
+  const Image *upper = (hit.side ? as->walls_dark : as->walls)[WT_STONE];
+  float base = minf(level_floor_at(lv, cx, cy), level_floor_at(lv, from_x, from_y));
+  float top = doorway(game_cell(g, cx, cy)) ? roof_height(lv, cx, cy) : wall_top(g, cx, cy);
+  draw_wall_column(r, fb, tex, upper, tex_column(tex, hit.wall_x), x, base, top, &tint, hit.dist, true);
+}
+
 static void push_overlay(Renderer *r, int column, float dist, int side, int tex, float wall_x, float floor, float ceiling) {
   if (r->overlay_count[column] >= MAX_OVERLAYS) return;
   r->overlays[column][r->overlay_count[column]++] = (Overlay){dist, side, tex, wall_x, floor, ceiling};
 }
 
-static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float pos_y, float ray_x, float ray_y) {
+static Hit cast_ray(Renderer *r, Image *fb, const Game *g, int column, float pos_x, float pos_y, float ray_x, float ray_y) {
   const Level *lv = g->level;
   int map_x = (int)floorf(pos_x), map_y = (int)floorf(pos_y);
   float delta_x = fabsf(1 / ray_x), delta_y = fabsf(1 / ray_y);
@@ -420,6 +485,9 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
   }
 
   int side = 0;
+  // Outdoor walls cover only part of a column. Keep traversing so taller
+  // walls and scenery beyond a parapet can pass the per-pixel depth test.
+  Hit first = {1e9f, 0, WT_STONE, 0};
   r->overlay_count[column] = 0;
   for (int i = 0; i < MAX_STEPS; i++) {
     if (side_x < side_y) {
@@ -448,17 +516,26 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
         coord = pos_x + dist_mid * ray_x - map_x;
       }
       if (cell == 'N') {
-        if (coord >= 0 && coord < 1) return (Hit){dist_mid, side, WT_NICHE, coord};
+        if (coord >= 0 && coord < 1) {
+          Hit hit = {dist_mid, side, WT_NICHE, coord};
+          if (!lv->world.cells) return hit;
+          if (first.dist == 1e9f) first = hit;
+          render_hit(r, fb, g, column, hit, map_x, map_y, map_x, map_y);
+        }
         continue;
       }
       float open = game_door_open_amount(g, map_x, map_y);
       if (coord >= 0 && coord < 1 && coord >= open) {
         if (cell == 'R') {
           push_overlay(r, column, dist_mid, side, WT_BAR_DOOR, coord - open,
-                       level_floor_at(lv, map_x, map_y), level_ceiling_at(lv, map_x, map_y));
+                       level_floor_at(lv, map_x, map_y),
+                       lv->world.cells ? roof_height(lv, map_x, map_y) : level_ceiling_at(lv, map_x, map_y));
           continue;
         }
-        return (Hit){dist_mid, side, WT_DOOR, coord - open};
+        Hit hit = {dist_mid, side, WT_DOOR, coord - open};
+        if (!lv->world.cells) return hit;
+        if (first.dist == 1e9f) first = hit;
+        render_hit(r, fb, g, column, hit, map_x, map_y, map_x, map_y);
       }
       continue; // door open at this spot — ray passes through
     }
@@ -476,7 +553,8 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
     if ((side == 0 && ray_x > 0) || (side == 1 && ray_y < 0)) wall_x = 1 - wall_x;
     if (cell == 'B') {
       push_overlay(r, column, dist, side, WT_BARS, wall_x,
-                   level_floor_at(lv, map_x, map_y), level_ceiling_at(lv, map_x, map_y));
+                   level_floor_at(lv, map_x, map_y),
+                   lv->world.cells ? wall_top(g, map_x, map_y) : level_ceiling_at(lv, map_x, map_y));
       continue;
     }
     int tex;
@@ -512,16 +590,20 @@ static Hit cast_ray(Renderer *r, const Game *g, int column, float pos_x, float p
     // struck the side of that opening
     char from = game_cell(g, side == 0 ? map_x - step_x : map_x, side == 1 ? map_y - step_y : map_y);
     if (from == 'D' || from == 'R' || from == 'N' || from == 'Z') tex = jamb_tex(tex);
-    return (Hit){dist, side, tex, wall_x};
+    Hit hit = {dist, side, tex, wall_x};
+    if (!lv->world.cells) return hit;
+    if (first.dist == 1e9f) first = hit;
+    render_hit(r, fb, g, column, hit, map_x, map_y, side == 0 ? map_x - step_x : map_x,
+               side == 1 ? map_y - step_y : map_y);
   }
-  return (Hit){1e9f, 0, WT_STONE, 0};
+  return first;
 }
 
 // Walk every sector crossed by a column. Each tread owns a horizontal span;
 // height changes expose stone risers and ceiling soffits. Depth is stored per
 // pixel so a ledge hides feet while leaving the upper body visible.
 static void sector_plane(Renderer *r, Image *fb, const Game *g, int x, float rx, float ry,
-                          float enter, float exit, float z, bool ceiling) {
+                          float enter, float exit, float z, bool ceiling, bool cap) {
   float rise = r->eye_z - z;
   if ((!ceiling && rise <= 0) || (ceiling && rise >= 0)) return;
   float a = VIEW_H / 2.0f + rise * VIEW_H / maxf(.001f, enter);
@@ -531,6 +613,7 @@ static void sector_plane(Renderer *r, Image *fb, const Game *g, int x, float rx,
   const Level *lv = g->level;
   Color palette = ceiling ? rgb(lv->ceil_color.r * (2.1f / 128), lv->ceil_color.g * (2.1f / 128), lv->ceil_color.b * (2.1f / 128))
                           : rgb(lv->floor_color.r * (1.3f / 128), lv->floor_color.g * (1.3f / 128), lv->floor_color.b * (1.3f / 128));
+  if (cap) palette = rgb(.95f, .95f, .95f);
   for (int y = y0; y < y1; y++) {
     float offset = y + .5f - VIEW_H / 2.0f;
     float dist = rise * VIEW_H / offset;
@@ -543,14 +626,14 @@ static void sector_plane(Renderer *r, Image *fb, const Game *g, int x, float rx,
     float footprint = TEX * maxf(dist * hypotf(rx, ry) / fabsf(offset), 1.32f * dist / W);
     int mip = clampi((int)log2f(maxf(1, footprint)), 0, SURFACE_MIPS - 1);
     GroundKind ground = world_ground(lv, cx, cy);
-    const Image *tex = ceiling ? r->assets->ceilings[lv->surface_theme][mip] :
+    const Image *tex = cap ? r->assets->floors[lv->surface_theme][mip] : ceiling ? r->assets->ceilings[lv->surface_theme][mip] :
                        ground ? r->assets->grounds[ground - 1][mip] : r->assets->floors[lv->surface_theme][mip];
     int tx = mini(tex->w - 1, (int)(u * tex->w)), ty = mini(tex->h - 1, (int)(v * tex->h));
     Tint tint = plane_tint(r, lv->w + 1, cx, cy, u, v);
-    Color local_palette = !ceiling && ground ? rgb(1.13f, 1.13f, 1.13f) : palette;
+    Color local_palette = !ceiling && !cap && ground ? rgb(1.13f, 1.13f, 1.13f) : palette;
     fb->px[(size_t)y * fb->w + x] = plane_color(tex->px[ty * tex->w + tx], local_palette, &tint);
     r->depth[index] = dist;
-    r->floor_mask[index] = !ceiling;
+    r->floor_mask[index] = !ceiling && !cap;
   }
 }
 
@@ -565,7 +648,7 @@ static void sector_riser(Renderer *r, Image *fb, const Game *g, int x, float rx,
   float along = side ? wx : wy;
   along -= floorf(along);
   const Image *tex = (side ? r->assets->walls_dark : r->assets->walls)[WT_STONE];
-  Tint tint = surface_tint(g, wx, wy, dist);
+  Tint tint = face_tint(g, wx, wy, dist, side, rx, ry);
   for (int y = y0; y < y1; y++) {
     int index = y * W + x;
     if (dist >= r->depth[index]) continue;
@@ -586,6 +669,8 @@ static void sector_riser(Renderer *r, Image *fb, const Game *g, int x, float rx,
 static void render_sectors(Renderer *r, Image *fb, const Game *g) {
   build_plane_tints(r, g);
   const Player *p = &g->player;
+  const Level *lv = g->level;
+  bool volumes = lv->world.cells != NULL;
   for (int x = 0; x < W; x++) {
     float camera = 2.0f * x / W - 1;
     float rx = p->dir_x + p->plane_x * camera, ry = p->dir_y + p->plane_y * camera;
@@ -596,29 +681,56 @@ static void render_sectors(Renderer *r, Image *fb, const Game *g) {
     float side_y = (ry < 0 ? p->y - cy : cy + 1 - p->y) * dy;
     float enter = 0;
     for (int i = 0; i < MAX_STEPS; i++) {
-      float exit = minf(r->zbuffer[x], minf(side_x, side_y));
+      float exit = minf(side_x, side_y);
+      if (!volumes) exit = minf(r->zbuffer[x], exit);
       float floor = level_floor_at(g->level, cx, cy);
-      float ceiling = level_ceiling_at(g->level, cx, cy);
+      float ceiling = volumes ? roof_height(lv, cx, cy) : level_ceiling_at(lv, cx, cy);
       bool outside = world_outside(g->level, cx, cy);
-      sector_plane(r, fb, g, x, rx, ry, enter, exit, floor, false);
-      if (!outside) sector_plane(r, fb, g, x, rx, ry, enter, exit, ceiling, true);
-      if (exit >= r->zbuffer[x]) break;
+      char cell = game_cell(g, cx, cy);
+      bool door = doorway(cell);
+      bool solid = volumes && solid_masonry(cell);
+      float top = solid ? wall_top(g, cx, cy) : door ? doorway_top(g, cx, cy) : ceiling + ROOF_THICKNESS;
+      if (solid) {
+        // A carved niche still has a floor in front of its recessed face.
+        if (cell == 'N') sector_plane(r, fb, g, x, rx, ry, enter, exit, floor, false, false);
+        sector_plane(r, fb, g, x, rx, ry, enter, exit, top, false, true);
+      } else {
+        sector_plane(r, fb, g, x, rx, ry, enter, exit, floor, false, false);
+        if (!outside || (volumes && door)) {
+          sector_plane(r, fb, g, x, rx, ry, enter, exit, ceiling, true, false);
+          if (volumes) sector_plane(r, fb, g, x, rx, ry, enter, exit, top, false, true);
+        }
+      }
+      if (!volumes && exit >= r->zbuffer[x]) break;
       int side;
       if (side_x < side_y) { side_x += dx; cx += sx; side = 0; }
       else { side_y += dy; cy += sy; side = 1; }
       if (cx < 0 || cy < 0 || cx >= g->level->w || cy >= g->level->h) break;
       float next = level_floor_at(g->level, cx, cy);
-      float next_ceiling = level_ceiling_at(g->level, cx, cy);
+      float next_ceiling = volumes ? roof_height(lv, cx, cy) : level_ceiling_at(lv, cx, cy);
+      char next_cell = game_cell(g, cx, cy);
+      // Opaque wall faces already contain their roof edge and floor riser.
+      // Painting a second, coplanar surface makes roundoff expose alternating
+      // columns of two different shades. Niches retain their recessed face.
+      if ((solid && cell != 'N') || (volumes && solid_masonry(next_cell) && next_cell != 'N')) {
+        enter = exit;
+        continue;
+      }
       if (next != floor)
         sector_riser(r, fb, g, x, rx, ry, exit, side, minf(floor, next), maxf(floor, next));
       bool next_outside = world_outside(g->level, cx, cy);
+      if (volumes && door)
+        sector_riser(r, fb, g, x, rx, ry, exit, side, ceiling, top);
+      if (volumes && doorway(next_cell))
+        sector_riser(r, fb, g, x, rx, ry, exit, side, next_ceiling, doorway_top(g, cx, cy));
       if (next_ceiling != ceiling && !outside && !next_outside)
-        sector_riser(r, fb, g, x, rx, ry, exit, side, minf(ceiling, next_ceiling), maxf(ceiling, next_ceiling));
+        sector_riser(r, fb, g, x, rx, ry, exit, side, minf(ceiling, next_ceiling),
+                     maxf(ceiling, next_ceiling) + (volumes ? ROOF_THICKNESS : 0));
       else if (outside != next_outside) {
         float eave = outside ? next_ceiling : ceiling;
         // Only the edge of a real roof exists at a threshold; never erect a
         // wall from its lintel all the way to the exterior's physics ceiling.
-        sector_riser(r, fb, g, x, rx, ry, exit, side, eave, eave + .125f);
+        sector_riser(r, fb, g, x, rx, ry, exit, side, eave, eave + ROOF_THICKNESS);
       }
       enter = exit;
     }
@@ -646,7 +758,7 @@ static void render_floor_features(Renderer *r, Image *fb, const Game *g) {
     for (int y = VIEW_H / 2; y < VIEW_H; y++) {
       float slope = ((float)y + 0.5f - VIEW_H / 2.0f) / VIEW_H;
       float dist = (g->level->has_heights || g->level->has_ceilings) ? r->depth[y * W + x] : 0.5f / slope;
-      if (!r->floor_mask[y * W + x] || dist >= r->zbuffer[x]) continue;
+      if (!r->floor_mask[y * W + x] || (!g->level->world.cells && dist >= r->zbuffer[x])) continue;
       float wx = p->x + rx * dist, wy = p->y + ry * dist;
       int cx = (int)floorf(wx), cy = (int)floorf(wy);
       char kind = game_cell(g, cx, cy);
@@ -787,7 +899,7 @@ static void draw_box_face(Renderer *r, Image *fb, const Game *g, float x0, float
   for (int x = q.x_start; x <= q.x_end; x++) {
     float dist, u;
     quad_at(&q, x, &dist, &u);
-    if (dist >= r->zbuffer[x]) continue;
+    if (!g->level->world.cells && dist >= r->zbuffer[x]) continue;
     float line_h = VIEW_H / dist;
     float base = level_floor(g->level, (x0 + x1) * .5f + nx * .1f, (y0 + y1) * .5f + ny * .1f);
     float top = VIEW_H / 2.0f + line_h * (r->eye_z - base - height);
@@ -860,7 +972,7 @@ static void draw_box_lid(Renderer *r, Image *fb, const Game *g, const WallBox *w
       s_near = maxf(s_near, minf(a, b));
       s_far = minf(s_far, maxf(a, b));
     }
-    if (s_far <= s_near || s_near >= r->zbuffer[x]) continue;
+    if (s_far <= s_near || (!g->level->world.cells && s_near >= r->zbuffer[x])) continue;
 
     float base = level_floor_at(g->level, wd->x + wd->dx, wd->y + wd->dy);
     float rise = (r->eye_z - base - spec->height) * VIEW_H; // eye sits above the lid
@@ -1019,7 +1131,7 @@ static void draw_hanging_quad(Renderer *r, Image *fb, const Game *g, float x0, f
   for (int x = q.x_start; x <= q.x_end; x++) {
     float dist, u;
     quad_at(&q, x, &dist, &u);
-    if (dist >= r->zbuffer[x]) continue;
+    if (!g->level->world.cells && dist >= r->zbuffer[x]) continue;
     float line_h = VIEW_H / dist;
     float base = level_floor(g->level, (x0 + x1) * .5f, (y0 + y1) * .5f);
     float top = VIEW_H / 2.0f + line_h * (r->eye_z - base - spec->z_top);
@@ -1297,7 +1409,7 @@ static void render_pendulum(Renderer *r, Image *fb, const Game *g, const Pendulu
     float camera_x = 2.0f * x / W - 1;
     float rx = p->dir_x + p->plane_x * camera_x, ry = p->dir_y + p->plane_y * camera_x;
     float da = rx * s->dx + ry * s->dy, dn = -rx * s->dy + ry * s->dx;
-    float near = NEAR_PLANE, far = r->zbuffer[x];
+    float near = NEAR_PLANE, far = g->level->world.cells ? INFINITY : r->zbuffer[x];
     if (!ray_interval(across, da, -half, half, &near, &far) ||
         !ray_interval(normal, dn, -thickness, thickness, &near, &far)) continue;
     float top = VIEW_H * .5f + minf((eye - 1) * VIEW_H / near, (eye - 1) * VIEW_H / far);
@@ -1386,7 +1498,8 @@ static void render_sprites(Renderer *r, Image *fb, const Game *g) {
     // thread; a wall in front of the middle column hides all of it
     int mid = (int)floorf(screen_x);
     float ceil_y = VIEW_H / 2.0f + full_h * (r->eye_z - level_ceiling(g->level, s->x, s->y));
-    if (s->dropline && mid >= 0 && mid < W && transform_y < r->zbuffer[mid] && top > ceil_y) {
+    if (s->dropline && mid >= 0 && mid < W &&
+        (g->level->world.cells || transform_y < r->zbuffer[mid]) && top > ceil_y) {
       float lw = maxf(1, full_h / 240);
       float f = SPRITE_SHADES[bucket];
       if (!(g->level->has_heights || g->level->has_ceilings)) {
@@ -1447,7 +1560,8 @@ static void draw_glow(Renderer *r, Image *fb, const Player *p, const GlowSpec *g
   float screen_x = (W / 2.0f) * (1 + transform_x / transform_y);
   if (screen_x < -gs->margin || screen_x > W + gs->margin) return;
   int zi = clampi((int)round_half_up(screen_x), 0, W - 1);
-  if (transform_y > r->zbuffer[zi] + 0.15f) return;
+  int yi = clampi((int)(VIEW_H / 2.0f + VIEW_H / transform_y * (r->eye_z - gs->height)), 0, VIEW_H - 1);
+  if (transform_y > r->depth[yi * W + zi] + 0.15f) return;
   float full_h = VIEW_H / transform_y;
   float screen_y = VIEW_H / 2.0f + full_h * (r->eye_z - gs->height);
   float radius = maxf(gs->min_r, minf(gs->max_r, full_h * gs->r_scale));
@@ -1679,19 +1793,14 @@ void render_view(Renderer *r, Image *fb, const Game *g) {
     float camera_x = 2.0f * x / W - 1;
     float ray_x = p->dir_x + p->plane_x * camera_x;
     float ray_y = p->dir_y + p->plane_y * camera_x;
-    Hit hit = cast_ray(r, g, x, p->x, p->y, ray_x, ray_y);
+    Hit hit = cast_ray(r, fb, g, x, p->x, p->y, ray_x, ray_y);
     r->zbuffer[x] = hit.dist;
-    if (hit.dist <= 0.0001f) continue;
+    if (hit.dist <= 0.0001f || hit.dist == 1e9f || g->level->world.cells) continue;
     const Image *tex = (hit.side == 1 ? as->walls_dark : as->walls)[hit.tex];
     Tint tint = surface_tint(g, p->x + ray_x * hit.dist, p->y + ray_y * hit.dist, hit.dist);
     float near = maxf(0, hit.dist - .001f);
     float base = level_floor(g->level, p->x + ray_x * near, p->y + ray_y * near);
     float ceiling = level_ceiling(g->level, p->x + ray_x * near, p->y + ray_y * near);
-    if (world_outside(g->level, (int)floorf(p->x + ray_x * near), (int)floorf(p->y + ray_y * near))) {
-      int wx = (int)floorf(p->x + ray_x * (hit.dist + .001f));
-      int wy = (int)floorf(p->y + ray_y * (hit.dist + .001f));
-      ceiling = maxf(base + 1.25f, level_ceiling_at(g->level, wx, wy));
-    }
     const Image *upper = (hit.side == 1 ? as->walls_dark : as->walls)[WT_STONE];
     draw_wall_column(r, fb, tex, upper, tex_column(tex, hit.wall_x), x, base, ceiling, &tint, hit.dist, true);
   }

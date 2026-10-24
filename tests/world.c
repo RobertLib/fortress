@@ -105,6 +105,110 @@ static void rendering(const Assets *assets) {
   image_free(fb); renderer_free(&r); game_destroy(g); level_free(&lv);
 }
 
+static void solid_architecture(const Assets *assets, bool shots) {
+  Level lv; parse(&lv, COURT);
+  lv.decoration_count=lv.wall_box_count=lv.hanging_count=lv.torch_count=lv.fire_light_count=0;
+  Session session={.lives=3,.next_life=40000}; Game *g=game_create(&lv,0,&session,NULL);
+  Renderer r; renderer_init(&r,assets); Image *fb=image_new(SCREEN_W,SCREEN_H);
+  // From a raised path, a low wall has a stone cap, with ground and taller
+  // masonry still visible beyond it. The first wall cannot end the column.
+  lv.has_heights=true; lv.heights[5*lv.w+3]=1.5f;
+  lv.grid[5*lv.w+5]='1'; lv.world.cells[5*lv.w+5].outside=0;
+  lv.ceilings[5*lv.w+5]=1;
+  lv.grid[5*lv.w+10]='1'; lv.world.cells[5*lv.w+10].outside=0;
+  lv.ceilings[5*lv.w+10]=2.5f;
+  aim(g,3.5f,5.5f,1,0); render_view(&r,fb,g);
+  int center=SCREEN_W/2;
+  CHECK(fabsf(r.depth[300*SCREEN_W+center]-(2-1.125f)*VIEW_H/140.5f)<.01f);
+  CHECK(!r.floor_mask[300*SCREEN_W+center]);
+  CHECK(fabsf(r.depth[270*SCREEN_W+center]-2*VIEW_H/110.5f)<.01f);
+  CHECK(r.floor_mask[270*SCREEN_W+center]);
+  CHECK(fabsf(r.depth[140*SCREEN_W+center]-6.5f)<.01f);
+  if(shots) screenshot(fb,"build/world-wall-cap.bmp");
+  // Furniture beyond the low wall is clipped per pixel, too.
+  lv.wall_boxes[0]=(WallBox){10,5,-1,0,BOX_WARDROBE}; lv.wall_box_count=1;
+  render_view(&r,fb,g);
+  CHECK(r.depth[240*SCREEN_W+center]>6 && r.depth[240*SCREEN_W+center]<6.5f);
+  lv.wall_box_count=0;
+  // A covered room behind that wall also has a top, rather than an open
+  // box that reveals the floor when viewed from above.
+  lv.world.cells[5*lv.w+6].outside=0; lv.ceilings[5*lv.w+6]=1;
+  render_view(&r,fb,g);
+  CHECK(fabsf(r.depth[260*SCREEN_W+center]-(2-1.125f)*VIEW_H/100.5f)<.01f);
+  CHECK(!r.floor_mask[260*SCREEN_W+center]);
+  image_free(fb); renderer_free(&r); game_destroy(g); level_free(&lv);
+
+  parse(&lv,
+    "@outside 1 1 5 9\n@ceiling 6 0 7 11 2.5\n@ceiling 6 5 1 1 1\n"
+    "1111111111111\n1.....1.....1\n1.....1.....1\n1.....1.....1\n1.....1.....1\n"
+    "1P....D.....1\n1.....1.....1\n1.....1.....1\n1.....1.....1\n1.....1.....1\n1111111111111\n");
+  lv.decoration_count=lv.wall_box_count=lv.hanging_count=lv.torch_count=lv.fire_light_count=0;
+  g=game_create(&lv,0,&session,NULL); renderer_init(&r,assets); fb=image_new(SCREEN_W,SCREEN_H);
+  // Both faces of the header sit flush with the wall, whether its leaf is
+  // closed, partly open or fully retracted. A clear sky remains above it.
+  for(int side=0;side<2;side++) for(int state=0;state<3;state++) {
+    aim(g,side?9.5f:3.5f,5.5f,side?-1:1,0);
+    g->doors[0].open=state*.5f; render_view(&r,fb,g);
+    CHECK(fabsf(r.depth[40*SCREEN_W+center]-2.5f)<.01f);
+    if(!side && state==2) CHECK(r.depth[160*SCREEN_W+center]>3);
+    if(shots && !side && state==2) screenshot(fb,"build/world-door-header.bmp");
+  }
+  aim(g,1.5f,5.5f,1,0); render_view(&r,fb,g);
+  CHECK(isinf(r.depth[center]));
+  CHECK(fabsf(r.depth[40*SCREEN_W+center]-4.5f)<.01f);
+  image_free(fb); renderer_free(&r); game_destroy(g); level_free(&lv);
+}
+
+static void distant_wall_lighting(const Assets *assets, bool shots) {
+  // A flat material isolates lighting from the painted mortar. A continuous
+  // facade must not alternate indoor/outdoor fog between adjacent columns.
+  Assets flat=*assets;
+  flat.walls[WT_STONE]=image_new(TEX,TEX);
+  flat.walls_dark[WT_STONE]=image_new(TEX,TEX);
+  image_fill(flat.walls[WT_STONE],0xffb4b4b4u);
+  image_fill(flat.walls_dark[WT_STONE],0xff7e7e7eu);
+  char text[2048];
+  int len=snprintf(text,sizeof text,"@horror 1\n@outside 1 1 29 27\n@ceiling 0 6 31 1 2.5\n@ceiling 15 6 1 1 1\n");
+  for(int y=0;y<29;y++) {
+    for(int x=0;x<31;x++)
+      text[len++]=y==6?(x==15?'D':'1'):x==0||y==0||x==30||y==28?'1':x==10&&y==24?'P':'.';
+    text[len++]='\n';
+  }
+  text[len]=0;
+  Level lv; parse(&lv,text);
+  for(int x=0;x<lv.w;x++) lv.world.cells[6*lv.w+x].outside=0;
+  lv.decoration_count=lv.wall_box_count=lv.hanging_count=lv.torch_count=lv.fire_light_count=0;
+  Session session={.lives=3,.next_life=40000}; Game *g=game_create(&lv,0,&session,NULL);
+  Renderer r; renderer_init(&r,&flat); Image *fb=image_new(SCREEN_W,SCREEN_H);
+  const float directions[][2]={{.25f,-.9682458f},{-.25f,-.9682458f},{.6f,-.8f}};
+  for(int view=0;view<3;view++) for(int state=0;state<3;state++) {
+    float dx=directions[view][0],dy=directions[view][1];
+    aim(g,15.5f-dx*18,7-dy*18,dx,dy);
+    g->doors[0].open=state*.5f; render_view(&r,fb,g);
+    const int spans[][2]={{220,290},{315,325},{350,420}};
+    for(int span=0;span<3;span++) for(int x=spans[span][0];x<spans[span][1];x++) {
+      int at=138*SCREEN_W+x;
+      int a=(fb->px[at]>>16)&255,b=(fb->px[at+1]>>16)&255;
+      CHECK(abs(a-b)<=3);
+      // The thin roof edge must not fight with the wall on the same plane.
+      int edge[2];
+      for(int n=0;n<2;n++) {
+        float camera=2.0f*(x+n)/SCREEN_W-1;
+        float dist=(7-g->player.y)/(dy+g->player.plane_y*camera);
+        int y=(int)floorf(VIEW_H/2.0f+VIEW_H*(r.eye_z-2.56f)/dist);
+        edge[n]=(fb->px[y*SCREEN_W+x+n]>>16)&255;
+      }
+      CHECK(abs(edge[0]-edge[1])<=3);
+    }
+    if(shots && state==2) {
+      char path[80]; snprintf(path,sizeof path,"build/world-distant-lighting-%d.bmp",view);
+      screenshot(fb,path);
+    }
+  }
+  image_free(fb); renderer_free(&r); game_destroy(g); level_free(&lv);
+  image_free(flat.walls[WT_STONE]); image_free(flat.walls_dark[WT_STONE]);
+}
+
 static void campaign(const Assets *assets,bool shots) {
   const int offsets[]={39,41,43,41,45};
   const float views[][2][4]={
@@ -134,6 +238,20 @@ static void campaign(const Assets *assets,bool shots) {
       render_view(&r,fb,g); render_hud(&r,fb,g);
       if(shots) { snprintf(path,sizeof path,"build/world-%d-%d.bmp",n+1,v+1); screenshot(fb,path); }
     }
+    if(n==0) {
+      // The inn's exterior and internal doors have one-storey openings in
+      // a taller timber building. Check both sides of both actual headers.
+      const float views[][3]={{57.5f,14.5f,-1},{57.5f,9.5f,1},{57.5f,10.5f,-1},{57.5f,6.5f,1}};
+      for(int v=0;v<4;v++) for(int state=0;state<3;state++) {
+        for(int i=0;i<g->door_count;i++) if(g->doors[i].kind!='Z') g->doors[i].open=state*.5f;
+        aim(g,views[v][0],views[v][1],0,views[v][2]); render_view(&r,fb,g);
+        CHECK(fabsf(r.depth[40*SCREEN_W+SCREEN_W/2]-(v?1.5f:2.5f))<.01f);
+      }
+      if(shots) {
+        aim(g,57.5f,18.5f,0,-1); render_view(&r,fb,g); render_hud(&r,fb,g);
+        screenshot(fb,"build/world-inn-facade.bmp");
+      }
+    }
     for (int i=0;i<lv.world.monk_count;i++) {
       const Monk *m=&lv.world.monks[i];
       const int directions[][2]={{0,1},{-1,0},{1,0},{0,-1}};
@@ -158,7 +276,9 @@ static void campaign(const Assets *assets,bool shots) {
 int main(int argc,char **argv) {
   CHECK(SDL_Init(0)); random_seed(9187);
   Assets assets; CHECK(assets_build(&assets));
-  validation(); rendering(&assets); campaign(&assets,argc>1&&!strcmp(argv[1],"--screenshots"));
+  bool shots=argc>1&&!strcmp(argv[1],"--screenshots");
+  validation(); rendering(&assets); solid_architecture(&assets,shots);
+  distant_wall_lighting(&assets,shots); campaign(&assets,shots);
   assets_free(&assets); SDL_Quit(); puts("Outdoor terrain, roofs, peaceful monks, dialogue and save compatibility passed.");
   return 0;
 }
