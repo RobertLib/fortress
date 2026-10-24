@@ -23,6 +23,7 @@ The game retains its 640 × 400 raycasting presentation.
 | Decorations | Furniture, fountain, armor, statue, urn, candles, chains, fireplace, sword, shield, portraits, webs and cracks |
 | Portraits | Three painted sitters, ten gaze variants each, fixed frames |
 | Boxes | Textured front, side and lid for chest and wardrobe; matching shaded faces |
+| Fireplaces | Shallow stone surround, arched opening and solid reveals; recessed firebox with twelve animated frames and emissive flames |
 | Items | Keys, potion, bread, quivers, treasure and repeating crossbow |
 | Weapons | Three painted first-person frames per weapon and separate equipment icons |
 | Traps | Two pressure-plate states, directional bolts and 49 pendulum angle samples with solid silhouette sides |
@@ -43,7 +44,7 @@ ctest --test-dir build --output-on-failure
 make release
 ```
 
-The artwork check visits all 524 image slots, verifies nonempty images and
+The artwork check visits all 532 image slots, verifies nonempty images and
 premultiplied alpha, checks distinct locomotion and weapon frames, validates
 mip sizes, renders all presentation states and checks shared-image cleanup.
 The existing gameplay checks cover walls, water, pits, stairs, pendulums,
@@ -54,6 +55,11 @@ Contact sheets are written to `build/art-enemy-poses.bmp`,
 `build/art-directions-and-details.bmp`. Individual screenshots cover every
 menu state, the story, each chapter, two views on every floor, the map,
 notes and HUD status variants. These are actual software-renderer outputs.
+`build/art-fireplace-views.bmp` covers frontal, oblique and grazing views at
+three animation phases. Checks cover all four wall orientations, raised floors,
+shallow frame projection, an actual cavity behind the wall plane, stable geometry
+during animation, a seamless loop, foreground wall and ledge occlusion, and the
+absence of a duplicate camera-facing fireplace.
 
 The native window should also be checked through title → new game →
 difficulty → story → chapter → play → map → pause. Release artwork lives

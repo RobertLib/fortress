@@ -16,6 +16,7 @@
 #define EXPLOSION_FRAMES 8
 #define WALL_DUST_FRAMES 6
 #define WATER_FRAMES 16
+#define FIREPLACE_FRAMES 12
 #define SURFACE_MIPS 9 // 256x256 down to 1x1, to soften distant floor detail
 
 typedef enum {
@@ -105,11 +106,11 @@ typedef struct Assets {
   Image *torches[4];
   Image *fountains[4];
   Image *water[2][WATER_FRAMES]; // still ripples / flowing ripples
-  // free-standing billboards: table, chair, armor, chains, statue, urn,
-  // candelabra and candles (the other kinds have none)
+  // Decoration artwork; the fireplace cell is for the inventory, while
+  // its wall attachment owns the solid geometry and animation.
   Image *decor[DECO_KIND_COUNT];
   Image *candle_flames[2][4]; // [0] candelabra, [1] niche candles; per frame
-  Image *fire_flames[4];
+  Image *fireplaces[FIREPLACE_FRAMES]; // fixed stone surround, moving firebox
   BoxTextures boxes[BOX_KIND_COUNT];
   Image *hangings[HANG_KIND_COUNT]; // sword, shield, chain and fireplace
   Image *cobwebs[4];

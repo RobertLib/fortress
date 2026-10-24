@@ -856,9 +856,9 @@ bool level_parse(Level *lv, const char *text, char *err, size_t err_size) {
   Hanging *hangings = lv->hangings;
 
   // A fireplace blazes in one hall (two on the biggest floors): a stone
-  // surround set into plain masonry with logs alight in the grate, drawn
-  // flat on the wall face like the hangings so it holds its place from
-  // every angle. It burns like an oversized torch, so it claims a stretch
+  // surround set into plain masonry with logs alight in the grate. Its
+  // wall attachment anchors the solid surround and animated firebox.
+  // It burns like an oversized torch, so it claims a stretch
   // the torches left dark, and it would rather have flanking floor on both
   // sides, so it reads as the heart of a room instead of a plug in a
   // corridor. Placed before the wardrobes and chests: the hearth is

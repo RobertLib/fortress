@@ -58,7 +58,148 @@ static void inventory(void) {
   for (int t = 0; t < SURFACE_THEME_COUNT; t++)
     for (int p = 0; p < SURFACE_MIPS; p++)
       CHECK(assets.floors[t][p]->w == (TEX >> p));
+  for (int f = 0; f < FIREPLACE_FRAMES; f++) {
+    const Image *im = assets.fireplaces[f], *stone = assets.hangings[HANG_FIREPLACE];
+    int moving = 0;
+    for (int y = 0; y < TEX; y++)
+      for (int x = 0; x < TEX; x++) {
+        int i = y * TEX + x;
+        if (im->px[i] == stone->px[i]) continue;
+        // The stonework, andirons and log bed stay fixed; only the firebox moves.
+        CHECK((x + .5f) / TEX > .34f && (x + .5f) / TEX < .68f);
+        CHECK((y + .5f) / TEX > .45f && (y + .5f) / TEX < .86f);
+        moving++;
+      }
+    CHECK(moving > 500);
+    for (int other = 0; other < f; other++)
+      CHECK(signature(im) != signature(assets.fireplaces[other]));
+  }
   printf("Validated %zu artwork slots: no missing assets, valid premultiplied alpha and animation frames.\n", slots);
+}
+static void fireplace_rendering(void) {
+  static const char *arena =
+      "111111111\n"
+      "1.......1\n"
+      "1.......1\n"
+      "1.......1\n"
+      "1.P.....1\n"
+      "1.......1\n"
+      "1.......1\n"
+      "1.......1\n"
+      "111111111\n";
+  Level lv;
+  char err[128];
+  CHECK(level_parse(&lv, arena, err, sizeof err));
+  lv.decoration_count = lv.wall_box_count = lv.hanging_count = 0;
+  lv.torch_count = lv.fire_light_count = 0;
+  Session session = {.lives = 3, .next_life = 40000};
+  Game *g = game_create(&lv, 0, &session, NULL);
+  g->player.weapon = WEAPON_DAGGER;
+  Image *base = image_new(W, H), *moving = image_new(W, H);
+  Image *sheet = previews ? image_new(5 * 320, 3 * 200) : NULL;
+  float *depth = malloc(sizeof(float) * W * VIEW_H);
+  CHECK(depth);
+  const Hanging walls[] = {{0, 4, 1, 0, HANG_FIREPLACE, 0}, {8, 4, -1, 0, HANG_FIREPLACE, 0},
+                           {4, 0, 0, 1, HANG_FIREPLACE, 0}, {4, 8, 0, -1, HANG_FIREPLACE, 0}};
+  const float views[] = {-80, -45, 0, 45, 80};
+  for (int elevated = 0; elevated < 2; elevated++) {
+    lv.has_heights = elevated;
+    for (int i = 0; i < lv.w * lv.h; i++) lv.heights[i] = elevated * .5f;
+    for (int wall = 0; wall < 4; wall++) {
+      Hanging hg = walls[wall];
+      lv.hangings[0] = hg;
+      float cx = hg.x + .5f + hg.dx * .5f, cy = hg.y + .5f + hg.dy * .5f;
+      lv.decorations[0] = (Decoration){cx + hg.dx * .06f, cy + hg.dy * .06f, .26, 0, DECO_FIREPLACE};
+      lv.decoration_count = 1;
+      for (int view = 0; view < 5; view++) {
+        image_fill(base, 0); image_fill(moving, 0); image_fill(fb, 0);
+        float angle = views[view] * (float)M_PI / 180;
+        g->player.x = cx + 1.35f * (hg.dx * cosf(angle) - hg.dy * sinf(angle));
+        g->player.y = cy + 1.35f * (hg.dy * cosf(angle) + hg.dx * sinf(angle));
+        float dx = cx + hg.dx * .09f - g->player.x, dy = cy + hg.dy * .09f - g->player.y;
+        float length = hypotf(dx, dy);
+        g->player.dir_x = dx / length; g->player.dir_y = dy / length;
+        g->player.plane_x = -g->player.dir_y * .66f; g->player.plane_y = g->player.dir_x * .66f;
+        g->time = 0;
+        lv.hanging_count = 1;
+        render_view(&renderer, base, g);
+        memcpy(depth, renderer.depth, sizeof(float) * W * VIEW_H);
+        lv.hanging_count = 0;
+        render_view(&renderer, moving, g);
+        int solid = 0, recessed = 0;
+        for (int i = 0; i < W * VIEW_H; i++) {
+          if (fabsf(depth[i] - renderer.depth[i]) < .0001f) continue;
+          CHECK(isfinite(depth[i]) && depth[i] >= .05f && depth[i] < 2);
+          float camera_x = 2.0f * (i % W) / W - 1;
+          float rx = g->player.dir_x + g->player.plane_x * camera_x;
+          float ry = g->player.dir_y + g->player.plane_y * camera_x;
+          float normal = (g->player.x + rx * depth[i] - cx) * hg.dx +
+                         (g->player.y + ry * depth[i] - cy) * hg.dy;
+          CHECK(normal >= -.141f && normal <= .046f); // shallow frame, fire behind the wall
+          solid += depth[i] < renderer.depth[i];
+          recessed += depth[i] > renderer.depth[i] + .002f;
+        }
+        CHECK(solid > 100); // grazing views retain the shallow stone frame
+        if (view > 0 && view < 4) CHECK(recessed > 50);
+        // Its collision marker must never draw a second camera-facing hearth.
+        lv.decoration_count = 0;
+        render_view(&renderer, fb, g);
+        CHECK(signature(fb) == signature(moving));
+        lv.decoration_count = 1;
+        lv.hanging_count = 1;
+        g->time = 1.0f / 18;
+        render_view(&renderer, moving, g);
+        CHECK(!memcmp(depth, renderer.depth, sizeof(float) * W * VIEW_H));
+        if (view > 0 && view < 4) CHECK(signature(base) != signature(moving));
+        // Same world time gives the same fire, including a complete loop.
+        g->time = FIREPLACE_FRAMES / 18.0f;
+        render_view(&renderer, moving, g);
+        CHECK(signature(base) == signature(moving));
+        if (sheet && !wall && !elevated) {
+          for (int phase = 0; phase < 3; phase++) {
+            g->time = phase / 6.0f;
+            render_view(&renderer, moving, g);
+            render_hud(&renderer, moving, g);
+            if (!phase && view == 2) save_image(moving, "fireplace-front");
+            if (!phase && view == 4) save_image(moving, "fireplace-side");
+            gfx_blit(sheet, moving, 0, 0, W, H, view * 320, phase * 200, 320, 200, 1);
+          }
+        }
+      }
+    }
+  }
+  if (sheet) save_image(sheet, "fireplace-views");
+  // A low foreground ledge still occludes the lower half of the cavity.
+  // Carving its supporting wall must not overwrite closer sector geometry.
+  lv.hangings[0] = walls[0];
+  g->player.x = 3.5f; g->player.y = 4.5f;
+  g->player.dir_x = -1; g->player.dir_y = 0;
+  g->player.plane_x = 0; g->player.plane_y = -.66f;
+  lv.heights[4 * lv.w + 2] = .75f;
+  lv.hanging_count = 0;
+  render_view(&renderer, moving, g);
+  memcpy(depth, renderer.depth, sizeof(float) * W * VIEW_H);
+  lv.hanging_count = 1;
+  render_view(&renderer, base, g);
+  int occluded = 0;
+  for (int i = 0; i < W * VIEW_H; i++) {
+    if (depth[i] >= 2.4f) continue; // the supporting fireplace wall is 2.5 tiles away
+    CHECK(base->px[i] == moving->px[i] && renderer.depth[i] == depth[i]);
+    occluded++;
+  }
+  CHECK(occluded > 1000);
+  lv.heights[4 * lv.w + 2] = .5f;
+  // An intervening wall hides both the solid surround and animated fire.
+  for (int y = 1; y < lv.h - 1; y++) lv.grid[y * lv.w + 2] = '1';
+  lv.hanging_count = 1;
+  render_view(&renderer, base, g);
+  lv.hanging_count = 0;
+  render_view(&renderer, moving, g);
+  CHECK(signature(base) == signature(moving));
+  free(depth);
+  image_free(base); image_free(moving); image_free(sheet);
+  game_destroy(g);
+  level_free(&lv);
 }
 static void tile(Image *sheet, const Image *im, int col, int row, const char *name) {
   float x = col * 128, y = row * 144;
@@ -279,6 +420,7 @@ int main(int argc, char **argv) {
   galleries();
   fb = image_new(W, H);
   renderer_init(&renderer, &assets);
+  fireplace_rendering();
   presentation();
   game_destroy(game);
   game = NULL;

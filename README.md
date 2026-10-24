@@ -76,7 +76,7 @@ painted cinematic scenes with readable captions and gentle camera movement.
 
 Run `./build/visual_tests --screenshots` from the repository root to render the
 complete presentation and contact sheets into `build/art-*.bmp`. The test
-checks all 524 asset slots, premultiplied alpha, distinct animation frames,
+checks all 532 asset slots, premultiplied alpha, distinct animation frames,
 material mips and asset ownership. See [the coverage and verification guide](docs/art-direction.md)
 and [artwork sources and reproduction](assets/README.md).
 
@@ -448,6 +448,10 @@ and a wall with a hanging banner.
 Torches, furniture, fountains, fireplaces, candelabra, wall hangings,
 portraits, cobwebs, cracks and niches are placed automatically, in a
 stable layout derived from the map.
+Fireplaces have a shallow stone frame around an arched opening, with the
+firebox recessed into the wall and solid reveals that hide it from the side.
+A twelve-frame firebox animation follows the world clock,
+with glowing flames and steady stonework, and pauses with the game.
 
 Floors and ceilings use perspective-correct, world-anchored textures with
 torchlight, key glow and distance fog. Distant detail is filtered to reduce

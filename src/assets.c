@@ -99,6 +99,24 @@ static Image *flame_layer(const Image *source) {
     }
   return im;
 }
+static Image *fireplace_frame(const Image *source, int frame) {
+  Image *im = image_clone(source);
+  float phase = frame * (float)(2 * M_PI / FIREPLACE_FRAMES);
+  // The hearth's flame is below the middle of the atlas cell. Deform that
+  // field as a whole so no still flame remains under the moving one. The
+  // stone arch, andirons and base of the logs stay anchored in every frame.
+  for (int y = 0; y < TEX; y++)
+    for (int x = 0; x < TEX; x++) {
+      float u = (x + .5f) / TEX, v = (y + .5f) / TEX;
+      if (u <= .34f || u >= .68f || v <= .45f || v >= .86f) continue;
+      float across = sinf((u - .34f) / .34f * (float)M_PI);
+      float tip = clampf((.86f - v) / .30f, 0, 1) * clampf((v - .45f) / .08f, 0, 1);
+      float sway = sinf(phase + v * 18) * 5.5f + sinf(phase * 2 - v * 25) * 2;
+      float rise = sinf(phase + u * 21) * 6;
+      im->px[y * TEX + x] = art_sample(source, x + sway * across * tip, y + rise * across * tip);
+    }
+  return im;
+}
 static Image *arrow(const Image *bolt, TrapSprite kind) {
   Image *im = image_new(TEX, TEX);
   if (kind == TRAP_ARROW || kind == TRAP_ARROW_LEFT) {
@@ -355,10 +373,9 @@ bool assets_build(Assets *a) {
     motion = art_motion(candles, f, 1);
     a->candle_flames[1][f] = flame_layer(motion);
     image_free(motion);
-    motion = art_motion(hearth, f, 1);
-    a->fire_flames[f] = flame_layer(motion);
-    image_free(motion);
   }
+  for (int f = 0; f < FIREPLACE_FRAMES; f++)
+    a->fireplaces[f] = fireplace_frame(hearth, f);
   image_free(torch);
   image_free(fountain);
   a->decor[DECO_FOUNTAIN] = a->fountains[0];

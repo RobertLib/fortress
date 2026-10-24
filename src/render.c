@@ -41,7 +41,6 @@ static const HangingSpec HANGING_SPECS[HANG_KIND_COUNT] = {
     [HANG_SWORD] = {0.3f, 0.9f, 0.03f},    [HANG_SHIELD] = {0.35f, 0.85f, 0.03f},
     [HANG_CHAIN] = {0.22f, 0.92f, 0.03f},  [HANG_PORTRAIT] = {0.32f, 0.84f, 0.03f},
     [HANG_COBWEB] = {0.55f, 1, 0.02f},     [HANG_CRACK] = {0, 1, 0.02f},
-    [HANG_FIREPLACE] = {0, 0.62f, 0.03f},
 };
 
 // distance buckets for pre-darkened sprite variants
@@ -889,6 +888,115 @@ static void render_wall_boxes(Renderer *r, Image *fb, const Game *g) {
 
 // ------------------------------------------------------------------ hangings
 
+static bool ray_interval(float origin, float dir, float lo, float hi, float *enter, float *exit) {
+  if (fabsf(dir) < 1e-7f) return origin >= lo && origin <= hi;
+  float a = (lo - origin) / dir, b = (hi - origin) / dir;
+  *enter = maxf(*enter, minf(a, b));
+  *exit = minf(*exit, maxf(a, b));
+  return *enter <= *exit;
+}
+
+static bool fireplace_opening(float u, float v) {
+  float arch = (u - .5f) / .235f;
+  return fabsf(arch) < 1 && v > .415f + .085f * arch * arch && v < .89f;
+}
+
+static void render_fireplace(Renderer *r, Image *fb, const Game *g, const Hanging *hg) {
+  const Player *p = &g->player;
+  const float width = .62f, height = .62f, projection = .045f, recess = .14f;
+  float cx = hg->x + .5f + hg->dx * .5f, cy = hg->y + .5f + hg->dy * .5f;
+  float tx = -hg->dy, ty = hg->dx;
+  float across = (p->x - cx) * tx + (p->y - cy) * ty;
+  float normal = (p->x - cx) * hg->dx + (p->y - cy) * hg->dy;
+  if (normal < 0) return;
+  float eye = r->eye_z - level_floor_at(g->level, hg->x + hg->dx, hg->y + hg->dy);
+  int frame = ((int)floorf(g->time * 18) + (int)(hg->seed % FIREPLACE_FRAMES)) % FIREPLACE_FRAMES;
+  const Image *tex = r->assets->fireplaces[frame];
+  const Image *stone = r->assets->hangings[HANG_FIREPLACE];
+
+  // Only the shallow stone surround projects into the room. An arched
+  // opening continues into the wall, with solid reveals in front of the
+  // animated firebox. Carve only pixels belonging to this supporting face;
+  // foreground geometry and the rest of the masonry keep their depth.
+  for (int x = fb->clip_x0; x < fb->clip_x1; x++) {
+    float camera_x = 2.0f * x / W - 1;
+    float rx = p->dir_x + p->plane_x * camera_x, ry = p->dir_y + p->plane_y * camera_x;
+    float da = rx * tx + ry * ty, dn = rx * hg->dx + ry * hg->dy;
+    float near = NEAR_PLANE, far = INFINITY;
+    if (!ray_interval(across, da, -width / 2, width / 2, &near, &far) ||
+        !ray_interval(normal, dn, -recess, projection, &near, &far)) continue;
+    float wall_dist = dn < -1e-7f ? -normal / dn : INFINITY;
+    float back_dist = dn < -1e-7f ? (-recess - normal) / dn : INFINITY;
+    float top = VIEW_H * .5f + minf((eye - height) * VIEW_H / near, (eye - height) * VIEW_H / far);
+    float bottom = VIEW_H * .5f + maxf(eye * VIEW_H / near, eye * VIEW_H / far);
+    int y0 = maxi(fb->clip_y0, (int)ceilf(top - .5f));
+    int y1 = mini(fb->clip_y1, (int)ceilf(bottom - .5f));
+    Tint tint = surface_tint(g, cx + hg->dx * projection, cy + hg->dy * projection, near);
+    for (int y = y0; y < y1; y++) {
+      int index = y * W + x;
+      float dz = (VIEW_H * .5f - y - .5f) / VIEW_H;
+      float wall_u = .5f - (across + da * wall_dist) / width;
+      float wall_v = 1 - (eye + dz * wall_dist) / height;
+      bool opening = isfinite(wall_dist) && fabsf(r->depth[index] - wall_dist) < .001f &&
+                     fireplace_opening(wall_u, wall_v);
+      float enter = near, exit = opening ? far : minf(far, r->depth[index]);
+      if (!ray_interval(eye, dz, 0, height, &enter, &exit)) continue;
+      float dist = minf(enter + .00001f, exit);
+      float u = (.5f - (across + da * dist) / width) * tex->w;
+      float v = (1 - (eye + dz * dist) / height) * tex->h;
+      float du = -da / width * tex->w, dv = -dz / height * tex->h;
+      int ix = clampi((int)floorf(u), 0, tex->w - 1), iy = clampi((int)floorf(v), 0, tex->h - 1);
+      int sx = du < 0 ? -1 : 1, sy = dv < 0 ? -1 : 1;
+      float step_x = fabsf(du) < 1e-7f ? INFINITY : fabsf(1 / du);
+      float step_y = fabsf(dv) < 1e-7f ? INFINITY : fabsf(1 / dv);
+      float next_x = isinf(step_x) ? INFINITY : dist + (ix + (sx > 0) - u) / du;
+      float next_y = isinf(step_y) ? INFINITY : dist + (iy + (sy > 0) - v) / dv;
+      uint32_t color = 0;
+      bool inner = false, back = false;
+      while (dist <= exit && ix >= 0 && ix < tex->w && iy >= 0 && iy < tex->h) {
+        bool aperture = fireplace_opening((ix + .5f) / tex->w, (iy + .5f) / tex->h);
+        uint32_t sample = stone->px[iy * tex->w + ix];
+        if (!aperture && (sample >> 24) >= 128) { color = sample; break; }
+        inner |= aperture;
+        if (next_x < next_y) { dist = next_x; next_x += step_x; ix += sx; }
+        else { dist = next_y; next_y += step_y; iy += sy; }
+      }
+      if (!color && back_dist >= enter && back_dist <= exit + .00001f) {
+        float bu = .5f - (across + da * back_dist) / width;
+        float bv = 1 - (eye + dz * back_dist) / height;
+        if (fireplace_opening(bu, bv)) {
+          ix = tex_column(tex, bu); iy = tex_column(tex, bv);
+          color = tex->px[iy * tex->w + ix];
+          dist = back_dist;
+          back = true;
+        }
+      }
+      if ((color >> 24) < 128) continue;
+      bool front = !back && fabsf(normal + dn * dist - projection) < .0001f;
+      if (inner && !back) {
+        const Image *brick = r->assets->walls[WT_BRICK];
+        float along = (normal + dn * dist + recess) / (projection + recess);
+        color = brick->px[tex_column(brick, (eye + dz * dist) / height) * brick->w + tex_column(brick, along)];
+      } else if (!front && !back) {
+        float along = clampf((normal + dn * dist) / projection, 0, 1);
+        float stone_x = ix < tex->w / 2 ? .12f + along * .10f : .88f - along * .10f;
+        uint32_t surface = stone->px[iy * tex->w + tex_column(stone, stone_x)];
+        if ((surface >> 24) >= 128) color = surface;
+      }
+      float k = 255.0f / (color >> 24);
+      float red = ((color >> 16) & 255) * k, green = ((color >> 8) & 255) * k, blue = (color & 255) * k;
+      float shade = back ? .85f : front ? 1 : inner ? .52f : .72f;
+      float emission = back ? clampf((green - 80) / 95, 0, 1) * clampf((red - blue - 50) / 70, 0, 1) : 0;
+      fb->px[index] = pack_argb(255,
+          (red * tint.k * shade + tint.r) * (1 - emission) + red * emission,
+          (green * tint.k * shade + tint.g) * (1 - emission) + green * emission,
+          (blue * tint.k * shade + tint.b) * (1 - emission) + blue * emission);
+      r->depth[index] = dist;
+      r->floor_mask[index] = 0;
+    }
+  }
+}
+
 static void draw_hanging_quad(Renderer *r, Image *fb, const Game *g, float x0, float y0, float x1, float y1,
                               const Image *tex, const HangingSpec *spec) {
   QuadSpan q;
@@ -915,6 +1023,10 @@ static void render_wall_hangings(Renderer *r, Image *fb, const Game *g) {
   const Level *lv = g->level;
   for (int i = 0; i < lv->hanging_count; i++) {
     const Hanging *hg = &lv->hangings[i];
+    if (hg->kind == HANG_FIREPLACE) {
+      render_fireplace(r, fb, g, hg);
+      continue;
+    }
     const HangingSpec *spec = &HANGING_SPECS[hg->kind];
     float half_w = (spec->z_top - spec->z_bot) / 2; // square quad, square texture
     float fx = hg->x + 0.5f + hg->dx * (0.5f + spec->offset);
@@ -954,13 +1066,6 @@ static void render_wall_hangings(Renderer *r, Image *fb, const Game *g) {
     float ax = fx + tx * half_w, ay = fy + ty * half_w;
     float bx = fx - tx * half_w, by = fy - ty * half_w;
     draw_hanging_quad(r, fb, g, ax, ay, bx, by, shaded(img, bucket), spec);
-    if (hg->kind == HANG_FIREPLACE) {
-      // the blaze rides the same quad unshaded, so it registers with the
-      // firebox exactly and keeps burning through the distance fog; each
-      // hearth flickers on its own schedule
-      int frame = ((int)floorf(g->time * 10) + ((hg->x * 31 + hg->y * 17) & 3)) & 3;
-      draw_hanging_quad(r, fb, g, ax, ay, bx, by, as->fire_flames[frame], spec);
-    }
   }
 }
 
@@ -1109,6 +1214,7 @@ static void collect_sprites(Renderer *r, const Game *g) {
   }
   for (int i = 0; i < lv->decoration_count; i++) {
     const Decoration *d = &lv->decorations[i];
+    if (d->kind == DECO_FIREPLACE) continue; // collision/light marker; the wall attachment owns its geometry
     float dx = (float)d->x, dy = (float)d->y;
     if (d->kind == DECO_FOUNTAIN) {
       // the water animates like the torch flames, just at a calmer pace
@@ -1155,14 +1261,6 @@ static void collect_sprites(Renderer *r, const Game *g) {
   qsort(sprites, (size_t)sprite_count, sizeof(Sprite), cmp_sprite);
 }
 
-static bool pendulum_interval(float origin, float dir, float lo, float hi, float *enter, float *exit) {
-  if (fabsf(dir) < 1e-7f) return origin >= lo && origin <= hi;
-  float a = (lo - origin) / dir, b = (hi - origin) / dir;
-  *enter = maxf(*enter, minf(a, b));
-  *exit = minf(*exit, maxf(a, b));
-  return *enter <= *exit;
-}
-
 static void render_pendulum(Renderer *r, Image *fb, const Game *g, const PendulumSpawn *s) {
   float angle = game_pendulum_angle(s, g->time);
   int frame = clampi((int)round_half_up((angle / PENDULUM_MAX_ANGLE + 1) * 0.5f * (PENDULUM_FRAMES - 1)),
@@ -1183,8 +1281,8 @@ static void render_pendulum(Renderer *r, Image *fb, const Game *g, const Pendulu
     float rx = p->dir_x + p->plane_x * camera_x, ry = p->dir_y + p->plane_y * camera_x;
     float da = rx * s->dx + ry * s->dy, dn = -rx * s->dy + ry * s->dx;
     float near = NEAR_PLANE, far = r->zbuffer[x];
-    if (!pendulum_interval(across, da, -half, half, &near, &far) ||
-        !pendulum_interval(normal, dn, -thickness, thickness, &near, &far)) continue;
+    if (!ray_interval(across, da, -half, half, &near, &far) ||
+        !ray_interval(normal, dn, -thickness, thickness, &near, &far)) continue;
     float top = VIEW_H * .5f + minf((eye - 1) * VIEW_H / near, (eye - 1) * VIEW_H / far);
     float bottom = VIEW_H * .5f + maxf(eye * VIEW_H / near, eye * VIEW_H / far);
     int y0 = maxi(fb->clip_y0, (int)ceilf(top - .5f));
@@ -1194,7 +1292,7 @@ static void render_pendulum(Renderer *r, Image *fb, const Game *g, const Pendulu
       int index = y * W + x;
       float dz = (VIEW_H * .5f - y - .5f) / VIEW_H;
       float enter = near, exit = minf(far, r->depth[index]);
-      if (!pendulum_interval(eye, dz, 0, 1, &enter, &exit) || enter > exit) continue;
+      if (!ray_interval(eye, dz, 0, 1, &enter, &exit) || enter > exit) continue;
       float dist = minf(enter + .00001f, exit);
       float u = ((across + da * dist) / PENDULUM_VIEW_WIDTH + .5f) * tex->w;
       float v = (1 - eye - dz * dist) * tex->h;
